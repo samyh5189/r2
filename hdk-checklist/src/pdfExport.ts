@@ -5,6 +5,15 @@ import { ENGINE_HOURS_ID, itemType } from "./checklistData";
 
 type RGB = [number, number, number];
 
+export interface PdfFile {
+  blob: Blob;
+  filename: string;
+}
+
+function toFile(doc: jsPDF, filename: string): PdfFile {
+  return { blob: doc.output("blob"), filename };
+}
+
 // Strip near-white pixels from a PNG data URL (for transparent signature rendering).
 // Older signatures were captured with a light background; this makes them transparent.
 async function stripWhiteBg(dataUrl: string): Promise<string> {
@@ -177,7 +186,7 @@ export async function exportInspectionPDF(log: InspectionLog) {
     );
   }
 
-  doc.save(`HDK-Checklist-${log.date.replace(/\//g, "-")}-${log.operatorName}.pdf`);
+  return toFile(doc, `HDK-Checklist-${log.date.replace(/\//g, "-")}-${log.operatorName}.pdf`);
 }
 
 export async function exportFaultReportPDF(report: FaultReport) {
@@ -469,7 +478,7 @@ export async function exportFaultReportPDF(report: FaultReport) {
     }
   }
 
-  doc.save(`HDK-FaultReport-${report.reportNumber.replace(/\//g, "-")}.pdf`);
+  return toFile(doc, `HDK-FaultReport-${report.reportNumber.replace(/\//g, "-")}.pdf`);
 }
 
 export async function exportWeeklyPDF(logs: InspectionLog[]) {
@@ -833,5 +842,5 @@ export async function exportWeeklyPDF(logs: InspectionLog[]) {
 
   const ws = `${String(days[0].getDate()).padStart(2,"0")}-${MONTHS[days[0].getMonth()]}`;
   const we = `${String(days[6].getDate()).padStart(2,"0")}-${MONTHS[days[6].getMonth()]}-${days[6].getFullYear()}`;
-  doc.save(`HDK-Weekly-${ws}-to-${we}.pdf`);
+  return toFile(doc, `HDK-Weekly-${ws}-to-${we}.pdf`);
 }

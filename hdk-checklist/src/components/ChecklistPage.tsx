@@ -4,6 +4,7 @@ import { buildBlankChecklist, buildChecklist, itemType } from "../checklistData"
 import type { ChecklistSection, ChecklistSectionConfig, ItemStatus, InspectionLog, FaultReport, EvidenceItem } from "../types";
 import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek, getChecklistConfig } from "../storage";
 import { generateFaultReport } from "../faultReportAI";
+import { showPdf } from "../pdfViewer";
 import { exportInspectionPDF, exportFaultReportPDF } from "../pdfExport";
 import { processFile } from "../evidenceUtils";
 
@@ -324,9 +325,9 @@ export default function ChecklistPage() {
             </p>
           )}
           <div className="export-btns">
-            <button className="btn-export" onClick={() => exportInspectionPDF(savedLog)}>↓ Checklist PDF</button>
+            <button className="btn-export" onClick={() => showPdf(exportInspectionPDF(savedLog))}>View Checklist PDF</button>
             {savedFault && (
-              <button className="btn-export secondary" onClick={() => exportFaultReportPDF(savedFault)}>↓ Fault Report PDF</button>
+              <button className="btn-export secondary" onClick={() => showPdf(exportFaultReportPDF(savedFault))}>View Fault Report PDF</button>
             )}
           </div>
           <br />

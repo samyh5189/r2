@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import type { InspectionLog, FaultReport } from "../types";
 import { getLogs, getFaultReports, sameInspectionWeek, updateLog, deleteLog, updateFaultReport, deleteFaultReport } from "../storage";
 import { EditLogModal, EditFaultModal } from "./EditModals";
+import { showPdf } from "../pdfViewer";
 import { exportInspectionPDF, exportFaultReportPDF, exportWeeklyPDF } from "../pdfExport";
 
 async function migrateLocalStorage(): Promise<{ logs: number; faults: number }> {
@@ -133,8 +134,8 @@ function FaultModal({ report, onClose }: { report: FaultReport; onClose: () => v
             <button className="btn-export secondary" onClick={onClose} style={{ border: "1.5px solid var(--border)", background: "white", color: "var(--text)" }}>
               Close
             </button>
-            <button className="btn-export" onClick={() => exportFaultReportPDF(report)}>
-              ↓ Export PDF
+            <button className="btn-export" onClick={() => showPdf(exportFaultReportPDF(report))}>
+              View PDF
             </button>
           </div>
         </div>
@@ -220,8 +221,8 @@ function LogModal({ log, onClose }: { log: InspectionLog; onClose: () => void })
             <button className="btn-export secondary" onClick={onClose} style={{ border: "1.5px solid var(--border)", background: "white", color: "var(--text)" }}>
               Close
             </button>
-            <button className="btn-export" onClick={() => exportInspectionPDF(log)}>
-              ↓ Export PDF
+            <button className="btn-export" onClick={() => showPdf(exportInspectionPDF(log))}>
+              View PDF
             </button>
           </div>
         </div>
@@ -231,7 +232,7 @@ function LogModal({ log, onClose }: { log: InspectionLog; onClose: () => void })
 }
 
 function exportWeekFor(log: InspectionLog, allLogs: InspectionLog[]) {
-  exportWeeklyPDF(allLogs.filter((l) => sameInspectionWeek(l.date, log.date)));
+  showPdf(exportWeeklyPDF(allLogs.filter((l) => sameInspectionWeek(l.date, log.date))));
 }
 
 function localIds(key: string): string[] {
@@ -384,7 +385,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
                     </td>
                     <td className="log-actions">
                       <button className="action-btn" onClick={() => setViewLog(log)}>View</button>
-                      <button className="action-btn" onClick={() => exportInspectionPDF(log)}>PDF</button>
+                      <button className="action-btn" onClick={() => showPdf(exportInspectionPDF(log))}>PDF</button>
                       <button className="action-btn" onClick={() => exportWeekFor(log, logs)}>Week</button>
                       {isAdmin && <>
                         <button className="action-btn" onClick={() => setEditLog(log)}>Edit</button>
@@ -438,7 +439,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
                       </td>
                       <td className="log-actions">
                         <button className="action-btn" onClick={() => setViewFault(fr)}>View</button>
-                        <button className="action-btn" onClick={() => exportFaultReportPDF(fr)}>PDF</button>
+                        <button className="action-btn" onClick={() => showPdf(exportFaultReportPDF(fr))}>PDF</button>
                         {isAdmin && <>
                           <button className="action-btn" onClick={() => setEditFault(fr)}>Edit</button>
                           <button className="action-btn danger" onClick={() => confirmDelete(fr.reportNumber, () => deleteFaultReport(fr.id))}>Delete</button>

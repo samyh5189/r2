@@ -521,3 +521,22 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
 @media (max-width: 600px) {
   .trend-stats { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ── PDF viewer ─────────────────────────────────────────────────────── */
+.pdf-viewer { position: fixed; inset: 0; z-index: 1000; background: #525659; display: flex; flex-direction: column; }
+.pdf-toolbar { background: var(--navy); color: white; display: flex; align-items: center; gap: 10px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); flex-wrap: wrap; }
+.pdf-close { background: rgba(255,255,255,0.15); border: none; color: white; font-size: 20px; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; flex-shrink: 0; line-height: 1; }
+.pdf-name { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pdf-actions { display: flex; gap: 6px; }
+.pdf-actions button { background: white; color: var(--navy); border: none; border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.pdf-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+.pdf-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.pdf-pages { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.pdf-page { width: 100%; height: auto; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
+.pdf-viewer .spinner-text { color: white; }
+.pdf-error { color: white; text-align: center; padding: 40px 16px; }
+@media (max-width: 600px) {
+  .pdf-actions { width: 100%; }
+  .pdf-actions button { flex: 1; }
+  .pdf-scroll { padding: 8px; }
+}

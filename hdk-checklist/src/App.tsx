@@ -5,6 +5,7 @@ import LogsPage from "./components/LogsPage";
 import AdminLogin from "./components/AdminLogin";
 import ChecklistEditor from "./components/ChecklistEditor";
 import TrendsPage from "./components/TrendsPage";
+import PdfViewer from "./components/PdfViewer";
 import { getAdminToken, signOutAdmin } from "./storage";
 
 type Tab = "checklist" | "logs" | "faults" | "trends" | "setup";
@@ -61,6 +62,7 @@ export default function App() {
       {tab === "trends" && <TrendsPage />}
       {tab === "setup" && isAdmin && <ChecklistEditor onAuthLost={signOut} />}
 
+      <PdfViewer />
       {showLogin && (
         <AdminLogin onClose={() => setShowLogin(false)} onSignedIn={() => { setIsAdmin(true); setShowLogin(false); }} />
       )}
