@@ -2,20 +2,103 @@ import express from "express";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { readFileSync } from "fs";
+import pg from "pg";
 import "dotenv/config";
 
+const { Pool } = pg;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "20mb" }));
 
-// ── AI proxy route ────────────────────────────────────────────────────
-// Keeps the Anthropic API key entirely server-side.
+// ── PostgreSQL ────────────────────────────────────────────────────────
+let pool = null;
+if (process.env.DATABASE_URL) {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  });
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS inspection_logs (
+      id TEXT PRIMARY KEY,
+      data JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS fault_reports (
+      id TEXT PRIMARY KEY,
+      data JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `)
+    .then(() => console.log("✓ DB tables ready"))
+    .catch((e) => console.error("DB init error:", e));
+}
+
+// ── Inspection logs ───────────────────────────────────────────────────
+app.get("/api/logs", async (_req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  try {
+    const result = await pool.query(
+      "SELECT data FROM inspection_logs ORDER BY created_at DESC"
+    );
+    res.json(result.rows.map((r) => r.data));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB query failed." });
+  }
+});
+
+app.post("/api/logs", async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  try {
+    const log = req.body;
+    await pool.query(
+      `INSERT INTO inspection_logs (id, data, created_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (id) DO UPDATE SET data = $2`,
+      [log.id, log, log.createdAt]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB insert failed." });
+  }
+});
+
+// ── Fault reports ─────────────────────────────────────────────────────
+app.get("/api/fault-reports", async (_req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  try {
+    const result = await pool.query(
+      "SELECT data FROM fault_reports ORDER BY created_at DESC"
+    );
+    res.json(result.rows.map((r) => r.data));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB query failed." });
+  }
+});
+
+app.post("/api/fault-reports", async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  try {
+    const report = req.body;
+    await pool.query(
+      `INSERT INTO fault_reports (id, data, created_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (id) DO UPDATE SET data = $2`,
+      [report.id, report, report.createdAt]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB insert failed." });
+  }
+});
+
+// ── AI proxy ──────────────────────────────────────────────────────────
 app.post("/api/fault-report", async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return res.status(503).json({ error: "AI service not configured on this server." });
-  }
-
+  if (!apiKey) return res.status(503).json({ error: "AI service not configured on this server." });
   try {
     const upstream = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -26,7 +109,6 @@ app.post("/api/fault-report", async (req, res) => {
       },
       body: JSON.stringify(req.body),
     });
-
     const data = await upstream.json();
     res.status(upstream.status).json(data);
   } catch (err) {
@@ -37,11 +119,7 @@ app.post("/api/fault-report", async (req, res) => {
 
 // ── Health check ──────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => {
-  res.json({
-    ok: true,
-    ai: !!process.env.ANTHROPIC_API_KEY,
-    ts: new Date().toISOString(),
-  });
+  res.json({ ok: true, ai: !!process.env.ANTHROPIC_API_KEY, db: !!pool, ts: new Date().toISOString() });
 });
 
 // ── Serve built frontend in production ────────────────────────────────
@@ -55,11 +133,6 @@ if (process.env.NODE_ENV === "production") {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  const keyStatus = process.env.ANTHROPIC_API_KEY ? "✓ API key loaded" : "✗ No API key set";
-  console.log(`HDK ARFF server → http://localhost:${PORT}  [${keyStatus}]`);
-  if (process.env.NODE_ENV === "production") {
-    console.log("Serving built frontend from /dist");
-  } else {
-    console.log("Dev mode — Vite frontend runs separately on :5173");
-  }
+  console.log(`HDK ARFF server → http://localhost:${PORT}`);
+  console.log(`  AI: ${process.env.ANTHROPIC_API_KEY ? "✓" : "✗"}  DB: ${pool ? "✓" : "✗ (no DATABASE_URL)"}`);
 });

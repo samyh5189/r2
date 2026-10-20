@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { InspectionLog, FaultReport } from "../types";
 import { getLogs, getFaultReports } from "../storage";
 import { exportInspectionPDF, exportFaultReportPDF, exportWeeklyPDF } from "../pdfExport";
@@ -220,10 +220,17 @@ function exportWeekFor(log: InspectionLog, allLogs: InspectionLog[]) {
 }
 
 export default function LogsPage({ showFaults }: Props) {
-  const [logs] = useState<InspectionLog[]>(() => getLogs());
-  const [faults] = useState<FaultReport[]>(() => getFaultReports());
+  const [logs, setLogs] = useState<InspectionLog[]>([]);
+  const [faults, setFaults] = useState<FaultReport[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState("");
   const [filterOperator, setFilterOperator] = useState("");
+
+  useEffect(() => {
+    Promise.all([getLogs(), getFaultReports()])
+      .then(([l, f]) => { setLogs(l); setFaults(f); })
+      .finally(() => setLoading(false));
+  }, []);
   const [viewLog, setViewLog] = useState<InspectionLog | null>(null);
   const [viewFault, setViewFault] = useState<FaultReport | null>(null);
 
@@ -242,6 +249,12 @@ export default function LogsPage({ showFaults }: Props) {
       return true;
     });
   }, [faults, filterDate, filterOperator]);
+
+  if (loading) return (
+    <div className="container" style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>
+      Loading records…
+    </div>
+  );
 
   return (
     <div className="container">

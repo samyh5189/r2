@@ -209,10 +209,10 @@ export default function ChecklistPage() {
       if (faultReport) {
         faultReport.inspectionLogId = log.id;
         log.faultReportId = faultReport.id;
-        saveFaultReport(faultReport);
+        await saveFaultReport(faultReport);
       }
     }
-    saveLog(log);
+    await saveLog(log);
     setSavedLog(log);
     setSavedFault(faultReport);
     setPhase("done");

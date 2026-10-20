@@ -1,38 +1,69 @@
 import type { InspectionLog, FaultReport } from "./types";
 
-const LOGS_KEY = "hdk_inspection_logs";
-const FAULTS_KEY = "hdk_fault_reports";
+const LS_LOGS = "hdk_inspection_logs";
+const LS_FAULTS = "hdk_fault_reports";
 
-export function getLogs(): InspectionLog[] {
+function lsGet<T>(key: string): T[] {
+  try { return JSON.parse(localStorage.getItem(key) || "[]"); } catch { return []; }
+}
+function lsSet<T>(key: string, items: T[]) {
+  try { localStorage.setItem(key, JSON.stringify(items)); } catch { /* storage full */ }
+}
+
+// ── Inspection logs ───────────────────────────────────────────────────
+
+export async function getLogs(): Promise<InspectionLog[]> {
   try {
-    return JSON.parse(localStorage.getItem(LOGS_KEY) || "[]");
-  } catch {
-    return [];
+    const res = await fetch("/api/logs");
+    if (res.ok) return await res.json();
+  } catch { /* offline — fall through */ }
+  return lsGet<InspectionLog>(LS_LOGS);
+}
+
+export async function saveLog(log: InspectionLog): Promise<void> {
+  // Write to DB
+  try {
+    await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(log),
+    });
+  } catch { /* offline */ }
+  // Mirror to localStorage as offline fallback
+  const logs = lsGet<InspectionLog>(LS_LOGS);
+  if (!logs.find((l) => l.id === log.id)) {
+    lsSet(LS_LOGS, [log, ...logs]);
   }
 }
 
-export function saveLog(log: InspectionLog): void {
-  const logs = getLogs();
-  logs.unshift(log);
-  localStorage.setItem(LOGS_KEY, JSON.stringify(logs));
+// ── Fault reports ─────────────────────────────────────────────────────
+
+export async function getFaultReports(): Promise<FaultReport[]> {
+  try {
+    const res = await fetch("/api/fault-reports");
+    if (res.ok) return await res.json();
+  } catch { /* offline */ }
+  return lsGet<FaultReport>(LS_FAULTS);
 }
 
-export function getFaultReports(): FaultReport[] {
+export async function saveFaultReport(report: FaultReport): Promise<void> {
   try {
-    return JSON.parse(localStorage.getItem(FAULTS_KEY) || "[]");
-  } catch {
-    return [];
+    await fetch("/api/fault-reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(report),
+    });
+  } catch { /* offline */ }
+  const reports = lsGet<FaultReport>(LS_FAULTS);
+  if (!reports.find((r) => r.id === report.id)) {
+    lsSet(LS_FAULTS, [report, ...reports]);
   }
 }
 
-export function saveFaultReport(report: FaultReport): void {
-  const reports = getFaultReports();
-  reports.unshift(report);
-  localStorage.setItem(FAULTS_KEY, JSON.stringify(reports));
-}
+// ── Report number ─────────────────────────────────────────────────────
 
-export function nextFaultReportNumber(): string {
-  const reports = getFaultReports();
+export async function nextFaultReportNumber(): Promise<string> {
+  const reports = await getFaultReports();
   const year = new Date().getFullYear();
   const prefix = `HDK-ARFF/${year}/`;
   const existing = reports

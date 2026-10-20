@@ -153,7 +153,7 @@ export async function generateFaultReport(
 
   return {
     id: crypto.randomUUID(),
-    reportNumber: nextFaultReportNumber(),
+    reportNumber: await nextFaultReportNumber(),
     inspectionLogId: "",
     date, time,
     vehicle: "RESCUE 2 (HDK-ARFF)",
