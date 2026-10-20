@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import type { PdfFile } from "../pdfExport";
 import { onShowPdf } from "../pdfViewer";
 
-// Phones can't reliably show PDFs in an iframe, so pages are drawn with pdf.js (loaded on first use)
+// Phones can't reliably show PDFs in an iframe, so pages are drawn with pdf.js (loaded on first use).
+// The legacy build supports older phone browsers (e.g. iOS WebKit) that the modern build doesn't.
 async function renderPages(blob: Blob, container: HTMLDivElement, isCancelled: () => boolean) {
-  const pdfjs = await import("pdfjs-dist");
-  const { default: workerUrl } = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const { default: workerUrl } = await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url");
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
   const pdf = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
@@ -32,11 +33,13 @@ export default function PdfViewer() {
   const [file, setFile] = useState<PdfFile | null>(null);
   const [state, setState] = useState<"closed" | "loading" | "ready" | "error">("closed");
   const [error, setError] = useState("");
+  const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const urlRef = useRef<string | null>(null);
 
   useEffect(() => onShowPdf((pending) => {
     setFile(null);
+    setFallbackUrl(null);
     setState("loading");
     pending
       .then((f) => {
@@ -52,7 +55,13 @@ export default function PdfViewer() {
     urlRef.current = URL.createObjectURL(file.blob);
     renderPages(file.blob, pagesRef.current, () => cancelled)
       .then(() => { if (!cancelled) setState("ready"); })
-      .catch(() => { if (!cancelled) { setError("Could not display the PDF — use Download instead."); setState("error"); } });
+      .catch((e) => {
+        if (cancelled) return;
+        // Fall back to the browser's own PDF display
+        console.error("pdf.js render failed", e);
+        setFallbackUrl(urlRef.current);
+        setState("ready");
+      });
     return () => {
       cancelled = true;
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -113,7 +122,9 @@ export default function PdfViewer() {
       <div className="pdf-scroll">
         {state === "loading" && <div className="spinner-wrap"><div className="spinner" /><span className="spinner-text">Preparing PDF…</span></div>}
         {state === "error" && <p className="pdf-error">{error}</p>}
-        <div ref={pagesRef} className="pdf-pages" />
+        {fallbackUrl
+          ? <iframe className="pdf-frame" src={fallbackUrl} title={file?.filename} />
+          : <div ref={pagesRef} className="pdf-pages" />}
       </div>
     </div>
   );
