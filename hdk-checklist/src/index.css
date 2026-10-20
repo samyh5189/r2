@@ -837,3 +837,36 @@ textarea.comments-box:focus { border-color: var(--navy); }
   .cl-status-label { font-size: 16px; }
   .cl-intro-card { margin: 16px auto 0; padding: 24px 18px; border-radius: 16px; }
 }
+
+/* ── ENGINE HOURS INPUT ── */
+.cl-hours-wrap {
+  background: white;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.cl-hours-hint {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+.cl-hours-input {
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 22px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--navy);
+  text-align: center;
+  outline: none;
+  transition: border-color 0.15s;
+  -moz-appearance: textfield;
+}
+.cl-hours-input::-webkit-outer-spin-button,
+.cl-hours-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.cl-hours-input:focus { border-color: var(--navy); }

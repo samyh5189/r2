@@ -65,7 +65,6 @@ export default function ChecklistPage() {
 
   // Intro fields
   const [operatorName, setOperatorName] = useState("");
-  const [fleetNumber, setFleetNumber] = useState("");
 
   // Outro fields
   const [overallCondition, setOverallCondition] = useState<"Excellent" | "Good" | "Poor" | "">("");
@@ -79,6 +78,7 @@ export default function ChecklistPage() {
   const sigPad = useRef<SignaturePad | null>(null);
   const remarksRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hoursInputRef = useRef<HTMLInputElement>(null);
 
   const flatItems = useMemo(() => buildFlatItems(sections), []);
   const total = flatItems.length;
@@ -194,7 +194,7 @@ export default function ChecklistPage() {
       time: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
       duration: elapsed,
       operatorName: operatorName.trim(),
-      fleetNumber: fleetNumber.trim(),
+      fleetNumber: "",
       operatorSignature: sig,
       sections,
       overallCondition,
@@ -205,7 +205,7 @@ export default function ChecklistPage() {
 
     let faultReport: FaultReport | null = null;
     if (count > 0) {
-      faultReport = await generateFaultReport(sections, operatorName.trim(), fleetNumber.trim(), sig);
+      faultReport = await generateFaultReport(sections, operatorName.trim(), "", sig);
       if (faultReport) {
         faultReport.inspectionLogId = log.id;
         log.faultReportId = faultReport.id;
@@ -240,10 +240,6 @@ export default function ChecklistPage() {
           <div className="cl-intro-field">
             <label>Operator Name *</label>
             <input type="text" placeholder="Full name" value={operatorName} onChange={(e) => setOperatorName(e.target.value)} autoFocus />
-          </div>
-          <div className="cl-intro-field">
-            <label>Fleet No.</label>
-            <input type="text" placeholder="e.g. HDK-03" value={fleetNumber} onChange={(e) => setFleetNumber(e.target.value)} />
           </div>
           <div className="legend cl-legend-compact">
             <span className="legend-item"><span className="legend-dot" style={{ background: "var(--ok)" }} /> OK — Good</span>
@@ -431,6 +427,7 @@ export default function ChecklistPage() {
   const currentStatus = currentItem?.status ?? "";
   const prevSection = currentIdx > 0 ? flatItems[currentIdx - 1].sectionId : null;
   const isNewSection = prevSection !== flat.sectionId;
+  const isEngineHours = flat.itemId === "p1-10";
 
   return (
     <div className="cl-screen">
@@ -458,7 +455,10 @@ export default function ChecklistPage() {
           {currentStatus && !pendingStatus && (
             <div className="cl-current-status">
               Currently: <span style={{ color: currentStatus === "OK" ? "var(--ok)" : currentStatus === "NOK" ? "var(--nok)" : currentStatus === "U/S" ? "var(--us)" : "var(--na)", fontWeight: 700 }}>{currentStatus}</span>
-              {currentItem && currentItem.evidence.length > 0 && (
+              {isEngineHours && currentItem?.remarks && (
+                <span style={{ marginLeft: 8, fontSize: 12, color: "var(--muted)" }}>— {currentItem.remarks} hrs</span>
+              )}
+              {!isEngineHours && currentItem && currentItem.evidence.length > 0 && (
                 <span style={{ marginLeft: 8, fontSize: 11, color: "var(--muted)" }}>· {currentItem.evidence.length} evidence</span>
               )}
             </div>
@@ -521,7 +521,33 @@ export default function ChecklistPage() {
           )}
         </div>
 
-        {!pendingStatus && (
+        {isEngineHours && (
+          <div className="cl-hours-wrap">
+            <p className="cl-hours-hint">Enter the current engine hours reading from the dashboard</p>
+            <input
+              key={`hours-${currentIdx}`}
+              ref={hoursInputRef}
+              className="cl-hours-input"
+              type="number"
+              step="0.01"
+              min="0"
+              defaultValue={currentItem?.remarks ?? ""}
+              placeholder="e.g. 271.35"
+            />
+            <button
+              className="cl-confirm-btn"
+              onClick={() => {
+                const val = hoursInputRef.current?.value ?? currentItem?.remarks ?? "";
+                applyStatus(flat.sectionId, flat.itemId, "OK", val, []);
+                advance();
+              }}
+            >
+              Record Hours →
+            </button>
+          </div>
+        )}
+
+        {!pendingStatus && !isEngineHours && (
           <div className="cl-status-grid">
             {[
               { status: "OK" as ItemStatus, label: "OK", desc: "Good", color: "var(--ok)" },

@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import type { InspectionLog, FaultReport } from "../types";
 import { getLogs, getFaultReports } from "../storage";
-import { exportInspectionPDF, exportFaultReportPDF } from "../pdfExport";
+import { exportInspectionPDF, exportFaultReportPDF, exportWeeklyPDF } from "../pdfExport";
 
 interface Props {
   showFaults: boolean;
@@ -202,6 +202,23 @@ function LogModal({ log, onClose }: { log: InspectionLog; onClose: () => void })
   );
 }
 
+function exportWeekFor(log: InspectionLog, allLogs: InspectionLog[]) {
+  const [d, m, y] = log.date.split("/").map(Number);
+  const date = new Date(y, m - 1, d);
+  const dow = date.getDay();
+  const daysFromSat = dow === 6 ? 0 : dow + 1;
+  const weekStart = new Date(date);
+  weekStart.setDate(date.getDate() - daysFromSat);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  const weekLogs = allLogs.filter(l => {
+    const [ld, lm, ly] = l.date.split("/").map(Number);
+    const ld2 = new Date(ly, lm - 1, ld);
+    return ld2 >= weekStart && ld2 <= weekEnd;
+  });
+  exportWeeklyPDF(weekLogs);
+}
+
 export default function LogsPage({ showFaults }: Props) {
   const [logs] = useState<InspectionLog[]>(() => getLogs());
   const [faults] = useState<FaultReport[]>(() => getFaultReports());
@@ -284,6 +301,7 @@ export default function LogsPage({ showFaults }: Props) {
                     <td>
                       <button className="action-btn" onClick={() => setViewLog(log)}>View</button>
                       <button className="action-btn" onClick={() => exportInspectionPDF(log)}>PDF</button>
+                      <button className="action-btn" onClick={() => exportWeekFor(log, logs)}>Week</button>
                     </td>
                   </tr>
                 ))}

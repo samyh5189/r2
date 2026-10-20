@@ -486,3 +486,286 @@ export function exportFaultReportPDF(report: FaultReport) {
 
   doc.save(`HDK-FaultReport-${report.reportNumber.replace(/\//g, "-")}.pdf`);
 }
+
+export function exportWeeklyPDF(logs: InspectionLog[]) {
+  if (logs.length === 0) return;
+
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  function parseDateGB(s: string): Date {
+    const [d, m, y] = s.split("/").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function fmtDateGB(d: Date): string {
+    return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+  }
+
+  // Find week (Sat–Fri) containing the most recent log
+  const recentDate = parseDateGB(logs[0].date);
+  const dow = recentDate.getDay(); // 0=Sun … 6=Sat
+  const daysFromSat = dow === 6 ? 0 : dow + 1;
+  const weekStart = new Date(recentDate);
+  weekStart.setDate(weekStart.getDate() - daysFromSat);
+
+  const DAY_NAMES = ["Sat","Sun","Mon","Tue","Wed","Thu","Fri"];
+  const days: Date[] = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d;
+  });
+  const dayStrs = days.map(fmtDateGB);
+
+  const logByDate: Record<string, InspectionLog> = {};
+  for (const log of logs) {
+    if (!logByDate[log.date]) logByDate[log.date] = log;
+  }
+  const dayLogs: (InspectionLog | null)[] = dayStrs.map(ds => logByDate[ds] ?? null);
+  const templateLog = dayLogs.find(l => l !== null)!;
+
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const M = 10;
+  const PW = 210;
+  const TW = PW - 2 * M; // 190
+
+  // Column widths
+  const NUM_W = 7;
+  const DESC_W = 68;
+  const DAY_W = 13;
+  const REM_W = TW - NUM_W - DESC_W - 7 * DAY_W; // 190-7-68-91=24
+
+  const H_DAY = 5.5;
+  const H_DATE = 4.5;
+  const H_ITEM = 5.5;
+  const LIGHT_BLUE: RGB = [232, 240, 250];
+  const PART_BG: RGB = [50, 80, 120];
+  const SEC_BG: RGB = [200, 210, 225];
+  const LINE: RGB = [180, 185, 195];
+
+  let y = 10;
+
+  function drawPageHeader() {
+    doc.setFillColor(...NAVY);
+    doc.rect(M, y, TW, 11, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.text("REGIONAL AIRPORTS COMPANY LTD — ARFF DEPARTMENT", PW / 2, y + 4.5, { align: "center" });
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.text("RESCUE 3  |  SECTION ONE — VEHICLE OPERATORS  |  Weekly Inspection Log", PW / 2, y + 9, { align: "center" });
+    y += 13;
+
+    const weekEndDate = days[6];
+    const range = `${days[0].getDate()}-${MONTHS[days[0].getMonth()]}-${days[0].getFullYear()}  to  ${weekEndDate.getDate()}-${MONTHS[weekEndDate.getMonth()]}-${weekEndDate.getFullYear()}`;
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Week: ${range}`, M, y + 3);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6);
+    doc.setTextColor(...GREY);
+    doc.text("Note: The items/things included in this section shall be inspected and filled out by the assigned Vehicle Operators.", M, y + 7);
+    doc.setTextColor(0, 0, 0);
+    y += 10;
+
+    drawColumnHeaders();
+  }
+
+  function drawColumnHeaders() {
+    // Day name row
+    doc.setFillColor(...LIGHT_BLUE);
+    doc.rect(M, y, TW, H_DAY + H_DATE, "F");
+    doc.setLineWidth(0.3);
+    doc.setDrawColor(...LINE);
+
+    // # cell
+    doc.rect(M, y, NUM_W, H_DAY + H_DATE, "D");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
+    doc.text("#", M + NUM_W / 2, y + (H_DAY + H_DATE) / 2 + 1.5, { align: "center" });
+
+    // Description cell
+    doc.rect(M + NUM_W, y, DESC_W, H_DAY + H_DATE, "D");
+    doc.text("Type and Location of Inspection", M + NUM_W + 2, y + (H_DAY + H_DATE) / 2 + 1.5);
+
+    // Day columns
+    for (let i = 0; i < 7; i++) {
+      const x = M + NUM_W + DESC_W + i * DAY_W;
+      doc.rect(x, y, DAY_W, H_DAY, "D");
+      doc.rect(x, y + H_DAY, DAY_W, H_DATE, "D");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(6.5);
+      doc.text(DAY_NAMES[i], x + DAY_W / 2, y + H_DAY / 2 + 1.5, { align: "center" });
+      doc.setFont("helvetica", "normal"); doc.setFontSize(5.8);
+      doc.setTextColor(60,60,60);
+      doc.text(`${days[i].getDate()}-${MONTHS[days[i].getMonth()]}`, x + DAY_W / 2, y + H_DAY + H_DATE / 2 + 1.5, { align: "center" });
+      doc.setTextColor(0,0,0);
+    }
+
+    // Remarks cell
+    const remX = M + NUM_W + DESC_W + 7 * DAY_W;
+    doc.rect(remX, y, REM_W, H_DAY + H_DATE, "D");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6);
+    doc.text("Remarks", remX + REM_W / 2, y + (H_DAY + H_DATE) / 2 + 1.5, { align: "center" });
+
+    y += H_DAY + H_DATE;
+  }
+
+  function checkPageBreak(needed = H_ITEM) {
+    if (y + needed > 282) {
+      doc.addPage();
+      y = 10;
+      drawColumnHeaders();
+    }
+  }
+
+  function drawPartRow(title: string) {
+    checkPageBreak(6);
+    doc.setFillColor(...PART_BG);
+    doc.rect(M, y, TW, 6, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5);
+    doc.text(title, M + 2, y + 4.2);
+    y += 6;
+  }
+
+  function drawSectionRow(title: string) {
+    checkPageBreak(5);
+    doc.setFillColor(...SEC_BG);
+    doc.rect(M, y, TW, 5, "F");
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.3);
+    doc.rect(M, y, TW, 5, "D");
+    doc.setTextColor(20, 40, 80);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5);
+    doc.text(title, M + 2, y + 3.6);
+    y += 5;
+  }
+
+  function drawItemRow(secId: string, itemIdx: number, label: string, isHours: boolean, rowNum: number) {
+    checkPageBreak(H_ITEM);
+    const rowBg = rowNum % 2 === 0 ? WHITE : LIGHT;
+    doc.setFillColor(...rowBg);
+    doc.rect(M, y, TW, H_ITEM, "F");
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.25);
+
+    // # cell
+    doc.rect(M, y, NUM_W, H_ITEM, "D");
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6); doc.setTextColor(100,100,100);
+    doc.text(String(rowNum), M + NUM_W / 2, y + H_ITEM / 2 + 1.3, { align: "center" });
+
+    // Description cell
+    doc.rect(M + NUM_W, y, DESC_W, H_ITEM, "D");
+    doc.setTextColor(0,0,0); doc.setFontSize(6);
+    doc.text(isHours ? "Engine Running Hours" : label, M + NUM_W + 2, y + H_ITEM / 2 + 1.3);
+
+    // Day cells
+    const remX = M + NUM_W + DESC_W + 7 * DAY_W;
+    const weekRemarks: string[] = [];
+
+    for (let di = 0; di < 7; di++) {
+      const x = M + NUM_W + DESC_W + di * DAY_W;
+      doc.rect(x, y, DAY_W, H_ITEM, "D");
+      const dl = dayLogs[di];
+      if (dl) {
+        const sec = dl.sections.find(s => s.id === secId);
+        const it = sec?.items[itemIdx];
+        if (it) {
+          if (isHours) {
+            if (it.remarks) {
+              doc.setFontSize(5.5); doc.setTextColor(0,0,0);
+              doc.text(it.remarks, x + DAY_W / 2, y + H_ITEM / 2 + 1.3, { align: "center" });
+            }
+          } else if (it.status === "OK") {
+            // Draw green checkmark
+            doc.setDrawColor(0, 140, 60); doc.setLineWidth(0.7);
+            const cx = x + DAY_W / 2 - 2; const cy = y + 0.8;
+            doc.line(cx, cy + 2.2, cx + 1.8, cy + 4);
+            doc.line(cx + 1.8, cy + 4, cx + 4.5, cy + 0.8);
+            doc.setDrawColor(...LINE); doc.setLineWidth(0.25);
+          } else if (it.status === "NOK") {
+            doc.setTextColor(180, 100, 0); doc.setFont("helvetica", "bold"); doc.setFontSize(5.5);
+            doc.text("NOK", x + DAY_W / 2, y + H_ITEM / 2 + 1.3, { align: "center" });
+            if (it.remarks) weekRemarks.push(it.remarks);
+          } else if (it.status === "U/S") {
+            doc.setTextColor(180, 30, 30); doc.setFont("helvetica", "bold"); doc.setFontSize(5.5);
+            doc.text("U/S", x + DAY_W / 2, y + H_ITEM / 2 + 1.3, { align: "center" });
+            if (it.remarks) weekRemarks.push(it.remarks);
+          } else if (it.status === "NA") {
+            doc.setTextColor(130,130,130); doc.setFont("helvetica", "normal"); doc.setFontSize(7);
+            doc.text("—", x + DAY_W / 2, y + H_ITEM / 2 + 1.3, { align: "center" });
+          }
+          doc.setFont("helvetica", "normal"); doc.setTextColor(0,0,0);
+        }
+      }
+    }
+
+    // Remarks cell
+    doc.rect(remX, y, REM_W, H_ITEM, "D");
+    if (weekRemarks.length > 0) {
+      doc.setFontSize(4.8); doc.setTextColor(100,100,100);
+      const rem = weekRemarks.join("; ");
+      doc.text(rem.length > 28 ? rem.substring(0, 28) + "…" : rem, remX + 1, y + H_ITEM / 2 + 1.3);
+    }
+
+    y += H_ITEM;
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────
+  drawPageHeader();
+
+  let lastPart = "";
+  let itemCounter = 0;
+
+  for (const sec of templateLog.sections) {
+    const hasPartPrefix = sec.title.startsWith("PART ");
+    let partTitle = "";
+    let sectionLabel = sec.title;
+
+    if (hasPartPrefix) {
+      const dashIdx = sec.title.indexOf(" — ");
+      if (dashIdx > 0) {
+        partTitle = sec.title.substring(0, dashIdx);
+        sectionLabel = sec.title.substring(dashIdx + 3);
+      } else {
+        partTitle = sec.title;
+        sectionLabel = "";
+      }
+    }
+
+    if (partTitle && partTitle !== lastPart) {
+      drawPartRow(partTitle);
+      lastPart = partTitle;
+    }
+    if (sectionLabel) drawSectionRow(sectionLabel);
+
+    for (let idx = 0; idx < sec.items.length; idx++) {
+      itemCounter++;
+      const lbl = sec.items[idx].label;
+      const isHours = sec.items[idx].id === "p1-10";
+      drawItemRow(sec.id, idx, lbl, isHours, itemCounter);
+    }
+  }
+
+  // Operator info footer row
+  if (y + 14 > 282) { doc.addPage(); y = 10; }
+  y += 4;
+  doc.setFillColor(...LIGHT);
+  doc.rect(M, y, TW, 13, "F");
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.3);
+  doc.rect(M, y, TW, 13, "D");
+  doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
+  doc.text("Operators this week:", M + 2, y + 5);
+  doc.setFont("helvetica", "normal");
+  const ops = [...new Set(dayLogs.filter(Boolean).map(l => `${l!.operatorName} (${l!.date})`))];
+  doc.text(ops.join("   "), M + 2, y + 10, { maxWidth: TW - 4 });
+
+  // Footer on every page
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setFontSize(5.5); doc.setTextColor(...GREY);
+    doc.text("Legend:  ✓ = OK    NOK = Minor defect but operational    U/S = Unserviceable    — = Not Applicable", PW / 2, 293, { align: "center" });
+    doc.text(`Page ${p} of ${totalPages}  |  HDK-ARFF/R3/CHK`, PW - M, 293, { align: "right" });
+  }
+
+  const ws = `${String(days[0].getDate()).padStart(2,"0")}-${MONTHS[days[0].getMonth()]}`;
+  const we = `${String(days[6].getDate()).padStart(2,"0")}-${MONTHS[days[6].getMonth()]}-${days[6].getFullYear()}`;
+  doc.save(`HDK-Weekly-${ws}-to-${we}.pdf`);
+}
