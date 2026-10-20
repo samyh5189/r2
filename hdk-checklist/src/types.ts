@@ -8,9 +8,32 @@ export interface EvidenceItem {
   capturedAt: string;
 }
 
+// How an item is answered: the 4 status buttons, a number reading, or free text.
+// Number/text values are stored in `remarks` (status is set to OK, or NOK when a number is out of limits).
+export type ItemInputType = "status" | "number" | "text";
+
+export interface ChecklistItemConfig {
+  id: string;
+  label: string;
+  type: ItemInputType;
+  unit?: string;
+  min?: number;
+  max?: number;
+}
+
+export interface ChecklistSectionConfig {
+  id: string;
+  title: string;
+  items: ChecklistItemConfig[];
+}
+
 export interface ChecklistItem {
   id: string;
   label: string;
+  type?: ItemInputType;
+  unit?: string;
+  min?: number;
+  max?: number;
   status: ItemStatus;
   remarks: string;
   evidence: EvidenceItem[];

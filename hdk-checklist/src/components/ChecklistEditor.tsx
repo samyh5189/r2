@@ -1,0 +1,146 @@
+import { useEffect, useState } from "react";
+import type { ChecklistItemConfig, ChecklistSectionConfig, ItemInputType } from "../types";
+import { getChecklistConfig, saveChecklistConfig } from "../storage";
+import { defaultChecklistConfig, itemType } from "../checklistData";
+
+interface Props {
+  onAuthLost: () => void;
+}
+
+const TYPE_LABELS: Record<ItemInputType, string> = {
+  status: "OK / NOK / U/S / N/A",
+  number: "Number",
+  text: "Text",
+};
+
+// New ids never collide with the built-in "<section>-<index>" ids, so history stays matched
+const newId = (prefix: string) => `${prefix}-x${crypto.randomUUID().slice(0, 8)}`;
+
+function move<T>(list: T[], i: number, dir: -1 | 1): T[] {
+  const j = i + dir;
+  if (j < 0 || j >= list.length) return list;
+  const next = [...list];
+  [next[i], next[j]] = [next[j], next[i]];
+  return next;
+}
+
+export default function ChecklistEditor({ onAuthLost }: Props) {
+  const [config, setConfig] = useState<ChecklistSectionConfig[] | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+
+  useEffect(() => {
+    getChecklistConfig().then((cfg) => setConfig(cfg.map((s) => ({ ...s, items: s.items.map((it) => ({ ...it, type: itemType(it) })) }))));
+  }, []);
+
+  if (!config) return <div className="container" style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Loading checklist…</div>;
+
+  function update(next: ChecklistSectionConfig[]) {
+    setConfig(next);
+    setDirty(true);
+    setMessage(null);
+  }
+
+  function updateSection(si: number, patch: Partial<ChecklistSectionConfig>) {
+    update(config!.map((s, i) => (i === si ? { ...s, ...patch } : s)));
+  }
+
+  function updateItem(si: number, ii: number, patch: Partial<ChecklistItemConfig>) {
+    updateSection(si, { items: config![si].items.map((it, i) => (i === ii ? { ...it, ...patch } : it)) });
+  }
+
+  async function persist(next: ChecklistSectionConfig[] | null, okText: string) {
+    setSaving(true);
+    try {
+      await saveChecklistConfig(next);
+      setDirty(false);
+      setMessage({ ok: true, text: okText });
+    } catch (e) {
+      const text = e instanceof Error ? e.message : "Save failed.";
+      if (/signed in|expired/i.test(text)) onAuthLost();
+      setMessage({ ok: false, text });
+    }
+    setSaving(false);
+  }
+
+  function save() {
+    const cleaned = config!
+      .map((s) => ({ ...s, title: s.title.trim(), items: s.items.filter((it) => it.label.trim()).map((it) => ({ ...it, label: it.label.trim() })) }))
+      .filter((s) => s.title && s.items.length > 0);
+    setConfig(cleaned);
+    persist(cleaned, "Checklist saved. New inspections use it now.");
+  }
+
+  function reset() {
+    if (!window.confirm("Reset the checklist to the built-in default? Your changes will be lost.")) return;
+    setConfig(defaultChecklistConfig());
+    persist(null, "Checklist reset to default.");
+  }
+
+  const total = config.reduce((a, s) => a + s.items.length, 0);
+
+  return (
+    <div className="container">
+      <div className="editor-bar">
+        <div>
+          <strong>Checklist setup</strong>
+          <span className="editor-sub">{config.length} sections · {total} items</span>
+        </div>
+        <div className="editor-actions">
+          <button className="btn-small" onClick={reset} disabled={saving}>Reset</button>
+          <button className="btn-export" onClick={save} disabled={saving || !dirty}>{saving ? "Saving…" : "Save"}</button>
+        </div>
+      </div>
+      {message && <p className={message.ok ? "editor-ok" : "form-error"}>{message.text}</p>}
+      <p className="editor-hint">Changes apply to new inspections. Past logs and PDFs keep the items they were recorded with.</p>
+
+      {config.map((sec, si) => (
+        <div key={sec.id} className="editor-section">
+          <div className="editor-section-head">
+            <button className="editor-toggle" onClick={() => setOpen(open === sec.id ? null : sec.id)}>{open === sec.id ? "▾" : "▸"}</button>
+            <input className="editor-title" value={sec.title} placeholder="Section title" onChange={(e) => updateSection(si, { title: e.target.value })} />
+            <span className="editor-count">{sec.items.length}</span>
+            <button className="icon-btn" title="Move up" onClick={() => update(move(config, si, -1))}>↑</button>
+            <button className="icon-btn" title="Move down" onClick={() => update(move(config, si, 1))}>↓</button>
+            <button className="icon-btn danger" title="Delete section" onClick={() => window.confirm(`Delete section "${sec.title}" and its ${sec.items.length} items?`) && update(config.filter((_, i) => i !== si))}>×</button>
+          </div>
+
+          {open === sec.id && (
+            <div className="editor-items">
+              {sec.items.map((it, ii) => (
+                <div key={it.id} className="editor-item">
+                  <input className="editor-label" value={it.label} placeholder="Item label" onChange={(e) => updateItem(si, ii, { label: e.target.value })} />
+                  <div className="editor-item-row">
+                    <select value={it.type} onChange={(e) => updateItem(si, ii, { type: e.target.value as ItemInputType })}>
+                      {(Object.keys(TYPE_LABELS) as ItemInputType[]).map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
+                    </select>
+                    {it.type === "number" && (
+                      <>
+                        <input className="editor-num" placeholder="Unit" value={it.unit ?? ""} onChange={(e) => updateItem(si, ii, { unit: e.target.value || undefined })} />
+                        <input className="editor-num" type="number" step="any" placeholder="Min" value={it.min ?? ""} onChange={(e) => updateItem(si, ii, { min: e.target.value === "" ? undefined : Number(e.target.value) })} />
+                        <input className="editor-num" type="number" step="any" placeholder="Max" value={it.max ?? ""} onChange={(e) => updateItem(si, ii, { max: e.target.value === "" ? undefined : Number(e.target.value) })} />
+                      </>
+                    )}
+                    <span className="editor-spacer" />
+                    <button className="icon-btn" title="Move up" onClick={() => updateSection(si, { items: move(sec.items, ii, -1) })}>↑</button>
+                    <button className="icon-btn" title="Move down" onClick={() => updateSection(si, { items: move(sec.items, ii, 1) })}>↓</button>
+                    <button className="icon-btn danger" title="Delete item" onClick={() => updateSection(si, { items: sec.items.filter((_, i) => i !== ii) })}>×</button>
+                  </div>
+                </div>
+              ))}
+              <button className="btn-new" onClick={() => updateSection(si, { items: [...sec.items, { id: newId(sec.id), label: "", type: "status" }] })}>+ Add item</button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      <button className="btn-small" style={{ marginTop: 4 }} onClick={() => {
+        const id = newId("s");
+        update([...config, { id, title: "", items: [{ id: newId(id), label: "", type: "status" }] }]);
+        setOpen(id);
+      }}>+ Add section</button>
+    </div>
+  );
+}

@@ -1,4 +1,5 @@
-import type { InspectionLog, FaultReport } from "./types";
+import type { InspectionLog, FaultReport, ChecklistSectionConfig } from "./types";
+import { defaultChecklistConfig } from "./checklistData";
 
 const LS_LOGS = "hdk_inspection_logs";
 const LS_FAULTS = "hdk_fault_reports";
@@ -149,4 +150,30 @@ export async function updateFaultReport(report: FaultReport) {
 export async function deleteFaultReport(id: string) {
   await adminRequest("DELETE", `/api/fault-reports/${id}`);
   lsReplace<FaultReport>(LS_FAULTS, id, null);
+}
+
+// ── Checklist config ──────────────────────────────────────────────────
+
+const LS_CONFIG = "hdk_checklist_config";
+
+export async function getChecklistConfig(): Promise<ChecklistSectionConfig[]> {
+  try {
+    const res = await fetch("/api/checklist-config");
+    if (res.ok) {
+      const { config } = await res.json();
+      try { localStorage.setItem(LS_CONFIG, JSON.stringify(config)); } catch { /* ignore */ }
+      return config ?? defaultChecklistConfig();
+    }
+  } catch { /* offline */ }
+  try {
+    const cached = JSON.parse(localStorage.getItem(LS_CONFIG) || "null");
+    if (Array.isArray(cached)) return cached;
+  } catch { /* ignore */ }
+  return defaultChecklistConfig();
+}
+
+/** Pass null to reset to the built-in checklist. */
+export async function saveChecklistConfig(config: ChecklistSectionConfig[] | null) {
+  await adminRequest("PUT", "/api/checklist-config", { config });
+  try { localStorage.setItem(LS_CONFIG, JSON.stringify(config)); } catch { /* ignore */ }
 }

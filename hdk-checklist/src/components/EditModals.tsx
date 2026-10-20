@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { InspectionLog, FaultReport, ItemStatus } from "../types";
+import { itemType } from "../checklistData";
 
 interface ModalProps<T> {
   item: T;
@@ -25,10 +26,10 @@ export function EditLogModal({ item, onClose, onSave }: ModalProps<InspectionLog
   const [log, setLog] = useState<InspectionLog>(() => structuredClone(item));
   const { busy, error, save } = useSave(onSave);
 
-  function setStatus(secId: string, itemId: string, status: ItemStatus) {
+  function setItem(secId: string, itemId: string, patch: { status?: ItemStatus; remarks?: string }) {
     setLog((l) => ({
       ...l,
-      sections: l.sections.map((s) => s.id !== secId ? s : { ...s, items: s.items.map((it) => it.id !== itemId ? it : { ...it, status }) }),
+      sections: l.sections.map((s) => s.id !== secId ? s : { ...s, items: s.items.map((it) => it.id !== itemId ? it : { ...it, ...patch }) }),
     }));
   }
 
@@ -64,9 +65,13 @@ export function EditLogModal({ item, onClose, onSave }: ModalProps<InspectionLog
               {sec.items.map((it) => (
                 <div key={it.id} className="edit-item">
                   <span>{it.label}</span>
-                  <select value={it.status} onChange={(e) => setStatus(sec.id, it.id, e.target.value as ItemStatus)}>
-                    {STATUSES.map((s) => <option key={s} value={s}>{s || "—"}</option>)}
-                  </select>
+                  {itemType(it) === "status" ? (
+                    <select value={it.status} onChange={(e) => setItem(sec.id, it.id, { status: e.target.value as ItemStatus })}>
+                      {STATUSES.map((s) => <option key={s} value={s}>{s || "—"}</option>)}
+                    </select>
+                  ) : (
+                    <input className="edit-value" value={it.remarks} placeholder={it.unit ?? ""} onChange={(e) => setItem(sec.id, it.id, { remarks: e.target.value })} />
+                  )}
                 </div>
               ))}
             </div>

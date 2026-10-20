@@ -1,6 +1,6 @@
-import type { ChecklistSection } from "./types";
+import type { ChecklistItem, ChecklistSection, ChecklistSectionConfig, ItemInputType } from "./types";
 
-export function buildBlankChecklist(): ChecklistSection[] {
+export function defaultChecklistConfig(): ChecklistSectionConfig[] {
   const raw: { id: string; title: string; items: string[] }[] = [
     {
       id: "p1",
@@ -128,12 +128,29 @@ export function buildBlankChecklist(): ChecklistSection[] {
   return raw.map((sec) => ({
     id: sec.id,
     title: sec.title,
-    items: sec.items.map((label, idx) => ({
-      id: `${sec.id}-${idx}`,
-      label,
-      status: "" as const,
-      remarks: "",
-      evidence: [],
-    })),
+    items: sec.items.map((label, idx) => {
+      const id = `${sec.id}-${idx}`;
+      return id === ENGINE_HOURS_ID
+        ? { id, label, type: "number" as const, unit: "hrs" }
+        : { id, label, type: "status" as const };
+    }),
   }));
+}
+
+export const ENGINE_HOURS_ID = "p1-10";
+
+export function itemType(item: { id: string; type?: ItemInputType }): ItemInputType {
+  return item.type ?? (item.id === ENGINE_HOURS_ID ? "number" : "status");
+}
+
+export function buildChecklist(config: ChecklistSectionConfig[]): ChecklistSection[] {
+  return config.map((sec) => ({
+    id: sec.id,
+    title: sec.title,
+    items: sec.items.map((it): ChecklistItem => ({ ...it, status: "", remarks: "", evidence: [] })),
+  }));
+}
+
+export function buildBlankChecklist(): ChecklistSection[] {
+  return buildChecklist(defaultChecklistConfig());
 }

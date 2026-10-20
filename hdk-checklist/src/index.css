@@ -460,3 +460,64 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
 .edit-item select { padding: 4px 6px; font-size: 13px; }
 .form-error { color: var(--us); font-size: 13px; }
 .repeat-note { background: var(--section-bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 12.5px; margin: 0 auto 16px; max-width: 420px; text-align: left; display: flex; flex-direction: column; gap: 2px; }
+.edit-item .edit-value { width: 110px; padding: 4px 6px; font-size: 13px; }
+
+/* ── Checklist editor ───────────────────────────────────────────────── */
+.editor-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.editor-sub { display: block; font-size: 12px; color: var(--muted); }
+.editor-actions { display: flex; gap: 8px; }
+.editor-actions .btn-export:disabled { opacity: 0.45; cursor: not-allowed; }
+.editor-hint { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+.editor-ok { color: var(--ok); font-size: 13px; margin-bottom: 8px; }
+.editor-section { background: white; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
+.editor-section-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; }
+.editor-toggle { background: none; border: none; font-size: 14px; cursor: pointer; color: var(--muted); width: 20px; padding: 0; }
+.editor-title { flex: 1; min-width: 0; border: 1px solid transparent; border-radius: 6px; padding: 5px 7px; font-size: 13px; font-weight: 600; font-family: inherit; background: none; color: var(--text); }
+.editor-title:focus, .editor-label:focus { border-color: var(--navy); outline: none; background: white; }
+.editor-count { font-size: 11px; color: var(--muted); background: var(--section-bg); border-radius: 10px; padding: 1px 7px; }
+.icon-btn { background: var(--section-bg); border: 1px solid var(--border); border-radius: 6px; width: 26px; height: 26px; cursor: pointer; font-size: 13px; color: var(--text); padding: 0; flex-shrink: 0; font-family: inherit; }
+.icon-btn:hover { background: var(--navy); color: white; border-color: var(--navy); }
+.icon-btn.danger { color: var(--us); }
+.icon-btn.danger:hover { background: var(--us); color: white; border-color: var(--us); }
+.editor-items { border-top: 1px solid var(--border); padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+.editor-item { display: flex; flex-direction: column; gap: 5px; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
+.editor-label { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 13px; font-family: inherit; background: white; color: var(--text); }
+.editor-item-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.editor-item-row select { border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font-size: 12px; font-family: inherit; background: white; }
+.editor-num { width: 62px; border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font-size: 12px; font-family: inherit; }
+.editor-spacer { flex: 1; }
+
+/* ── Trends ─────────────────────────────────────────────────────────── */
+.trend-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.trend-windows { display: flex; gap: 4px; }
+.trend-window { border: 1.5px solid var(--border); background: white; border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-family: inherit; color: var(--text); }
+.trend-window.active { background: var(--navy); color: white; border-color: var(--navy); }
+.trend-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.trend-stats div { background: white; border: 1px solid var(--border); border-radius: 10px; padding: 10px 8px; text-align: center; font-size: 11px; color: var(--muted); }
+.trend-stats strong { display: block; font-size: 20px; color: var(--text); line-height: 1.2; }
+.trend-heading { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 16px 0 8px; }
+.trend-empty { font-size: 13px; color: var(--muted); }
+.trend-card { background: white; border: 1px solid var(--border); border-left: 4px solid var(--na); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.trend-card.sev-high { border-left-color: var(--us); }
+.trend-card.sev-medium { border-left-color: var(--nok); }
+.trend-card.sev-low { border-left-color: #94a3b8; }
+.trend-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.trend-label { font-size: 13.5px; font-weight: 600; }
+.trend-section { font-size: 11.5px; color: var(--muted); }
+.trend-sev { font-size: 10.5px; font-weight: 700; border-radius: 20px; padding: 2px 8px; white-space: nowrap; }
+.trend-sev.sev-high { background: #fee2e2; color: #991b1b; }
+.trend-sev.sev-medium { background: #fef3c7; color: #92400e; }
+.trend-sev.sev-low { background: var(--section-bg); color: var(--muted); }
+.trend-reasons { margin: 6px 0 8px 16px; font-size: 12.5px; }
+.trend-strip { display: flex; gap: 3px; flex-wrap: wrap; }
+.trend-dot { width: 12px; height: 12px; border-radius: 3px; background: var(--border); }
+.trend-dot.s-OK { background: var(--ok); }
+.trend-dot.s-NOK { background: var(--nok); }
+.trend-dot.s-US { background: var(--us); }
+.trend-dot.s-NA { background: #cbd5e1; }
+.trend-readings { display: flex; flex-direction: column; gap: 6px; }
+.trend-reading { background: white; border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 13px; }
+.trend-reading .trend-section { grid-column: 1 / -1; }
+@media (max-width: 600px) {
+  .trend-stats { grid-template-columns: repeat(2, 1fr); }
+}

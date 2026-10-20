@@ -29,6 +29,11 @@ if (process.env.DATABASE_URL) {
       data JSONB NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS app_config (
+      key TEXT PRIMARY KEY,
+      data JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS deleted_records (
       id TEXT PRIMARY KEY,
       deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -104,6 +109,36 @@ function adminRoutes(path, table) {
     }
   });
 }
+
+// ── Checklist config (admin-editable; null → client uses built-in default) ──
+app.get("/api/checklist-config", async (_req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  try {
+    const result = await pool.query("SELECT data FROM app_config WHERE key = 'checklist'");
+    res.json({ config: result.rows[0]?.data ?? null });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB query failed." });
+  }
+});
+
+app.put("/api/checklist-config", requireAdmin, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  const config = req.body?.config;
+  if (config !== null && !Array.isArray(config)) return res.status(400).json({ error: "Invalid config." });
+  try {
+    if (config === null) await pool.query("DELETE FROM app_config WHERE key = 'checklist'");
+    else await pool.query(
+      `INSERT INTO app_config (key, data, updated_at) VALUES ('checklist', $1, NOW())
+       ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()`,
+      [JSON.stringify(config)]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB update failed." });
+  }
+});
 
 adminRoutes("/api/logs", "inspection_logs");
 adminRoutes("/api/fault-reports", "fault_reports");

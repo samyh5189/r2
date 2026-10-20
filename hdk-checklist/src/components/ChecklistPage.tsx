@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import SignaturePad from "signature_pad";
-import { buildBlankChecklist } from "../checklistData";
-import type { ChecklistSection, ItemStatus, InspectionLog, FaultReport, EvidenceItem } from "../types";
-import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek } from "../storage";
+import { buildBlankChecklist, buildChecklist, itemType } from "../checklistData";
+import type { ChecklistSection, ChecklistSectionConfig, ItemStatus, InspectionLog, FaultReport, EvidenceItem } from "../types";
+import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek, getChecklistConfig } from "../storage";
 import { generateFaultReport } from "../faultReportAI";
 import { exportInspectionPDF, exportFaultReportPDF } from "../pdfExport";
 import { processFile } from "../evidenceUtils";
@@ -61,6 +61,7 @@ const MAX_EVIDENCE = 5;
 
 export default function ChecklistPage() {
   const [sections, setSections] = useState<ChecklistSection[]>(buildBlankChecklist);
+  const [config, setConfig] = useState<ChecklistSectionConfig[] | null>(null);
   const [phase, setPhase] = useState<Phase>("intro");
   const [currentIdx, setCurrentIdx] = useState(0);
   const [pendingStatus, setPendingStatus] = useState<ItemStatus>("");
@@ -97,6 +98,14 @@ export default function ChecklistPage() {
 
   const timerRunning = phase === "item";
   const { elapsed, display: timerDisplay } = useElapsedTimer(timerRunning);
+
+  // Load the admin-configured checklist; only swap it in before any item is answered
+  useEffect(() => {
+    getChecklistConfig().then((cfg) => {
+      setConfig(cfg);
+      setSections((cur) => (cur.every((sec) => sec.items.every((it) => !it.status)) ? buildChecklist(cfg) : cur));
+    });
+  }, []);
 
   // Set up sig pad when we enter outro phase
   useEffect(() => {
@@ -238,7 +247,7 @@ export default function ChecklistPage() {
   }
 
   function handleNew() {
-    setSections(buildBlankChecklist());
+    setSections(config ? buildChecklist(config) : buildBlankChecklist());
     setPhase("intro"); setCurrentIdx(0);
     setPendingStatus(""); setPendingRemarks(""); setPendingEvidence([]); setFlash("");
     setOverallCondition(""); setComments("");
@@ -254,7 +263,7 @@ export default function ChecklistPage() {
           <div className="cl-intro-icon">🚒</div>
           <h2 className="cl-intro-title">Daily Inspection</h2>
           <p className="cl-intro-sub">RESCUE 2 · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
-          <p className="cl-intro-count">{total} items across 9 sections</p>
+          <p className="cl-intro-count">{total} items across {sections.length} sections</p>
 
           <div className="cl-intro-field">
             <label>Operator Name *</label>
@@ -452,7 +461,10 @@ export default function ChecklistPage() {
   const currentStatus = currentItem?.status ?? "";
   const prevSection = currentIdx > 0 ? flatItems[currentIdx - 1].sectionId : null;
   const isNewSection = prevSection !== flat.sectionId;
-  const isEngineHours = flat.itemId === "p1-10";
+  const inputType = currentItem ? itemType(currentItem) : "status";
+  const isValueItem = inputType !== "status";
+  const unit = currentItem?.unit ?? "";
+  const limits = [currentItem?.min != null && `min ${currentItem.min}`, currentItem?.max != null && `max ${currentItem.max}`].filter(Boolean).join(" · ");
 
   return (
     <div className="cl-screen">
@@ -480,10 +492,10 @@ export default function ChecklistPage() {
           {currentStatus && !pendingStatus && (
             <div className="cl-current-status">
               Currently: <span style={{ color: currentStatus === "OK" ? "var(--ok)" : currentStatus === "NOK" ? "var(--nok)" : currentStatus === "U/S" ? "var(--us)" : "var(--na)", fontWeight: 700 }}>{currentStatus}</span>
-              {isEngineHours && currentItem?.remarks && (
-                <span style={{ marginLeft: 8, fontSize: 12, color: "var(--muted)" }}>— {currentItem.remarks} hrs</span>
+              {isValueItem && currentItem?.remarks && (
+                <span style={{ marginLeft: 8, fontSize: 12, color: "var(--muted)" }}>— {currentItem.remarks} {unit}</span>
               )}
-              {!isEngineHours && currentItem && currentItem.evidence.length > 0 && (
+              {!isValueItem && currentItem && currentItem.evidence.length > 0 && (
                 <span style={{ marginLeft: 8, fontSize: 11, color: "var(--muted)" }}>· {currentItem.evidence.length} evidence</span>
               )}
             </div>
@@ -564,33 +576,39 @@ export default function ChecklistPage() {
           )}
         </div>
 
-        {isEngineHours && (
+        {isValueItem && (
           <div className="cl-hours-wrap">
-            <p className="cl-hours-hint">Enter the current engine hours reading from the dashboard</p>
+            <p className="cl-hours-hint">
+              {inputType === "number" ? `Enter the reading${unit ? ` (${unit})` : ""}` : "Enter the details"}
+              {limits && <><br /><span style={{ fontSize: 11 }}>Allowed: {limits}</span></>}
+            </p>
             <input
-              key={`hours-${currentIdx}`}
+              key={`value-${currentIdx}`}
               ref={hoursInputRef}
-              className="cl-hours-input"
-              type="number"
-              step="0.01"
-              min="0"
+              className={inputType === "number" ? "cl-hours-input" : "cl-remarks-input"}
+              type={inputType === "number" ? "number" : "text"}
+              step="any"
               defaultValue={currentItem?.remarks ?? ""}
-              placeholder="e.g. 271.35"
+              placeholder={inputType === "number" ? "e.g. 271.35" : "Type here…"}
             />
             <button
               className="cl-confirm-btn"
               onClick={() => {
-                const val = hoursInputRef.current?.value ?? currentItem?.remarks ?? "";
-                applyStatus(flat.sectionId, flat.itemId, "OK", val, []);
+                const val = (hoursInputRef.current?.value ?? currentItem?.remarks ?? "").trim();
+                if (!val) return;
+                // A number outside its configured limits is recorded as a fault
+                const n = Number(val);
+                const outOfRange = inputType === "number" && ((currentItem?.min != null && n < currentItem.min) || (currentItem?.max != null && n > currentItem.max));
+                applyStatus(flat.sectionId, flat.itemId, outOfRange ? "NOK" : "OK", val, []);
                 advance();
               }}
             >
-              Record Hours →
+              Record →
             </button>
           </div>
         )}
 
-        {!pendingStatus && !isEngineHours && (
+        {!pendingStatus && !isValueItem && (
           <div className="cl-status-grid">
             {[
               { status: "OK" as ItemStatus, label: "OK", desc: "Good", color: "var(--ok)" },

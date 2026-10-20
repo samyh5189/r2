@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import type { InspectionLog, FaultReport } from "./types";
 import { RACL_LOGO } from "./raclLogo";
+import { ENGINE_HOURS_ID, itemType } from "./checklistData";
 
 type RGB = [number, number, number];
 
@@ -123,10 +124,11 @@ export async function exportInspectionPDF(log: InspectionLog) {
       const col = statusColors[item.status] ?? ([150, 150, 150] as [number, number, number]);
       doc.setTextColor(...col);
       doc.setFont("helvetica", "bold");
-      doc.text(item.status || "—", 140, y + 3.8);
+      const isValue = itemType(item) !== "status";
+      doc.text(isValue && item.status === "OK" ? "" : item.status || "—", 140, y + 3.8);
       doc.setTextColor(...GREY);
       doc.setFont("helvetica", "normal");
-      if (item.remarks) doc.text(item.remarks.substring(0, 40), 155, y + 3.8);
+      if (item.remarks) doc.text(`${item.remarks}${isValue && item.unit ? ` ${item.unit}` : ""}`.substring(0, 40), 155, y + 3.8);
       y += 5.5;
     }
     y += 2;
@@ -503,7 +505,8 @@ export async function exportWeeklyPDF(logs: InspectionLog[]) {
     if (!logByDate[log.date]) logByDate[log.date] = log;
   }
   const dayLogs: (InspectionLog | null)[] = dayStrs.map(ds => logByDate[ds] ?? null);
-  const templateLog = dayLogs.find(l => l !== null)!;
+  // Latest log of the week defines the rows (reflects the current checklist setup)
+  const templateLog = [...dayLogs].reverse().find(l => l !== null)!;
 
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const M = 10;
@@ -648,7 +651,7 @@ export async function exportWeeklyPDF(logs: InspectionLog[]) {
     y += 5;
   }
 
-  function drawItemRow(secId: string, itemIdx: number, label: string, isHours: boolean, rowNum: number) {
+  function drawItemRow(secId: string, itemId: string, label: string, isHours: boolean, rowNum: number) {
     checkPageBreak(H_ITEM);
     const rowBg = rowNum % 2 === 0 ? WHITE : LIGHT;
     doc.setFillColor(...rowBg);
@@ -663,7 +666,7 @@ export async function exportWeeklyPDF(logs: InspectionLog[]) {
     // Description cell
     doc.rect(M + NUM_W, y, DESC_W, H_ITEM, "D");
     doc.setTextColor(0,0,0); doc.setFontSize(6);
-    doc.text(isHours ? "Engine Running Hours" : label, M + NUM_W + 2, y + H_ITEM / 2 + 1.3);
+    doc.text(itemId === ENGINE_HOURS_ID ? "Engine Running Hours" : label, M + NUM_W + 2, y + H_ITEM / 2 + 1.3);
 
     // Day cells
     const remX = M + NUM_W + DESC_W + 7 * DAY_W;
@@ -675,13 +678,16 @@ export async function exportWeeklyPDF(logs: InspectionLog[]) {
       const dl = dayLogs[di];
       if (dl) {
         const sec = dl.sections.find(s => s.id === secId);
-        const it = sec?.items[itemIdx];
+        // Match by id so a checklist edited mid-week doesn't shift rows
+        const it = sec?.items.find((i) => i.id === itemId);
         if (it) {
           if (isHours) {
             if (it.remarks) {
-              doc.setFillColor(...OK_BG);
+              const bad = it.status === "NOK" || it.status === "U/S";
+              doc.setFillColor(...(bad ? NOK_BG : OK_BG));
               doc.rect(x + 0.15, y + 0.15, DAY_W - 0.3, H_ITEM - 0.3, "F");
-              doc.setFontSize(5.5); doc.setTextColor(0, 100, 50);
+              doc.setFontSize(5.5);
+              if (bad) doc.setTextColor(160, 80, 0); else doc.setTextColor(0, 100, 50);
               doc.text(it.remarks, x + DAY_W / 2, y + H_ITEM / 2 + 1.3, { align: "center" });
             }
           } else if (it.status === "OK") {
@@ -759,8 +765,8 @@ export async function exportWeeklyPDF(logs: InspectionLog[]) {
     for (let idx = 0; idx < sec.items.length; idx++) {
       itemCounter++;
       const lbl = sec.items[idx].label;
-      const isHours = sec.items[idx].id === "p1-10";
-      drawItemRow(sec.id, idx, lbl, isHours, itemCounter);
+      const isHours = itemType(sec.items[idx]) !== "status";
+      drawItemRow(sec.id, sec.items[idx].id, lbl, isHours, itemCounter);
     }
   }
 
