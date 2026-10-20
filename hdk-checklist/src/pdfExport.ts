@@ -45,17 +45,28 @@ const WHITE: RGB = [255, 255, 255];
 // RED kept for potential future use
 const _RED: RGB = [180, 30, 30]; void _RED;
 
+// Logo on a white tile so its brown/gold reads on the navy header bars
+const LOGO_RATIO = 212 / 321;
+function logoTile(doc: jsPDF, x: number, y: number, w: number, h: number) {
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(x, y, w, h, 1, 1, "F");
+  const lh = h - 1.6;
+  const lw = Math.min(w - 2, lh / LOGO_RATIO);
+  doc.addImage(RACL_LOGO, "PNG", x + (w - lw) / 2, y + (h - lw * LOGO_RATIO) / 2, lw, lw * LOGO_RATIO);
+}
+
 function header(doc: jsPDF, page: number, pages: number) {
   doc.setFillColor(...NAVY);
   doc.rect(10, 8, 190, 18, "F");
+  logoTile(doc, 174, 9.5, 24, 15);
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(8);
   doc.setFont("helvetica", "bold");
-  doc.text("REGIONAL AIRPORTS COMPANY LTD", 105, 14, { align: "center" });
+  doc.text("REGIONAL AIRPORTS COMPANY LTD", 92, 14, { align: "center" });
   doc.setFontSize(8.5);
   doc.text(
     "AIRPORT RESCUE AND FIREFIGHTING DEPARTMENT — KULHUDHUFFUSHI AIRPORT (HDK)",
-    105,
+    92,
     18.5,
     { align: "center" }
   );
@@ -63,7 +74,7 @@ function header(doc: jsPDF, page: number, pages: number) {
   doc.setFontSize(7.5);
   doc.text(
     "RESCUE 2  |  SECTION ONE — VEHICLE OPERATORS  |  Daily Inspection Checklist",
-    105,
+    92,
     23,
     { align: "center" }
   );
@@ -217,7 +228,7 @@ export async function exportFaultReportPDF(report: FaultReport) {
 
   // Logo (right)
   const LOGO_W = 31;
-  const LOGO_H = LOGO_W * (212 / 321);
+  const LOGO_H = LOGO_W * LOGO_RATIO;
   doc.addImage(RACL_LOGO, "PNG", PW - M - LOGO_W, y - 5, LOGO_W, LOGO_H);
 
   // Title
@@ -556,6 +567,7 @@ export async function exportWeeklyPDF(logs: InspectionLog[]) {
   function drawPageHeader() {
     doc.setFillColor(...NAVY);
     doc.rect(M, y, TW, 11, "F");
+    logoTile(doc, M + TW - 17.5, y + 0.9, 16.5, 9.2);
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);

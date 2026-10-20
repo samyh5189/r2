@@ -540,3 +540,5 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
   .pdf-actions button { flex: 1; }
   .pdf-scroll { padding: 8px; }
 }
+.modal-logo { height: 30px; background: white; border-radius: 6px; padding: 3px 6px; flex-shrink: 0; }
+.modal-header .modal-title { flex: 1; min-width: 0; margin: 0 10px; }

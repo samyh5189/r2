@@ -3,6 +3,7 @@ import type { InspectionLog, FaultReport } from "../types";
 import { getLogs, getFaultReports, sameInspectionWeek, updateLog, deleteLog, updateFaultReport, deleteFaultReport } from "../storage";
 import { EditLogModal, EditFaultModal } from "./EditModals";
 import { showPdf } from "../pdfViewer";
+import { RACL_LOGO } from "../raclLogo";
 import { exportInspectionPDF, exportFaultReportPDF, exportWeeklyPDF } from "../pdfExport";
 
 async function migrateLocalStorage(): Promise<{ logs: number; faults: number }> {
@@ -42,6 +43,7 @@ function FaultModal({ report, onClose }: { report: FaultReport; onClose: () => v
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
+          <img src={RACL_LOGO} alt="RACL" className="modal-logo" />
           <span className="modal-title">{report.reportNumber} — Fault Report</span>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
@@ -149,6 +151,7 @@ function LogModal({ log, onClose }: { log: InspectionLog; onClose: () => void })
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
+          <img src={RACL_LOGO} alt="RACL" className="modal-logo" />
           <span className="modal-title">Inspection — {log.date} · {log.operatorName}</span>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
