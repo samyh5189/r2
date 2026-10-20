@@ -139,8 +139,10 @@ export async function generateFaultReport(
   operatorName: string,
   fleetNumber: string,
   operatorSignature: string,
+  skipItemIds: Set<string> = new Set(),
 ): Promise<FaultReport | null> {
-  const faults = collectFaults(sections);
+  // Faults already on an open report this week are not reported again
+  const faults = collectFaults(sections).filter((f) => !skipItemIds.has(f.itemId));
   if (faults.length === 0) return null;
 
   const now = new Date();

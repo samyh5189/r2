@@ -714,7 +714,14 @@ export async function exportWeeklyPDF(logs: InspectionLog[]) {
     doc.rect(remX, y, REM_W, H_ITEM, "D");
     if (weekRemarks.length > 0) {
       doc.setFontSize(4.8); doc.setTextColor(100,100,100);
-      const rem = weekRemarks.join("; ");
+      // Same fault re-marked on several days → list its remark once
+      const seen = new Set<string>();
+      const rem = weekRemarks.filter((r) => {
+        const k = r.trim().toLowerCase();
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      }).join("; ");
       doc.text(rem.length > 28 ? rem.substring(0, 28) + "…" : rem, remX + 1, y + H_ITEM / 2 + 1.3);
     }
 

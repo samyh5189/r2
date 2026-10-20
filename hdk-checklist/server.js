@@ -2,6 +2,7 @@ import express from "express";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { readFileSync } from "fs";
+import { createHmac, timingSafeEqual } from "crypto";
 import pg from "pg";
 import "dotenv/config";
 
@@ -28,10 +29,84 @@ if (process.env.DATABASE_URL) {
       data JSONB NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS deleted_records (
+      id TEXT PRIMARY KEY,
+      deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `)
     .then(() => console.log("✓ DB tables ready"))
     .catch((e) => console.error("DB init error:", e));
 }
+
+// ── Admin auth ────────────────────────────────────────────────────────
+// Admin signs in with ADMIN_EMAIL + ADMIN_PASSWORD (Railway variables) and gets a
+// signed token; edit/delete endpoints require it. Changing the password revokes tokens.
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "9799744@gmail.com").toLowerCase();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+function sign(payload) {
+  return createHmac("sha256", ADMIN_PASSWORD).update(payload).digest("base64url");
+}
+
+function safeEqual(a, b) {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+function requireAdmin(req, res, next) {
+  if (!ADMIN_PASSWORD) return res.status(503).json({ error: "Admin not configured." });
+  const token = (req.headers.authorization || "").replace(/^Bearer /, "");
+  const [payload, sig] = token.split(".");
+  if (!payload || !sig || !safeEqual(sig, sign(payload))) return res.status(401).json({ error: "Not signed in." });
+  const { email, exp } = JSON.parse(Buffer.from(payload, "base64url").toString());
+  if (email !== ADMIN_EMAIL || Date.now() > exp) return res.status(401).json({ error: "Session expired." });
+  next();
+}
+
+app.post("/api/admin/login", (req, res) => {
+  if (!ADMIN_PASSWORD) return res.status(503).json({ error: "Admin not configured on this server." });
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const password = String(req.body?.password || "");
+  if (email !== ADMIN_EMAIL || !safeEqual(password, ADMIN_PASSWORD)) {
+    return res.status(401).json({ error: "Wrong email or password." });
+  }
+  const payload = Buffer.from(JSON.stringify({ email, exp: Date.now() + TOKEN_TTL_MS })).toString("base64url");
+  res.json({ token: `${payload}.${sign(payload)}`, email });
+});
+
+// Shared admin update/delete handlers for a JSONB table
+function adminRoutes(path, table) {
+  app.put(`${path}/:id`, requireAdmin, async (req, res) => {
+    if (!pool) return res.status(503).json({ error: "No database configured." });
+    try {
+      const item = { ...req.body, id: req.params.id };
+      const result = await pool.query(`UPDATE ${table} SET data = $2 WHERE id = $1`, [req.params.id, item]);
+      if (result.rowCount === 0) return res.status(404).json({ error: "Not found." });
+      res.json({ ok: true });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "DB update failed." });
+    }
+  });
+
+  app.delete(`${path}/:id`, requireAdmin, async (req, res) => {
+    if (!pool) return res.status(503).json({ error: "No database configured." });
+    try {
+      // Remember the id so a device syncing old localStorage can't re-insert it
+      await pool.query(`INSERT INTO deleted_records (id) VALUES ($1) ON CONFLICT DO NOTHING`, [req.params.id]);
+      await pool.query(`DELETE FROM ${table} WHERE id = $1`, [req.params.id]);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "DB delete failed." });
+    }
+  });
+}
+
+adminRoutes("/api/logs", "inspection_logs");
+adminRoutes("/api/fault-reports", "fault_reports");
 
 // ── Inspection logs ───────────────────────────────────────────────────
 app.get("/api/logs", async (_req, res) => {
@@ -53,8 +128,8 @@ app.post("/api/logs", async (req, res) => {
     const log = req.body;
     await pool.query(
       `INSERT INTO inspection_logs (id, data, created_at)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (id) DO UPDATE SET data = $2`,
+       SELECT $1, $2, $3 WHERE NOT EXISTS (SELECT 1 FROM deleted_records WHERE id = $1)
+       ON CONFLICT (id) DO NOTHING`,
       [log.id, log, log.createdAt]
     );
     res.json({ ok: true });
@@ -84,8 +159,8 @@ app.post("/api/fault-reports", async (req, res) => {
     const report = req.body;
     await pool.query(
       `INSERT INTO fault_reports (id, data, created_at)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (id) DO UPDATE SET data = $2`,
+       SELECT $1, $2, $3 WHERE NOT EXISTS (SELECT 1 FROM deleted_records WHERE id = $1)
+       ON CONFLICT (id) DO NOTHING`,
       [report.id, report, report.createdAt]
     );
     res.json({ ok: true });

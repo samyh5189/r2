@@ -74,3 +74,79 @@ export async function nextFaultReportNumber(): Promise<string> {
   const next = existing.length > 0 ? Math.max(...existing) + 1 : 1;
   return `${prefix}${String(next).padStart(2, "0")}`;
 }
+
+// ── Inspection week (Sat–Fri, same as the weekly sheet) ───────────────
+
+export function inspectionWeekStart(dateGB: string): Date {
+  const [d, m, y] = dateGB.split("/").map(Number);
+  const date = new Date(y, m - 1, d);
+  const daysFromSat = date.getDay() === 6 ? 0 : date.getDay() + 1;
+  date.setDate(date.getDate() - daysFromSat);
+  return date;
+}
+
+export function sameInspectionWeek(a: string, b: string): boolean {
+  return inspectionWeekStart(a).getTime() === inspectionWeekStart(b).getTime();
+}
+
+// ── Admin (edit / delete) ─────────────────────────────────────────────
+
+const LS_ADMIN = "hdk_admin_token";
+
+export function getAdminToken(): string | null {
+  try { return localStorage.getItem(LS_ADMIN); } catch { return null; }
+}
+
+export function signOutAdmin() {
+  try { localStorage.removeItem(LS_ADMIN); } catch { /* ignore */ }
+}
+
+export async function adminLogin(email: string, password: string): Promise<string | null> {
+  const res = await fetch("/api/admin/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return data.error ?? "Sign-in failed.";
+  try { localStorage.setItem(LS_ADMIN, data.token); } catch { /* ignore */ }
+  return null;
+}
+
+async function adminRequest(method: "PUT" | "DELETE", path: string, body?: unknown) {
+  const res = await fetch(path, {
+    method,
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) signOutAdmin();
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? `Request failed (${res.status})`);
+  }
+}
+
+function lsReplace<T extends { id: string }>(key: string, id: string, item: T | null) {
+  const items = lsGet<T>(key);
+  lsSet(key, item ? items.map((i) => (i.id === id ? item : i)) : items.filter((i) => i.id !== id));
+}
+
+export async function updateLog(log: InspectionLog) {
+  await adminRequest("PUT", `/api/logs/${log.id}`, log);
+  lsReplace(LS_LOGS, log.id, log);
+}
+
+export async function deleteLog(id: string) {
+  await adminRequest("DELETE", `/api/logs/${id}`);
+  lsReplace<InspectionLog>(LS_LOGS, id, null);
+}
+
+export async function updateFaultReport(report: FaultReport) {
+  await adminRequest("PUT", `/api/fault-reports/${report.id}`, report);
+  lsReplace(LS_FAULTS, report.id, report);
+}
+
+export async function deleteFaultReport(id: string) {
+  await adminRequest("DELETE", `/api/fault-reports/${id}`);
+  lsReplace<FaultReport>(LS_FAULTS, id, null);
+}

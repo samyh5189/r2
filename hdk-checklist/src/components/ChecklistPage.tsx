@@ -2,12 +2,18 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import SignaturePad from "signature_pad";
 import { buildBlankChecklist } from "../checklistData";
 import type { ChecklistSection, ItemStatus, InspectionLog, FaultReport, EvidenceItem } from "../types";
-import { saveLog, saveFaultReport } from "../storage";
+import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek } from "../storage";
 import { generateFaultReport } from "../faultReportAI";
 import { exportInspectionPDF, exportFaultReportPDF } from "../pdfExport";
 import { processFile } from "../evidenceUtils";
 
 type Phase = "intro" | "item" | "review" | "outro" | "submitting" | "done";
+
+interface RepeatFault {
+  label: string;
+  reportNumber: string;
+  reportId: string;
+}
 
 interface FlatItem {
   sectionId: string;
@@ -73,6 +79,7 @@ export default function ChecklistPage() {
   // Results
   const [savedLog, setSavedLog] = useState<InspectionLog | null>(null);
   const [savedFault, setSavedFault] = useState<FaultReport | null>(null);
+  const [repeatFaults, setRepeatFaults] = useState<RepeatFault[]>([]);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sigPad = useRef<SignaturePad | null>(null);
@@ -206,17 +213,27 @@ export default function ChecklistPage() {
     };
 
     let faultReport: FaultReport | null = null;
+    const repeats: RepeatFault[] = [];
     if (count > 0) {
-      faultReport = await generateFaultReport(sections, operatorName.trim(), "", sig);
+      // Faults already on an open report from this week link to it instead of a new report
+      const openThisWeek = (await getFaultReports()).filter((r) => r.status !== "Resolved" && sameInspectionWeek(r.date, log.date));
+      const reportedIn = new Map<string, FaultReport>();
+      for (const r of openThisWeek) for (const f of r.faults) if (!reportedIn.has(f.itemId)) reportedIn.set(f.itemId, r);
+      for (const sec of sections) for (const it of sec.items) {
+        const prior = reportedIn.get(it.id);
+        if (prior && (it.status === "NOK" || it.status === "U/S")) repeats.push({ label: it.label, reportNumber: prior.reportNumber, reportId: prior.id });
+      }
+      faultReport = await generateFaultReport(sections, operatorName.trim(), "", sig, new Set(reportedIn.keys()));
       if (faultReport) {
         faultReport.inspectionLogId = log.id;
-        log.faultReportId = faultReport.id;
         await saveFaultReport(faultReport);
       }
+      log.faultReportId = faultReport?.id ?? repeats[0]?.reportId;
     }
     await saveLog(log);
     setSavedLog(log);
     setSavedFault(faultReport);
+    setRepeatFaults(repeats);
     setPhase("done");
   }
 
@@ -225,7 +242,7 @@ export default function ChecklistPage() {
     setPhase("intro"); setCurrentIdx(0);
     setPendingStatus(""); setPendingRemarks(""); setPendingEvidence([]); setFlash("");
     setOverallCondition(""); setComments("");
-    setSavedLog(null); setSavedFault(null);
+    setSavedLog(null); setSavedFault(null); setRepeatFaults([]);
     sigPad.current = null;
   }
 
@@ -284,6 +301,12 @@ export default function ChecklistPage() {
           {savedFault && (
             <div className={`fault-badge${isCritical ? " critical" : ""}`}>
               {isCritical ? "🔴 IMMEDIATE GROUNDING" : "⚠️ Fault Report"} — {savedFault.reportNumber}
+            </div>
+          )}
+          {repeatFaults.length > 0 && (
+            <div className="repeat-note">
+              <strong>Already reported this week — no new report:</strong>
+              {repeatFaults.map((r) => <div key={r.label}>{r.label} · {r.reportNumber}</div>)}
             </div>
           )}
           {savedFault?.aiAssessment && (

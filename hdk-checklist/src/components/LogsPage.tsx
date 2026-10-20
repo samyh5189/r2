@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import type { InspectionLog, FaultReport } from "../types";
-import { getLogs, getFaultReports } from "../storage";
+import { getLogs, getFaultReports, sameInspectionWeek, updateLog, deleteLog, updateFaultReport, deleteFaultReport } from "../storage";
+import { EditLogModal, EditFaultModal } from "./EditModals";
 import { exportInspectionPDF, exportFaultReportPDF, exportWeeklyPDF } from "../pdfExport";
 
 async function migrateLocalStorage(): Promise<{ logs: number; faults: number }> {
@@ -30,6 +31,8 @@ async function migrateLocalStorage(): Promise<{ logs: number; faults: number }> 
 
 interface Props {
   showFaults: boolean;
+  isAdmin: boolean;
+  onAuthLost: () => void;
 }
 
 function FaultModal({ report, onClose }: { report: FaultReport; onClose: () => void }) {
@@ -228,23 +231,14 @@ function LogModal({ log, onClose }: { log: InspectionLog; onClose: () => void })
 }
 
 function exportWeekFor(log: InspectionLog, allLogs: InspectionLog[]) {
-  const [d, m, y] = log.date.split("/").map(Number);
-  const date = new Date(y, m - 1, d);
-  const dow = date.getDay();
-  const daysFromSat = dow === 6 ? 0 : dow + 1;
-  const weekStart = new Date(date);
-  weekStart.setDate(date.getDate() - daysFromSat);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  const weekLogs = allLogs.filter(l => {
-    const [ld, lm, ly] = l.date.split("/").map(Number);
-    const ld2 = new Date(ly, lm - 1, ld);
-    return ld2 >= weekStart && ld2 <= weekEnd;
-  });
-  exportWeeklyPDF(weekLogs);
+  exportWeeklyPDF(allLogs.filter((l) => sameInspectionWeek(l.date, log.date)));
 }
 
-export default function LogsPage({ showFaults }: Props) {
+function localIds(key: string): string[] {
+  try { return (JSON.parse(localStorage.getItem(key) || "[]") as { id: string }[]).map((r) => r.id); } catch { return []; }
+}
+
+export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
   const [logs, setLogs] = useState<InspectionLog[]>([]);
   const [faults, setFaults] = useState<FaultReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -253,7 +247,6 @@ export default function LogsPage({ showFaults }: Props) {
   const [migrating, setMigrating] = useState(false);
   const [migrateResult, setMigrateResult] = useState<string | null>(null);
 
-  const hasLocalData = !!(localStorage.getItem("hdk_inspection_logs") || localStorage.getItem("hdk_fault_reports"));
 
   const reload = useCallback(() => {
     Promise.all([getLogs(), getFaultReports()])
@@ -273,6 +266,30 @@ export default function LogsPage({ showFaults }: Props) {
   };
   const [viewLog, setViewLog] = useState<InspectionLog | null>(null);
   const [viewFault, setViewFault] = useState<FaultReport | null>(null);
+  const [editLog, setEditLog] = useState<InspectionLog | null>(null);
+  const [editFault, setEditFault] = useState<FaultReport | null>(null);
+
+  // Every save is mirrored locally, so only offer a sync when this device holds records the DB lacks
+  const hasLocalData = useMemo(() => {
+    const dbIds = new Set([...logs, ...faults].map((r) => r.id));
+    return [...localIds("hdk_inspection_logs"), ...localIds("hdk_fault_reports")].some((id) => !dbIds.has(id));
+  }, [logs, faults]);
+
+  async function adminAction(action: () => Promise<void>) {
+    try {
+      await action();
+      reload();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Request failed.";
+      if (/signed in|expired/i.test(msg)) onAuthLost();
+      throw e;
+    }
+  }
+
+  function confirmDelete(what: string, action: () => Promise<void>) {
+    if (!window.confirm(`Delete ${what}? This cannot be undone.`)) return;
+    adminAction(action).catch((e) => window.alert(e instanceof Error ? e.message : "Delete failed."));
+  }
 
   const filteredLogs = useMemo(() => {
     return logs.filter((l) => {
@@ -316,14 +333,14 @@ export default function LogsPage({ showFaults }: Props) {
         <input
           className="filter-input"
           type="text"
-          placeholder="Filter by date (DD/MM/YYYY)"
+          placeholder="Date DD/MM/YYYY"
           value={filterDate}
           onChange={(e) => setFilterDate(e.target.value)}
         />
         <input
           className="filter-input"
           type="text"
-          placeholder="Filter by operator name"
+          placeholder="Operator"
           value={filterOperator}
           onChange={(e) => setFilterOperator(e.target.value)}
         />
@@ -348,15 +365,15 @@ export default function LogsPage({ showFaults }: Props) {
                   <tr><td colSpan={6} className="empty-state">No inspection logs yet.</td></tr>
                 ) : filteredLogs.map((log) => (
                   <tr key={log.id}>
-                    <td data-label="Date">{log.date}</td>
-                    <td data-label="Time">{log.time}</td>
-                    <td data-label="Operator">{log.operatorName}</td>
-                    <td data-label="Condition">
+                    <td className="ga-a" data-label="Date">{log.date}</td>
+                    <td className="ga-b" data-label="Time">{log.time}</td>
+                    <td className="ga-line" data-label="Operator">{log.operatorName}</td>
+                    <td className="ga-c" data-label="Condition">
                       <span className={`badge badge-${log.overallCondition === "Excellent" || log.overallCondition === "Good" ? "ok" : "critical"}`}>
                         {log.overallCondition}
                       </span>
                     </td>
-                    <td data-label="Faults">
+                    <td className="ga-d" data-label="Faults">
                       {log.faultCount > 0 ? (
                         <span className={`badge ${log.faultCount >= 3 ? "badge-critical" : "badge-fault"}`}>
                           {log.faultCount} fault{log.faultCount > 1 ? "s" : ""}
@@ -369,6 +386,10 @@ export default function LogsPage({ showFaults }: Props) {
                       <button className="action-btn" onClick={() => setViewLog(log)}>View</button>
                       <button className="action-btn" onClick={() => exportInspectionPDF(log)}>PDF</button>
                       <button className="action-btn" onClick={() => exportWeekFor(log, logs)}>Week</button>
+                      {isAdmin && <>
+                        <button className="action-btn" onClick={() => setEditLog(log)}>Edit</button>
+                        <button className="action-btn danger" onClick={() => confirmDelete(`the log from ${log.date}`, () => deleteLog(log.id))}>Delete</button>
+                      </>}
                     </td>
                   </tr>
                 ))}
@@ -401,16 +422,16 @@ export default function LogsPage({ showFaults }: Props) {
                   const priorityKey = fr.priority === "Immediate Grounding" ? "Grounding" : fr.priority;
                   return (
                     <tr key={fr.id}>
-                      <td data-label="Report No." style={{ fontWeight: 600 }}>{fr.reportNumber}</td>
-                      <td data-label="Date">{fr.date}</td>
-                      <td data-label="Operator">{fr.operatorName}</td>
-                      <td data-label="Faults">{fr.faults.length}</td>
-                      <td data-label="Priority">
+                      <td className="ga-a" data-label="Report No." style={{ fontWeight: 600 }}>{fr.reportNumber}</td>
+                      <td className="ga-b" data-label="Date">{fr.date}</td>
+                      <td className="ga-line" data-label="Operator">{fr.operatorName}</td>
+                      <td className="ga-meta" data-label="Faults">{fr.faults.length} fault{fr.faults.length !== 1 ? "s" : ""}</td>
+                      <td className="ga-c" data-label="Priority">
                         <span className={`priority-label priority-${priorityKey}`} style={{ padding: "2px 8px", fontSize: 11 }}>
                           {fr.priority}
                         </span>
                       </td>
-                      <td data-label="Status">
+                      <td className="ga-d" data-label="Status">
                         <span className={`badge badge-${fr.status === "Resolved" ? "resolved" : fr.status === "Open" ? "open" : "fault"}`}>
                           {fr.status}
                         </span>
@@ -418,6 +439,10 @@ export default function LogsPage({ showFaults }: Props) {
                       <td className="log-actions">
                         <button className="action-btn" onClick={() => setViewFault(fr)}>View</button>
                         <button className="action-btn" onClick={() => exportFaultReportPDF(fr)}>PDF</button>
+                        {isAdmin && <>
+                          <button className="action-btn" onClick={() => setEditFault(fr)}>Edit</button>
+                          <button className="action-btn danger" onClick={() => confirmDelete(fr.reportNumber, () => deleteFaultReport(fr.id))}>Delete</button>
+                        </>}
                       </td>
                     </tr>
                   );
@@ -433,6 +458,8 @@ export default function LogsPage({ showFaults }: Props) {
 
       {viewLog && <LogModal log={viewLog} onClose={() => setViewLog(null)} />}
       {viewFault && <FaultModal report={viewFault} onClose={() => setViewFault(null)} />}
+      {editLog && <EditLogModal item={editLog} onClose={() => setEditLog(null)} onSave={(l) => adminAction(() => updateLog(l)).then(() => setEditLog(null))} />}
+      {editFault && <EditFaultModal item={editFault} onClose={() => setEditFault(null)} onSave={(r) => adminAction(() => updateFaultReport(r)).then(() => setEditFault(null))} />}
     </div>
   );
 }
