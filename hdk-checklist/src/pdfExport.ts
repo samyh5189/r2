@@ -4,12 +4,12 @@ import type { InspectionLog, FaultReport } from "./types";
 type RGB = [number, number, number];
 
 // Strip near-white pixels from a PNG data URL (for transparent signature rendering).
-// Data URLs are decoded synchronously in browsers, so no async needed.
-function stripWhiteBg(dataUrl: string): string {
+// Older signatures were captured with a light background; this makes them transparent.
+async function stripWhiteBg(dataUrl: string): Promise<string> {
   try {
     const img = new Image();
     img.src = dataUrl;
-    if (!img.complete || !img.naturalWidth) return dataUrl;
+    await img.decode();
     const canvas = document.createElement("canvas");
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
@@ -68,7 +68,8 @@ function header(doc: jsPDF, page: number, pages: number) {
   doc.text(`Page ${page} of ${pages}`, 198, 31, { align: "right" });
 }
 
-export function exportInspectionPDF(log: InspectionLog) {
+export async function exportInspectionPDF(log: InspectionLog) {
+  const sig = log.operatorSignature ? await stripWhiteBg(log.operatorSignature) : "";
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pages = 2;
   header(doc, 1, pages);
@@ -153,7 +154,7 @@ export function exportInspectionPDF(log: InspectionLog) {
     doc.setFontSize(7);
     doc.setTextColor(0, 0, 0);
     doc.text("Operator Signature:", 12, y + 5);
-    doc.addImage(log.operatorSignature, "PNG", 12, y + 7, 60, 20);
+    doc.addImage(sig, "PNG", 12, y + 7, 60, 20);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(6.5);
     doc.setTextColor(...GREY);
@@ -176,7 +177,8 @@ export function exportInspectionPDF(log: InspectionLog) {
   doc.save(`HDK-Checklist-${log.date.replace(/\//g, "-")}-${log.operatorName}.pdf`);
 }
 
-export function exportFaultReportPDF(report: FaultReport) {
+export async function exportFaultReportPDF(report: FaultReport) {
+  const sig = report.operatorSignature ? await stripWhiteBg(report.operatorSignature) : undefined;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
 
   const M = 12;
@@ -416,7 +418,7 @@ export function exportFaultReportPDF(report: FaultReport) {
   labelTextRow("3. Details of Defects :", defectText, defectH);
 
   // 4. Reported by
-  sigRow("4. Reported by :", report.operatorName, 16, report.operatorSignature);
+  sigRow("4. Reported by :", report.operatorName, 16, sig);
 
   // Malfunction / Notification date row
   dtHeader("MALFUNCTION DATE / TIME", "NOTIFICATION DATE / TIME");
@@ -512,8 +514,9 @@ export function exportFaultReportPDF(report: FaultReport) {
   doc.save(`HDK-FaultReport-${report.reportNumber.replace(/\//g, "-")}.pdf`);
 }
 
-export function exportWeeklyPDF(logs: InspectionLog[]) {
+export async function exportWeeklyPDF(logs: InspectionLog[]) {
   if (logs.length === 0) return;
+  const sigs = new Map(await Promise.all(logs.map(async (l) => [l, l.operatorSignature ? await stripWhiteBg(l.operatorSignature) : ""] as const)));
 
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -820,9 +823,9 @@ export function exportWeeklyPDF(logs: InspectionLog[]) {
     doc.text(`${DAY_NAMES[i]}  ${days[i].getDate()}-${MONTHS[days[i].getMonth()]}`, x + cellW / 2, y + 3.5, { align: "center" });
 
     if (dl) {
-      if (dl.operatorSignature) {
+      const sigData = sigs.get(dl);
+      if (sigData) {
         try {
-          const sigData = stripWhiteBg(dl.operatorSignature);
           doc.addImage(sigData, "PNG", x + 1, y + 5, cellW - 2, SIG_H - 10);
         } catch { /* no-op */ }
       }
