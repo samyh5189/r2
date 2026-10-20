@@ -78,6 +78,7 @@ export default function ChecklistPage() {
   const sigPad = useRef<SignaturePad | null>(null);
   const remarksRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const hoursInputRef = useRef<HTMLInputElement>(null);
 
   const flatItems = useMemo(() => buildFlatItems(sections), []);
@@ -152,6 +153,7 @@ export default function ChecklistPage() {
     setPendingEvidence((prev) => [...prev, ...results]);
     setUploadingEvidence(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    if (uploadInputRef.current) uploadInputRef.current.value = "";
   }
 
   function removeEvidence(id: string) {
@@ -483,20 +485,38 @@ export default function ChecklistPage() {
                 <div className="cl-evidence-header">
                   <span className="cl-evidence-title">Evidence ({pendingEvidence.length}/{MAX_EVIDENCE})</span>
                   {pendingEvidence.length < MAX_EVIDENCE && (
-                    <button
-                      className="cl-add-evidence-btn"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploadingEvidence}
-                    >
-                      {uploadingEvidence ? "Processing…" : "📷 Add Photo / Video"}
-                    </button>
+                    <div className="cl-ev-btn-group">
+                      <button
+                        className="cl-add-evidence-btn"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingEvidence}
+                      >
+                        📷 Camera
+                      </button>
+                      <button
+                        className="cl-add-evidence-btn secondary"
+                        onClick={() => uploadInputRef.current?.click()}
+                        disabled={uploadingEvidence}
+                      >
+                        📁 Upload
+                      </button>
+                    </div>
                   )}
+                  {uploadingEvidence && <span style={{ fontSize: 11, color: "var(--muted)" }}>Processing…</span>}
                 </div>
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept="image/*,video/*"
                   capture="environment"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={handleFileCapture}
+                />
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  accept="image/*,video/*"
                   multiple
                   style={{ display: "none" }}
                   onChange={handleFileCapture}
