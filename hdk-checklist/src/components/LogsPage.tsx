@@ -348,15 +348,15 @@ export default function LogsPage({ showFaults }: Props) {
                   <tr><td colSpan={6} className="empty-state">No inspection logs yet.</td></tr>
                 ) : filteredLogs.map((log) => (
                   <tr key={log.id}>
-                    <td>{log.date}</td>
-                    <td>{log.time}</td>
-                    <td>{log.operatorName}</td>
-                    <td>
+                    <td data-label="Date">{log.date}</td>
+                    <td data-label="Time">{log.time}</td>
+                    <td data-label="Operator">{log.operatorName}</td>
+                    <td data-label="Condition">
                       <span className={`badge badge-${log.overallCondition === "Excellent" || log.overallCondition === "Good" ? "ok" : "critical"}`}>
                         {log.overallCondition}
                       </span>
                     </td>
-                    <td>
+                    <td data-label="Faults">
                       {log.faultCount > 0 ? (
                         <span className={`badge ${log.faultCount >= 3 ? "badge-critical" : "badge-fault"}`}>
                           {log.faultCount} fault{log.faultCount > 1 ? "s" : ""}
@@ -365,7 +365,7 @@ export default function LogsPage({ showFaults }: Props) {
                         <span className="badge badge-ok">None</span>
                       )}
                     </td>
-                    <td>
+                    <td className="log-actions">
                       <button className="action-btn" onClick={() => setViewLog(log)}>View</button>
                       <button className="action-btn" onClick={() => exportInspectionPDF(log)}>PDF</button>
                       <button className="action-btn" onClick={() => exportWeekFor(log, logs)}>Week</button>
@@ -401,21 +401,21 @@ export default function LogsPage({ showFaults }: Props) {
                   const priorityKey = fr.priority === "Immediate Grounding" ? "Grounding" : fr.priority;
                   return (
                     <tr key={fr.id}>
-                      <td style={{ fontWeight: 600 }}>{fr.reportNumber}</td>
-                      <td>{fr.date}</td>
-                      <td>{fr.operatorName}</td>
-                      <td>{fr.faults.length}</td>
-                      <td>
+                      <td data-label="Report No." style={{ fontWeight: 600 }}>{fr.reportNumber}</td>
+                      <td data-label="Date">{fr.date}</td>
+                      <td data-label="Operator">{fr.operatorName}</td>
+                      <td data-label="Faults">{fr.faults.length}</td>
+                      <td data-label="Priority">
                         <span className={`priority-label priority-${priorityKey}`} style={{ padding: "2px 8px", fontSize: 11 }}>
                           {fr.priority}
                         </span>
                       </td>
-                      <td>
+                      <td data-label="Status">
                         <span className={`badge badge-${fr.status === "Resolved" ? "resolved" : fr.status === "Open" ? "open" : "fault"}`}>
                           {fr.status}
                         </span>
                       </td>
-                      <td>
+                      <td className="log-actions">
                         <button className="action-btn" onClick={() => setViewFault(fr)}>View</button>
                         <button className="action-btn" onClick={() => exportFaultReportPDF(fr)}>PDF</button>
                       </td>

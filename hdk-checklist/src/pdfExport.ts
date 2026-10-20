@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import type { InspectionLog, FaultReport } from "./types";
+import { RACL_LOGO } from "./raclLogo";
 
 type RGB = [number, number, number];
 
@@ -203,23 +204,10 @@ export async function exportFaultReportPDF(report: FaultReport) {
   doc.text("AIRPORT RESCUE AND FIREFIGHTING DEPARTMENT", M, y);
   doc.text("REIGIONAL AIRPORTS COMPANY LTD", M, y + 5);
 
-  // Logo box (right)
-  const logoX = PW - M - 30;
-  doc.setLineWidth(0.6);
-  doc.rect(logoX, y - 4, 30, 20, "D");
-  doc.setLineWidth(0.35);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(6);
-  doc.setTextColor(60, 60, 60);
-  doc.text("REGIONAL", logoX + 15, y + 1, { align: "center" });
-  doc.text("AIRPORTS", logoX + 15, y + 5.5, { align: "center" });
-  doc.text("COMPANY LTD", logoX + 15, y + 10, { align: "center" });
-  // simple graphic lines
-  doc.setLineWidth(1);
-  doc.setDrawColor(80, 80, 80);
-  doc.line(logoX + 6, y - 2, logoX + 6, y + 14);
-  doc.setLineWidth(0.35);
-  doc.setDrawColor(...BK);
+  // Logo (right)
+  const LOGO_W = 31;
+  const LOGO_H = LOGO_W * (212 / 321);
+  doc.addImage(RACL_LOGO, "PNG", PW - M - LOGO_W, y - 5, LOGO_W, LOGO_H);
 
   // Title
   y = 32;
@@ -259,8 +247,9 @@ export async function exportFaultReportPDF(report: FaultReport) {
     doc.setFontSize(7);
     doc.setTextColor(...BK);
     doc.text(label, M + 1.8, y + h / 2 + 1.4);
-    doc.setFont("helvetica", "normal");
-    doc.text(value, M + COL1 + 1.8, y + h / 2 + 1.4);
+    doc.setFont("times", "normal");
+    doc.setFontSize(9);
+    doc.text(value, M + COL1 + 1.8, y + h / 2 + 1.5);
     y += h;
   }
 
@@ -271,11 +260,12 @@ export async function exportFaultReportPDF(report: FaultReport) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7);
     doc.setTextColor(...BK);
-    doc.text(label, M + 1.8, y + 5.5);
+    doc.text(label, M + 1.8, y + h / 2 + 1.4);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     const lines = doc.splitTextToSize(text, COL2 - 4);
-    doc.text(lines, M + COL1 + 2, y + 5.5, { maxWidth: COL2 - 4 });
+    const textTop = y + h / 2 - (lines.length * 3.5) / 2 + 2.6;
+    doc.text(lines, M + COL1 + COL2 / 2, textTop, { align: "center", lineHeightFactor: 1.4 });
     y += h;
   }
 
@@ -290,10 +280,12 @@ export async function exportFaultReportPDF(report: FaultReport) {
     doc.setTextColor(...BK);
     doc.text(label, M + 1.8, y + h / 2 + 1.4);
     doc.setFont("helvetica", "normal");
-    if (name) doc.text(name, M + COL1 + 1.8, y + h / 2 + 1.4);
+    doc.setFont("times", "normal");
+    doc.setFontSize(9);
+    if (name) doc.text(name, M + COL1 + 1.8, y + h / 2 + 1.5);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    doc.text("Signature", M + COL1 + NAME_W + 1.8, y + 5.5);
+    doc.setFontSize(7);
+    doc.text("Signature", M + COL1 + NAME_W + SIG_LABEL / 2, y + h / 2 + 1.4, { align: "center" });
     if (sigImg) {
       try {
         doc.addImage(sigImg, "PNG", M + COL1 + NAME_W + SIG_LABEL + 1, y + 1, SIG_BOX - 2, h - 2);
@@ -302,78 +294,45 @@ export async function exportFaultReportPDF(report: FaultReport) {
     y += h;
   }
 
-  // Helper: date/time header row (two halves)
-  function dtHeader(leftLabel: string, rightLabel: string, h = 6.5) {
-    doc.rect(M, y, HALF, h, "D");
-    doc.rect(M + HALF, y, HALF, h, "D");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    doc.setTextColor(...BK);
-    doc.text(leftLabel, M + 1.8, y + 3.2);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.8);
-    doc.text("(DD MM YYYY & hh:mm formal)", M + 1.8, y + h - 0.8);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    doc.text(rightLabel, M + HALF + 1.8, y + 3.2);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.8);
-    doc.text("(DD MM YYYY & hh:mm formal)", M + HALF + 1.8, y + h - 0.8);
-    y += h;
-  }
+  // Helper: date/time block — label line + contiguous digit strips (DDMMYYYY | hh:mm), two halves
+  function dtBlock(leftLabel: string, rightLabel: string, leftDate: string, leftTime: string, rightDate: string, rightTime: string, h = 13) {
+    doc.rect(M, y, TW, h, "D");
+    const BW = 5.8;
+    const BH = 4.6;
+    const by = y + 6.5;
 
-  // Helper: draw digit boxes row (two halves)
-  function dtBoxRow(leftDate: string, leftTime: string, rightDate: string, rightTime: string, h = 11) {
-    doc.rect(M, y, HALF, h, "D");
-    doc.rect(M + HALF, y, HALF, h, "D");
-
-    function drawBoxes(startX: number, dStr: string, tStr: string) {
-      const BW = 4.8;
-      const BH = 7.5;
-      const G = 0.6;
-      let cx = startX;
-      doc.setFont("helvetica", "normal");
+    function label(x: number, text: string) {
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(7);
-      // DD
-      for (let i = 0; i < 2; i++) {
-        doc.rect(cx, y + 1.5, BW, BH, "D");
-        if (dStr[i] && dStr[i] !== " ") doc.text(dStr[i], cx + BW / 2, y + 1.5 + BH - 1.5, { align: "center" });
-        cx += BW + G;
-      }
-      cx += 1.5;
-      // MM
-      for (let i = 2; i < 4; i++) {
-        doc.rect(cx, y + 1.5, BW, BH, "D");
-        if (dStr[i] && dStr[i] !== " ") doc.text(dStr[i], cx + BW / 2, y + 1.5 + BH - 1.5, { align: "center" });
-        cx += BW + G;
-      }
-      cx += 1.5;
-      // YYYY
-      for (let i = 4; i < 8; i++) {
-        doc.rect(cx, y + 1.5, BW, BH, "D");
-        if (dStr[i] && dStr[i] !== " ") doc.text(dStr[i], cx + BW / 2, y + 1.5 + BH - 1.5, { align: "center" });
-        cx += BW + G;
-      }
-      cx += 3;
-      // HH
-      for (let i = 0; i < 2; i++) {
-        doc.rect(cx, y + 1.5, BW, BH, "D");
-        if (tStr[i] && tStr[i] !== " ") doc.text(tStr[i], cx + BW / 2, y + 1.5 + BH - 1.5, { align: "center" });
-        cx += BW + G;
-      }
-      doc.setFontSize(8);
-      doc.text(":", cx, y + 1.5 + BH - 1.5);
-      cx += 3.5;
-      // MM
-      for (let i = 2; i < 4; i++) {
-        doc.rect(cx, y + 1.5, BW, BH, "D");
-        if (tStr[i] && tStr[i] !== " ") doc.text(tStr[i], cx + BW / 2, y + 1.5 + BH - 1.5, { align: "center" });
-        cx += BW + G;
-      }
+      doc.setTextColor(...BK);
+      doc.text(text, x, y + 4);
+      const labelW = doc.getTextWidth(text);
+      doc.setFont("helvetica", "italic");
+      doc.text("(DD MM YYYY & hh:mm formal)", x + labelW + 1, y + 4);
     }
 
-    drawBoxes(M + 2, leftDate, leftTime);
-    drawBoxes(M + HALF + 2, rightDate, rightTime);
+    function strip(x: number, chars: string[]) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      chars.forEach((c, i) => {
+        const cx = x + i * BW;
+        doc.rect(cx, by, BW, BH, "D");
+        if (c.trim()) {
+          if (c === ":") doc.setFont("helvetica", "bolditalic");
+          doc.text(c, cx + BW / 2, by + BH / 2 + 1.3, { align: "center" });
+          if (c === ":") doc.setFont("helvetica", "normal");
+        }
+      });
+    }
+
+    function half(x: number, text: string, dStr: string, tStr: string) {
+      label(x, text);
+      strip(x, dStr.padEnd(8).slice(0, 8).split(""));
+      strip(x + 8 * BW + 3.8, [tStr[0] ?? " ", tStr[1] ?? " ", ":", tStr[2] ?? " ", tStr[3] ?? " "]);
+    }
+
+    half(M + 3.8, leftLabel, leftDate, leftTime);
+    half(M + HALF + 3.8, rightLabel, rightDate, rightTime);
     y += h;
   }
 
@@ -399,8 +358,8 @@ export async function exportFaultReportPDF(report: FaultReport) {
     doc.setTextColor(...BK);
     doc.text(label, M + 1.8, y + h / 2 + 1.4);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.5);
-    doc.text("Signature", M + LAB_W + 1.8, y + 5.5);
+    doc.setFontSize(7);
+    doc.text("Signature", M + LAB_W + SIG_LABEL / 2, y + h / 2 + 1.4, { align: "center" });
     y += h;
   }
 
@@ -421,8 +380,7 @@ export async function exportFaultReportPDF(report: FaultReport) {
   sigRow("4. Reported by :", report.operatorName, 16, sig);
 
   // Malfunction / Notification date row
-  dtHeader("MALFUNCTION DATE / TIME", "NOTIFICATION DATE / TIME");
-  dtBoxRow(dateDigits, timeDigits, dateDigits, timeDigits);
+  dtBlock("MALFUNCTION DATE / TIME", "NOTIFICATION DATE / TIME", dateDigits, timeDigits, dateDigits, timeDigits);
 
   // Shift In-Charge (blank)
   sigRow("Shift In-Charge", "", 15);
@@ -430,8 +388,7 @@ export async function exportFaultReportPDF(report: FaultReport) {
   // ── DETAILS OF REPAIR ───────────────────────────────────────────────
   secHeader("DETAILS OF REPAIR");
 
-  dtHeader("DESIRED START DATE / TIME", "REQUIRED END DATE / TIME");
-  dtBoxRow("        ", "    ", "        ", "    ");
+  dtBlock("DESIRED START DATE / TIME", "REQUIRED END DATE / TIME", "", "", "", "");
 
   sigRow("1. Repaired by :", "", 13);
   blankRow("2. Details of Repair Works :", 22);
@@ -440,8 +397,7 @@ export async function exportFaultReportPDF(report: FaultReport) {
   // ── ACCEPTANCE TEST ─────────────────────────────────────────────────
   secHeader("ACCEPTANCE TEST");
 
-  dtHeader("DATE / TIME", "REQUIRED END DATE / TIME");
-  dtBoxRow("        ", "    ", "        ", "    ");
+  dtBlock("DATE / TIME", "REQUIRED END DATE / TIME", "", "", "", "");
 
   blankRow("Comments :", 16);
   maintRow("MAINTENANCE TEAM (RUL) :");
@@ -569,6 +525,17 @@ export async function exportWeeklyPDF(logs: InspectionLog[]) {
   const SEC_BG: RGB = [200, 210, 225];
   const LINE: RGB = [180, 185, 195];
   const OK_BG: RGB = [220, 252, 231];
+
+  // Centred green checkmark drawn as one rounded stroke (scale 1 fits an item cell)
+  function drawTick(cx: number, cy: number, scale: number) {
+    doc.setDrawColor(0, 130, 55);
+    doc.setLineWidth(0.55 * scale);
+    doc.setLineCap("round");
+    doc.setLineJoin("round");
+    doc.lines([[1.1 * scale, 1.1 * scale], [2.1 * scale, -2.4 * scale]], cx - 1.6 * scale, cy + 0.05 * scale, [1, 1], "S");
+    doc.setLineCap("butt");
+    doc.setLineJoin("miter");
+  }
   const NOK_BG: RGB = [254, 243, 199];
   const US_BG: RGB = [254, 226, 226];
 
@@ -720,12 +687,7 @@ export async function exportWeeklyPDF(logs: InspectionLog[]) {
           } else if (it.status === "OK") {
             doc.setFillColor(...OK_BG);
             doc.rect(x + 0.15, y + 0.15, DAY_W - 0.3, H_ITEM - 0.3, "F");
-            // Draw centred green checkmark (thicker, slightly larger)
-            doc.setDrawColor(0, 130, 55); doc.setLineWidth(0.9);
-            const cx = x + DAY_W / 2;
-            const cy = y + H_ITEM / 2;
-            doc.line(cx - 2.8, cy + 0.3, cx - 0.6, cy + 2.2);
-            doc.line(cx - 0.6, cy + 2.2, cx + 3.0, cy - 1.6);
+            drawTick(x + DAY_W / 2, y + H_ITEM / 2, 1);
             doc.setDrawColor(...LINE); doc.setLineWidth(0.25);
           } else if (it.status === "NOK") {
             doc.setFillColor(...NOK_BG);
@@ -845,7 +807,14 @@ export async function exportWeeklyPDF(logs: InspectionLog[]) {
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p);
     doc.setFontSize(5.5); doc.setTextColor(...GREY);
-    doc.text("Legend:  ✓ = OK    NOK = Minor defect but operational    U/S = Unserviceable    — = Not Applicable", PW / 2, 293, { align: "center" });
+    const legend = "= OK    NOK = Minor defect but operational    U/S = Unserviceable    — = Not Applicable";
+    const TICK_W = 3.6;
+    const legendX = PW / 2 - (doc.getTextWidth("Legend:  " + legend) + TICK_W) / 2;
+    const tickX = legendX + doc.getTextWidth("Legend:  ");
+    doc.text("Legend:", legendX, 293);
+    drawTick(tickX + 0.9, 292.3, 0.55);
+    doc.setTextColor(...GREY);
+    doc.text(legend, tickX + TICK_W, 293);
     doc.text(`Page ${p} of ${totalPages}  |  HDK-ARFF/R2/CHK`, PW - M, 293, { align: "right" });
   }
 

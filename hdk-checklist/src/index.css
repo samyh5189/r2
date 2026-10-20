@@ -23,6 +23,8 @@ body {
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
 }
 
 /* ── Header ─────────────────────────────────────────────────────────── */
@@ -277,6 +279,33 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
   .info-row { flex-direction: column; }
   .export-btns { flex-direction: column; align-items: stretch; }
   .container { padding: 12px; }
+
+  /* Header: let the doc badge drop below the title instead of squeezing it */
+  .app-header-top { flex-wrap: wrap; gap: 4px 8px; }
+  .tabs { overflow-x: auto; }
+
+  /* Filters stack full-width */
+  .filter-input { flex: 1 1 100%; min-width: 0; }
+
+  /* Tables become stacked cards */
+  .log-table-wrap { overflow: visible; border: none; background: none; }
+  .log-table, .log-table tbody, .log-table tr, .log-table td { display: block; width: 100%; }
+  .log-table thead { display: none; }
+  .log-table tr { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; }
+  .log-table tr:hover td { background: none; }
+  .log-table td { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 5px 0; border-bottom: none; white-space: normal; text-align: right; }
+  .log-table td[data-label]::before { content: attr(data-label); font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; text-align: left; flex-shrink: 0; }
+  .log-table td.log-actions { justify-content: flex-start; gap: 6px; padding-top: 10px; margin-top: 4px; border-top: 1px solid var(--section-bg); }
+  .log-table td.log-actions .action-btn { flex: 1; margin-right: 0; padding: 8px 10px; font-size: 13px; }
+  .log-table td.empty-state { display: block; text-align: center; }
+
+  /* Evidence buttons wrap under the title */
+  .cl-evidence-header { flex-wrap: wrap; gap: 8px; }
+
+  /* Review stats: 2×2 instead of 4 cramped columns */
+  .cl-review-summary { grid-template-columns: repeat(2, 1fr); }
+
+  .migrate-banner button { width: 100%; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
