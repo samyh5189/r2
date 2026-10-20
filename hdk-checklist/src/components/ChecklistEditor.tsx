@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ChecklistItemConfig, ChecklistSectionConfig, ItemInputType } from "../types";
 import { getChecklistConfig, saveChecklistConfig } from "../storage";
 import { defaultChecklistConfig, itemType } from "../checklistData";
+import OperatorsEditor from "./OperatorsEditor";
 
 interface Props {
   onAuthLost: () => void;
@@ -83,7 +84,8 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
 
   return (
     <div className="container">
-      <div className="editor-bar">
+      <OperatorsEditor onAuthLost={onAuthLost} />
+      <div className="editor-bar" style={{ marginTop: 16 }}>
         <div>
           <strong>Checklist setup</strong>
           <span className="editor-sub">{config.length} sections · {total} items</span>

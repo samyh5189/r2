@@ -92,6 +92,7 @@ function header(doc: jsPDF, page: number, pages: number) {
 
 export async function exportInspectionPDF(log: InspectionLog) {
   const sig = log.operatorSignature ? await stripWhiteBg(log.operatorSignature) : "";
+  const shiftSig = log.shiftSignoff ? await stripWhiteBg(log.shiftSignoff.signature) : "";
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const pages = 2;
   header(doc, 1, pages);
@@ -171,17 +172,21 @@ export async function exportInspectionPDF(log: InspectionLog) {
     y += lines.length * 4 + 4;
   }
 
-  if (log.operatorSignature) {
+  if (log.operatorSignature || log.shiftSignoff) {
     if (y > 255) { doc.addPage(); y = 40; }
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.setTextColor(0, 0, 0);
-    doc.text("Operator Signature:", 12, y + 5);
-    doc.addImage(sig, "PNG", 12, y + 7, 60, 20);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.5);
-    doc.setTextColor(...GREY);
-    doc.text(log.operatorName, 12, y + 30);
+    const sigBlock = (x: number, title: string, img: string, name: string) => {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(0, 0, 0);
+      doc.text(title, x, y + 5);
+      if (img) doc.addImage(img, "PNG", x, y + 7, 60, 20);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.setTextColor(...GREY);
+      doc.text(name, x, y + 30);
+    };
+    if (log.operatorSignature) sigBlock(12, "Operator Signature:", sig, log.operatorName);
+    if (log.shiftSignoff) sigBlock(110, "Shift In-Charge Sign-off:", shiftSig, `${log.shiftSignoff.name} · ${new Date(log.shiftSignoff.signedAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}`);
   }
 
   doc.setFontSize(5.5);
@@ -201,7 +206,17 @@ export async function exportInspectionPDF(log: InspectionLog) {
 }
 
 export async function exportFaultReportPDF(report: FaultReport) {
-  const sig = report.operatorSignature ? await stripWhiteBg(report.operatorSignature) : undefined;
+  const clean = (d?: string) => (d ? stripWhiteBg(d) : Promise.resolve(undefined));
+  const [sig, shiftSig, repairSig, maintSig, arffSig] = await Promise.all([
+    clean(report.operatorSignature),
+    clean(report.shiftSignoff?.signature),
+    clean(report.repair?.repairedBySignature),
+    clean(report.acceptance?.maintenanceSignature),
+    clean(report.acceptance?.arffSignature),
+  ]);
+  const rp = report.repair ?? {};
+  const ac = report.acceptance ?? {};
+  const digits = (v?: string) => (v ?? "").replace(/[/:]/g, "");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
 
   const M = 12;
@@ -359,18 +374,24 @@ export async function exportFaultReportPDF(report: FaultReport) {
   }
 
   // Helper: blank tall box row for repair sections
-  function blankRow(label: string, h: number) {
+  function blankRow(label: string, h: number, text = "") {
     doc.rect(M, y, COL1, h, "D");
     doc.rect(M + COL1, y, COL2, h, "D");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7);
     doc.setTextColor(...BK);
     doc.text(label, M + 1.8, y + 5.5);
+    if (text) {
+      doc.setFont("times", "normal");
+      doc.setFontSize(9);
+      const lines = doc.splitTextToSize(text, COL2 - 4).slice(0, Math.floor((h - 3) / 4));
+      doc.text(lines, M + COL1 + 2, y + 5.5);
+    }
     y += h;
   }
 
   // Helper: bottom two-col row (label | Signature | box) full width
-  function maintRow(label: string, h = 13) {
+  function maintRow(label: string, name = "", sigImg?: string, h = 13) {
     const LAB_W = 74;
     doc.rect(M, y, LAB_W, h, "D");
     doc.rect(M + LAB_W, y, SIG_LABEL, h, "D");
@@ -382,6 +403,15 @@ export async function exportFaultReportPDF(report: FaultReport) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7);
     doc.text("Signature", M + LAB_W + SIG_LABEL / 2, y + h / 2 + 1.4, { align: "center" });
+    if (name) {
+      doc.setFont("times", "normal");
+      doc.setFontSize(9);
+      doc.text(name, M + 40, y + h / 2 + 1.5, { maxWidth: LAB_W - 41 });
+    }
+    if (sigImg) {
+      const boxW = TW - LAB_W - SIG_LABEL;
+      try { doc.addImage(sigImg, "PNG", M + LAB_W + SIG_LABEL + 1, y + 1, Math.min(boxW - 2, (h - 2) * 3), h - 2); } catch { /* ignore bad image data */ }
+    }
     y += h;
   }
 
@@ -405,25 +435,25 @@ export async function exportFaultReportPDF(report: FaultReport) {
   dtBlock("MALFUNCTION DATE / TIME", "NOTIFICATION DATE / TIME", dateDigits, timeDigits, dateDigits, timeDigits);
 
   // Shift In-Charge (blank)
-  sigRow("Shift In-Charge", "", 15);
+  sigRow("Shift In-Charge", report.shiftSignoff?.name ?? "", 15, shiftSig);
 
   // ── DETAILS OF REPAIR ───────────────────────────────────────────────
   secHeader("DETAILS OF REPAIR");
 
-  dtBlock("DESIRED START DATE / TIME", "REQUIRED END DATE / TIME", "", "", "", "");
+  dtBlock("DESIRED START DATE / TIME", "REQUIRED END DATE / TIME", digits(rp.desiredStartDate), digits(rp.desiredStartTime), digits(rp.requiredEndDate), digits(rp.requiredEndTime));
 
-  sigRow("1. Repaired by :", "", 13);
-  blankRow("2. Details of Repair Works :", 22);
-  blankRow("3. Remarks :", 26);
+  sigRow("1. Repaired by :", rp.repairedBy ?? "", 13, repairSig);
+  blankRow("2. Details of Repair Works :", 22, rp.details);
+  blankRow("3. Remarks :", 26, rp.remarks);
 
   // ── ACCEPTANCE TEST ─────────────────────────────────────────────────
   secHeader("ACCEPTANCE TEST");
 
-  dtBlock("DATE / TIME", "REQUIRED END DATE / TIME", "", "", "", "");
+  dtBlock("DATE / TIME", "REQUIRED END DATE / TIME", digits(ac.date), digits(ac.time), digits(ac.requiredEndDate), digits(ac.requiredEndTime));
 
-  blankRow("Comments :", 16);
-  maintRow("MAINTENANCE TEAM (RUL) :");
-  maintRow("ARFF (Name) :");
+  blankRow("Comments :", 16, ac.comments);
+  maintRow("MAINTENANCE TEAM (RUL) :", ac.maintenanceName, maintSig);
+  maintRow("ARFF (Name) :", ac.arffName, arffSig);
 
   // ── PHOTOGRAPHIC EVIDENCE (new page if faults have evidence) ──────────
   const faultsWithEvidence = report.faults.filter((f) => f.evidence && f.evidence.length > 0);

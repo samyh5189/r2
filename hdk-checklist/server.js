@@ -9,7 +9,27 @@ import "dotenv/config";
 const { Pool } = pg;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
+app.set("trust proxy", 1); // Railway sits behind a proxy; use the real client IP for rate limits
 app.use(express.json({ limit: "20mb" }));
+
+// Simple per-IP fixed-window rate limiter for the public write endpoints
+function rateLimit(max, windowMs) {
+  const hits = new Map();
+  return (req, res, next) => {
+    const now = Date.now();
+    const rec = hits.get(req.ip);
+    if (!rec || now > rec.reset) hits.set(req.ip, { count: 1, reset: now + windowMs });
+    else if (++rec.count > max) return res.status(429).json({ error: "Too many requests — try again later." });
+    if (hits.size > 5000) for (const [k, v] of hits) if (now > v.reset) hits.delete(k);
+    next();
+  };
+}
+const HOUR = 60 * 60 * 1000;
+const writeLimit = rateLimit(60, HOUR);
+const aiLimit = rateLimit(30, HOUR);
+
+const DATE_RE = /^\d{2}\/\d{2}\/\d{4}$/;
+const isId = (v) => typeof v === "string" && v.length > 0 && v.length <= 64;
 
 // ── PostgreSQL ────────────────────────────────────────────────────────
 let pool = null;
@@ -110,35 +130,40 @@ function adminRoutes(path, table) {
   });
 }
 
-// ── Checklist config (admin-editable; null → client uses built-in default) ──
-app.get("/api/checklist-config", async (_req, res) => {
-  if (!pool) return res.status(503).json({ error: "No database configured." });
-  try {
-    const result = await pool.query("SELECT data FROM app_config WHERE key = 'checklist'");
-    res.json({ config: result.rows[0]?.data ?? null });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "DB query failed." });
-  }
-});
+// ── Admin-editable config (checklist, operators); null → client uses its default ──
+function configRoutes(path, key) {
+  app.get(path, async (_req, res) => {
+    if (!pool) return res.status(503).json({ error: "No database configured." });
+    try {
+      const result = await pool.query("SELECT data FROM app_config WHERE key = $1", [key]);
+      res.json({ config: result.rows[0]?.data ?? null });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "DB query failed." });
+    }
+  });
 
-app.put("/api/checklist-config", requireAdmin, async (req, res) => {
-  if (!pool) return res.status(503).json({ error: "No database configured." });
-  const config = req.body?.config;
-  if (config !== null && !Array.isArray(config)) return res.status(400).json({ error: "Invalid config." });
-  try {
-    if (config === null) await pool.query("DELETE FROM app_config WHERE key = 'checklist'");
-    else await pool.query(
-      `INSERT INTO app_config (key, data, updated_at) VALUES ('checklist', $1, NOW())
-       ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()`,
-      [JSON.stringify(config)]
-    );
-    res.json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "DB update failed." });
-  }
-});
+  app.put(path, requireAdmin, async (req, res) => {
+    if (!pool) return res.status(503).json({ error: "No database configured." });
+    const config = req.body?.config;
+    if (config !== null && !Array.isArray(config)) return res.status(400).json({ error: "Invalid config." });
+    try {
+      if (config === null) await pool.query("DELETE FROM app_config WHERE key = $1", [key]);
+      else await pool.query(
+        `INSERT INTO app_config (key, data, updated_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = NOW()`,
+        [key, JSON.stringify(config)]
+      );
+      res.json({ ok: true });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "DB update failed." });
+    }
+  });
+}
+
+configRoutes("/api/checklist-config", "checklist");
+configRoutes("/api/operators", "operators");
 
 adminRoutes("/api/logs", "inspection_logs");
 adminRoutes("/api/fault-reports", "fault_reports");
@@ -157,20 +182,74 @@ app.get("/api/logs", async (_req, res) => {
   }
 });
 
-app.post("/api/logs", async (req, res) => {
+app.post("/api/logs", writeLimit, async (req, res) => {
   if (!pool) return res.status(503).json({ error: "No database configured." });
+  const log = req.body;
+  if (!isId(log?.id) || !DATE_RE.test(log.date) || !String(log.operatorName || "").trim() || !Array.isArray(log.sections)) {
+    return res.status(400).json({ error: "Invalid inspection log." });
+  }
+  const client = await pool.connect();
   try {
-    const log = req.body;
-    await pool.query(
+    await client.query("BEGIN");
+    // Serialise submissions so two devices can't both create today's inspection
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('inspection_logs'))");
+    const existing = await client.query("SELECT data FROM inspection_logs WHERE id = $1", [log.id]);
+    if (existing.rowCount > 0) { await client.query("COMMIT"); return res.json({ ok: true }); }
+    const sameDay = await client.query(
+      "SELECT data->>'operatorName' AS name, data->>'time' AS time FROM inspection_logs WHERE data->>'date' = $1 LIMIT 1",
+      [log.date]
+    );
+    if (sameDay.rowCount > 0) {
+      await client.query("ROLLBACK");
+      const { name, time } = sameDay.rows[0];
+      return res.status(409).json({ error: `Today's inspection was already submitted by ${name} at ${time}.`, operatorName: name, time });
+    }
+    await client.query(
       `INSERT INTO inspection_logs (id, data, created_at)
-       SELECT $1, $2, $3 WHERE NOT EXISTS (SELECT 1 FROM deleted_records WHERE id = $1)
-       ON CONFLICT (id) DO NOTHING`,
+       SELECT $1, $2, $3 WHERE NOT EXISTS (SELECT 1 FROM deleted_records WHERE id = $1)`,
       [log.id, log, log.createdAt]
     );
+    await client.query("COMMIT");
     res.json({ ok: true });
   } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error(e);
     res.status(500).json({ error: "DB insert failed." });
+  } finally {
+    client.release();
+  }
+});
+
+// Shift in-charge sign-off: once per log, by a name on the operators list marked in-charge
+app.post("/api/logs/:id/signoff", writeLimit, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  const name = String(req.body?.name || "").trim();
+  const signature = String(req.body?.signature || "");
+  if (!name || !signature.startsWith("data:image/png;base64,") || signature.length > 500_000) {
+    return res.status(400).json({ error: "Name and signature are required." });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const ops = await client.query("SELECT data FROM app_config WHERE key = 'operators'");
+    const allowed = (ops.rows[0]?.data ?? []).some((o) => o.inCharge && o.name === name);
+    if (!allowed) { await client.query("ROLLBACK"); return res.status(403).json({ error: "Only a shift in-charge on the operators list can sign off." }); }
+    const row = await client.query("SELECT data FROM inspection_logs WHERE id = $1 FOR UPDATE", [req.params.id]);
+    if (row.rowCount === 0) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Inspection not found." }); }
+    const log = row.rows[0].data;
+    if (log.shiftSignoff) { await client.query("ROLLBACK"); return res.status(409).json({ error: `Already signed off by ${log.shiftSignoff.name}.` }); }
+    const shiftSignoff = { name, signature, signedAt: new Date().toISOString() };
+    await client.query("UPDATE inspection_logs SET data = data || $2::jsonb WHERE id = $1", [req.params.id, { shiftSignoff }]);
+    // The linked fault report prints the same sign-off in its Shift In-Charge row
+    await client.query("UPDATE fault_reports SET data = data || $2::jsonb WHERE data->>'inspectionLogId' = $1", [req.params.id, { shiftSignoff }]);
+    await client.query("COMMIT");
+    res.json({ ok: true, shiftSignoff });
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(e);
+    res.status(500).json({ error: "Sign-off failed." });
+  } finally {
+    client.release();
   }
 });
 
@@ -188,27 +267,104 @@ app.get("/api/fault-reports", async (_req, res) => {
   }
 });
 
-app.post("/api/fault-reports", async (req, res) => {
+app.post("/api/fault-reports", writeLimit, async (req, res) => {
   if (!pool) return res.status(503).json({ error: "No database configured." });
+  const report = req.body;
+  if (!isId(report?.id) || !DATE_RE.test(report.date) || !Array.isArray(report.faults)) {
+    return res.status(400).json({ error: "Invalid fault report." });
+  }
+  const client = await pool.connect();
   try {
-    const report = req.body;
-    await pool.query(
-      `INSERT INTO fault_reports (id, data, created_at)
-       SELECT $1, $2, $3 WHERE NOT EXISTS (SELECT 1 FROM deleted_records WHERE id = $1)
-       ON CONFLICT (id) DO NOTHING`,
-      [report.id, report, report.createdAt]
+    await client.query("BEGIN");
+    // Number reports here, under a lock, so simultaneous submissions never share a number
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('fault_report_number'))");
+    const existing = await client.query("SELECT data FROM fault_reports WHERE id = $1", [report.id]);
+    if (existing.rowCount > 0) { await client.query("COMMIT"); return res.json({ ok: true, report: existing.rows[0].data }); }
+    const deleted = await client.query("SELECT 1 FROM deleted_records WHERE id = $1", [report.id]);
+    if (deleted.rowCount > 0) { await client.query("ROLLBACK"); return res.status(410).json({ error: "This report was deleted." }); }
+    const prefix = `HDK-ARFF/${report.date.slice(6)}/`;
+    const max = await client.query(
+      `SELECT COALESCE(MAX(NULLIF(regexp_replace(data->>'reportNumber', '^.*/', ''), '')::int), 0) AS n
+       FROM fault_reports WHERE data->>'reportNumber' LIKE $1 AND data->>'reportNumber' ~ '/[0-9]+$'`,
+      [prefix + "%"]
     );
-    res.json({ ok: true });
+    const saved = { ...report, reportNumber: prefix + String(max.rows[0].n + 1).padStart(2, "0") };
+    await client.query("INSERT INTO fault_reports (id, data, created_at) VALUES ($1, $2, $3)", [saved.id, saved, saved.createdAt]);
+    await client.query("COMMIT");
+    res.json({ ok: true, report: saved });
   } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error(e);
     res.status(500).json({ error: "DB insert failed." });
+  } finally {
+    client.release();
+  }
+});
+
+// Repair workflow (maintenance team): fills the form's repair + acceptance sections.
+// Status follows progress; a Resolved report is locked (admin edit only).
+const REPAIR_KEYS = ["desiredStartDate", "desiredStartTime", "requiredEndDate", "requiredEndTime", "repairedBy", "repairedBySignature", "details", "remarks"];
+const ACCEPT_KEYS = ["date", "time", "requiredEndDate", "requiredEndTime", "comments", "maintenanceName", "maintenanceSignature", "arffName", "arffSignature"];
+
+function pickFields(input, keys) {
+  const out = {};
+  for (const k of keys) {
+    const v = input?.[k];
+    if (typeof v !== "string") continue;
+    if (k.endsWith("Signature")) { if (v.startsWith("data:image/png;base64,") && v.length <= 500_000) out[k] = v; }
+    else if (k.endsWith("Date")  || k === "date") { if (v === "" || DATE_RE.test(v)) out[k] = v; }
+    else if (k.endsWith("Time") || k === "time") { if (v === "" || /^\d{2}:\d{2}$/.test(v)) out[k] = v; }
+    else out[k] = v.slice(0, 2000);
+  }
+  return out;
+}
+
+app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const row = await client.query("SELECT data FROM fault_reports WHERE id = $1 FOR UPDATE", [req.params.id]);
+    if (row.rowCount === 0) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Report not found." }); }
+    const report = row.rows[0].data;
+    if (report.status === "Resolved") { await client.query("ROLLBACK"); return res.status(409).json({ error: "This report is closed. Ask an admin to reopen it." }); }
+    // A signature, once given, can't be replaced
+    const merge = (old = {}, upd) => {
+      for (const k of Object.keys(upd)) if (k.endsWith("Signature") && old[k]) delete upd[k];
+      return { ...old, ...upd };
+    };
+    const repair = merge(report.repair, pickFields(req.body?.repair, REPAIR_KEYS));
+    const acceptance = merge(report.acceptance, pickFields(req.body?.acceptance, ACCEPT_KEYS));
+    const accepted = acceptance.maintenanceName && acceptance.maintenanceSignature && acceptance.arffName && acceptance.arffSignature;
+    const started = Object.values(repair).some(Boolean) || Object.values(acceptance).some(Boolean);
+    const status = accepted ? "Resolved" : started ? "In Progress" : report.status;
+    const saved = { ...report, repair, acceptance, status };
+    await client.query("UPDATE fault_reports SET data = $2 WHERE id = $1", [req.params.id, saved]);
+    await client.query("COMMIT");
+    res.json({ ok: true, report: saved });
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(e);
+    res.status(500).json({ error: "Repair update failed." });
+  } finally {
+    client.release();
   }
 });
 
 // ── AI proxy ──────────────────────────────────────────────────────────
-app.post("/api/fault-report", async (req, res) => {
+// Only the app's own requests are forwarded: one text prompt, fixed model, capped output
+const AI_MODEL = "claude-sonnet-4-6";
+const AI_MAX_TOKENS = 1500;
+const AI_MAX_PROMPT = 12_000;
+
+app.post("/api/fault-report", aiLimit, async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(503).json({ error: "AI service not configured on this server." });
+  const messages = req.body?.messages;
+  const prompt = Array.isArray(messages) && messages.length === 1 && messages[0]?.role === "user" ? messages[0].content : null;
+  if (typeof prompt !== "string" || !prompt.trim() || prompt.length > AI_MAX_PROMPT) {
+    return res.status(400).json({ error: "Invalid AI request." });
+  }
   try {
     const upstream = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -217,7 +373,11 @@ app.post("/api/fault-report", async (req, res) => {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify({
+        model: AI_MODEL,
+        max_tokens: Math.min(Number(req.body.max_tokens) || AI_MAX_TOKENS, AI_MAX_TOKENS),
+        messages: [{ role: "user", content: prompt }],
+      }),
     });
     const data = await upstream.json();
     res.status(upstream.status).json(data);

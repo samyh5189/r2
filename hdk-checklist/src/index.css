@@ -394,8 +394,8 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
 .cl-intro-count { font-size: 13px; color: var(--navy); text-align: center; font-weight: 600; background: var(--section-bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px; }
 .cl-intro-field { display: flex; flex-direction: column; gap: 7px; }
 .cl-intro-field label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-.cl-intro-field input { border: 1.5px solid var(--border); border-radius: 12px; padding: 14px 16px; font-size: 16px; font-family: inherit; outline: none; background: var(--bg); transition: border-color 0.15s; }
-.cl-intro-field input:focus { border-color: var(--navy); background: white; }
+.cl-intro-field input, .cl-intro-field select { border: 1.5px solid var(--border); border-radius: 12px; padding: 14px 16px; font-size: 16px; font-family: inherit; outline: none; background: var(--bg); transition: border-color 0.15s; }
+.cl-intro-field input:focus, .cl-intro-field select:focus { border-color: var(--navy); background: white; }
 .cl-legend-compact { border-radius: 12px; padding: 10px 14px; justify-content: center; margin-top: -6px; gap: 12px; }
 
 /* Evidence */
@@ -543,3 +543,11 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
 .modal-logo { height: 30px; background: white; border-radius: 6px; padding: 3px 6px; flex-shrink: 0; }
 .modal-header .modal-title { flex: 1; min-width: 0; margin: 0 10px; }
 .pdf-frame { width: 100%; max-width: 860px; height: 100%; min-height: 70vh; display: block; margin: 0 auto; border: 0; background: white; }
+.action-btn.accent { background: #fef3c7; border-color: #fde68a; color: #92400e; }
+.action-btn.accent:hover { background: var(--nok); border-color: var(--nok); color: white; }
+.signed-img { max-width: 220px; max-height: 90px; border: 1px solid var(--border); border-radius: 6px; background: white; display: block; }
+.repair-step { font-size: 12px; font-weight: 800; color: var(--navy); margin-top: 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.ops-row { flex-wrap: nowrap; }
+.ops-check { display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; color: var(--text); }
+@media (max-width: 600px) { .ops-row { flex-wrap: wrap; } .ops-row .editor-label { flex: 1 1 45% !important; } }
+@media (max-width: 600px) { .log-table td.log-actions { flex-wrap: wrap; } .log-table td.log-actions .action-btn { min-width: 22%; } }

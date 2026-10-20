@@ -1,4 +1,4 @@
-import type { InspectionLog, FaultReport, ChecklistSectionConfig } from "./types";
+import type { InspectionLog, FaultReport, ChecklistSectionConfig, Operator, ShiftSignoff, FaultRepair, FaultAcceptance } from "./types";
 import { defaultChecklistConfig } from "./checklistData";
 
 const LS_LOGS = "hdk_inspection_logs";
@@ -21,20 +21,30 @@ export async function getLogs(): Promise<InspectionLog[]> {
   return lsGet<InspectionLog>(LS_LOGS);
 }
 
-export async function saveLog(log: InspectionLog): Promise<void> {
-  // Write to DB
+/** Returns an error message when the server rejects the log (e.g. today's inspection already exists). */
+export async function saveLog(log: InspectionLog): Promise<string | null> {
   try {
-    await fetch("/api/logs", {
+    const res = await fetch("/api/logs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(log),
     });
-  } catch { /* offline */ }
+    if (res.status >= 400 && res.status < 500) {
+      const data = await res.json().catch(() => ({}));
+      return data.error ?? "The inspection was rejected.";
+    }
+  } catch { /* offline — keep it locally and sync later */ }
   // Mirror to localStorage as offline fallback
   const logs = lsGet<InspectionLog>(LS_LOGS);
   if (!logs.find((l) => l.id === log.id)) {
     lsSet(LS_LOGS, [log, ...logs]);
   }
+  return null;
+}
+
+/** Today's inspection, if one has already been submitted (one per day). */
+export async function findLogForDate(dateGB: string): Promise<InspectionLog | null> {
+  return (await getLogs()).find((l) => l.date === dateGB) ?? null;
 }
 
 // ── Fault reports ─────────────────────────────────────────────────────
@@ -47,22 +57,28 @@ export async function getFaultReports(): Promise<FaultReport[]> {
   return lsGet<FaultReport>(LS_FAULTS);
 }
 
-export async function saveFaultReport(report: FaultReport): Promise<void> {
+/** Saves the report; the server assigns the final report number, so use the returned copy. */
+export async function saveFaultReport(report: FaultReport): Promise<FaultReport> {
+  let saved = report;
   try {
-    await fetch("/api/fault-reports", {
+    const res = await fetch("/api/fault-reports", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(report),
     });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.report) saved = data.report;
   } catch { /* offline */ }
   const reports = lsGet<FaultReport>(LS_FAULTS);
-  if (!reports.find((r) => r.id === report.id)) {
-    lsSet(LS_FAULTS, [report, ...reports]);
+  if (!reports.find((r) => r.id === saved.id)) {
+    lsSet(LS_FAULTS, [saved, ...reports]);
   }
+  return saved;
 }
 
 // ── Report number ─────────────────────────────────────────────────────
 
+/** Provisional number for display/offline; the server assigns the final one on save. */
 export async function nextFaultReportNumber(): Promise<string> {
   const reports = await getFaultReports();
   const year = new Date().getFullYear();
@@ -152,28 +168,59 @@ export async function deleteFaultReport(id: string) {
   lsReplace<FaultReport>(LS_FAULTS, id, null);
 }
 
-// ── Checklist config ──────────────────────────────────────────────────
+// ── Admin-editable config (checklist, operators) ──────────────────────
 
-const LS_CONFIG = "hdk_checklist_config";
-
-export async function getChecklistConfig(): Promise<ChecklistSectionConfig[]> {
+async function getConfig<T>(path: string, cacheKey: string, fallback: () => T): Promise<T> {
   try {
-    const res = await fetch("/api/checklist-config");
+    const res = await fetch(path);
     if (res.ok) {
       const { config } = await res.json();
-      try { localStorage.setItem(LS_CONFIG, JSON.stringify(config)); } catch { /* ignore */ }
-      return config ?? defaultChecklistConfig();
+      try { localStorage.setItem(cacheKey, JSON.stringify(config)); } catch { /* ignore */ }
+      return config ?? fallback();
     }
   } catch { /* offline */ }
   try {
-    const cached = JSON.parse(localStorage.getItem(LS_CONFIG) || "null");
-    if (Array.isArray(cached)) return cached;
+    const cached = JSON.parse(localStorage.getItem(cacheKey) || "null");
+    if (cached) return cached;
   } catch { /* ignore */ }
-  return defaultChecklistConfig();
+  return fallback();
 }
 
+async function putConfig(path: string, cacheKey: string, config: unknown) {
+  await adminRequest("PUT", path, { config });
+  try { localStorage.setItem(cacheKey, JSON.stringify(config)); } catch { /* ignore */ }
+}
+
+export const getChecklistConfig = () => getConfig<ChecklistSectionConfig[]>("/api/checklist-config", "hdk_checklist_config", defaultChecklistConfig);
 /** Pass null to reset to the built-in checklist. */
-export async function saveChecklistConfig(config: ChecklistSectionConfig[] | null) {
-  await adminRequest("PUT", "/api/checklist-config", { config });
-  try { localStorage.setItem(LS_CONFIG, JSON.stringify(config)); } catch { /* ignore */ }
+export const saveChecklistConfig = (config: ChecklistSectionConfig[] | null) => putConfig("/api/checklist-config", "hdk_checklist_config", config);
+
+export const getOperators = () => getConfig<Operator[]>("/api/operators", "hdk_operators", () => []);
+export const saveOperators = (ops: Operator[]) => putConfig("/api/operators", "hdk_operators", ops);
+
+// ── Shift in-charge sign-off ──────────────────────────────────────────
+
+export async function signOffLog(logId: string, name: string, signature: string): Promise<ShiftSignoff> {
+  const res = await fetch(`/api/logs/${logId}/signoff`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, signature }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? "Sign-off failed.");
+  return data.shiftSignoff;
+}
+
+// ── Repair workflow ───────────────────────────────────────────────────
+
+export async function updateRepair(reportId: string, repair: FaultRepair, acceptance: FaultAcceptance): Promise<FaultReport> {
+  const res = await fetch(`/api/fault-reports/${reportId}/repair`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repair, acceptance }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? "Could not save the repair.");
+  lsReplace(LS_FAULTS, reportId, data.report);
+  return data.report;
 }

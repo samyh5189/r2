@@ -45,6 +45,44 @@ export interface ChecklistSection {
   items: ChecklistItem[];
 }
 
+export interface Operator {
+  id: string;
+  name: string;
+  rank?: string;
+  inCharge: boolean;
+}
+
+export interface ShiftSignoff {
+  name: string;
+  signature: string;
+  signedAt: string;
+}
+
+// Lower half of the paper fault report form: repair, then acceptance test.
+// Dates are DD/MM/YYYY and times HH:MM, matching the form's digit boxes.
+export interface FaultRepair {
+  desiredStartDate?: string;
+  desiredStartTime?: string;
+  requiredEndDate?: string;
+  requiredEndTime?: string;
+  repairedBy?: string;
+  repairedBySignature?: string;
+  details?: string;
+  remarks?: string;
+}
+
+export interface FaultAcceptance {
+  date?: string;
+  time?: string;
+  requiredEndDate?: string;
+  requiredEndTime?: string;
+  comments?: string;
+  maintenanceName?: string;
+  maintenanceSignature?: string;
+  arffName?: string;
+  arffSignature?: string;
+}
+
 export interface InspectionLog {
   id: string;
   date: string;
@@ -58,6 +96,7 @@ export interface InspectionLog {
   comments: string;
   faultCount: number;
   faultReportId?: string;
+  shiftSignoff?: ShiftSignoff;
   createdAt: string;
 }
 
@@ -89,5 +128,8 @@ export interface FaultReport {
   aiAssessment: string;
   priority: "Routine" | "Urgent" | "Immediate Grounding";
   status: "Open" | "In Progress" | "Resolved";
+  shiftSignoff?: ShiftSignoff;
+  repair?: FaultRepair;
+  acceptance?: FaultAcceptance;
   createdAt: string;
 }

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import type { InspectionLog, FaultReport } from "../types";
 import { getLogs, getFaultReports, sameInspectionWeek, updateLog, deleteLog, updateFaultReport, deleteFaultReport } from "../storage";
 import { EditLogModal, EditFaultModal } from "./EditModals";
+import { SignOffModal, RepairModal } from "./WorkflowModals";
 import { showPdf } from "../pdfViewer";
 import { RACL_LOGO } from "../raclLogo";
 import { exportInspectionPDF, exportFaultReportPDF, exportWeeklyPDF } from "../pdfExport";
@@ -114,6 +115,32 @@ function FaultModal({ report, onClose }: { report: FaultReport; onClose: () => v
             <div className="assessment-box">{report.faultSummary}</div>
           </div>
 
+          {(report.repair || report.acceptance) && (
+            <div className="modal-section">
+              <h4>Repair Progress</h4>
+              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                <tbody>
+                  {([
+                    ["Desired start", [report.repair?.desiredStartDate, report.repair?.desiredStartTime].filter(Boolean).join(" ")],
+                    ["Required end", [report.repair?.requiredEndDate, report.repair?.requiredEndTime].filter(Boolean).join(" ")],
+                    ["Repaired by", report.repair?.repairedBy],
+                    ["Repair works", report.repair?.details],
+                    ["Remarks", report.repair?.remarks],
+                    ["Acceptance test", [report.acceptance?.date, report.acceptance?.time].filter(Boolean).join(" ")],
+                    ["Comments", report.acceptance?.comments],
+                    ["Maintenance (RUL)", report.acceptance?.maintenanceName],
+                    ["ARFF", report.acceptance?.arffName],
+                  ] as [string, string | undefined][]).filter(([, v]) => v).map(([k, v]) => (
+                    <tr key={k}>
+                      <td style={{ padding: "4px 8px 4px 0", color: "var(--muted)", width: 120, verticalAlign: "top" }}>{k}</td>
+                      <td style={{ padding: "4px 0" }}>{v}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div className="modal-section">
             <h4>Operational Assessment</h4>
             <div
@@ -220,6 +247,18 @@ function LogModal({ log, onClose }: { log: InspectionLog; onClose: () => void })
             </div>
           )}
 
+          <div className="modal-section">
+            <h4>Shift In-Charge Sign-off</h4>
+            {log.shiftSignoff ? (
+              <>
+                <img src={log.shiftSignoff.signature} alt="signature" className="signed-img" />
+                <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+                  {log.shiftSignoff.name} · {new Date(log.shiftSignoff.signedAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
+                </p>
+              </>
+            ) : <p style={{ fontSize: 12, color: "var(--muted)" }}>Not signed off yet.</p>}
+          </div>
+
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
             <button className="btn-export secondary" onClick={onClose} style={{ border: "1.5px solid var(--border)", background: "white", color: "var(--text)" }}>
               Close
@@ -272,6 +311,8 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
   const [viewFault, setViewFault] = useState<FaultReport | null>(null);
   const [editLog, setEditLog] = useState<InspectionLog | null>(null);
   const [editFault, setEditFault] = useState<FaultReport | null>(null);
+  const [signOff, setSignOff] = useState<InspectionLog | null>(null);
+  const [repairFault, setRepairFault] = useState<FaultReport | null>(null);
 
   // Every save is mirrored locally, so only offer a sync when this device holds records the DB lacks
   const hasLocalData = useMemo(() => {
@@ -390,6 +431,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
                       <button className="action-btn" onClick={() => setViewLog(log)}>View</button>
                       <button className="action-btn" onClick={() => showPdf(exportInspectionPDF(log))}>PDF</button>
                       <button className="action-btn" onClick={() => exportWeekFor(log, logs)}>Week</button>
+                      {!log.shiftSignoff && <button className="action-btn accent" onClick={() => setSignOff(log)}>Sign off</button>}
                       {isAdmin && <>
                         <button className="action-btn" onClick={() => setEditLog(log)}>Edit</button>
                         <button className="action-btn danger" onClick={() => confirmDelete(`the log from ${log.date}`, () => deleteLog(log.id))}>Delete</button>
@@ -443,6 +485,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
                       <td className="log-actions">
                         <button className="action-btn" onClick={() => setViewFault(fr)}>View</button>
                         <button className="action-btn" onClick={() => showPdf(exportFaultReportPDF(fr))}>PDF</button>
+                        {fr.status !== "Resolved" && <button className="action-btn accent" onClick={() => setRepairFault(fr)}>Repair</button>}
                         {isAdmin && <>
                           <button className="action-btn" onClick={() => setEditFault(fr)}>Edit</button>
                           <button className="action-btn danger" onClick={() => confirmDelete(fr.reportNumber, () => deleteFaultReport(fr.id))}>Delete</button>
@@ -462,6 +505,8 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
 
       {viewLog && <LogModal log={viewLog} onClose={() => setViewLog(null)} />}
       {viewFault && <FaultModal report={viewFault} onClose={() => setViewFault(null)} />}
+      {signOff && <SignOffModal log={signOff} onClose={() => setSignOff(null)} onDone={() => { setSignOff(null); reload(); }} />}
+      {repairFault && <RepairModal report={repairFault} onClose={() => setRepairFault(null)} onDone={() => { setRepairFault(null); reload(); }} />}
       {editLog && <EditLogModal item={editLog} onClose={() => setEditLog(null)} onSave={(l) => adminAction(() => updateLog(l)).then(() => setEditLog(null))} />}
       {editFault && <EditFaultModal item={editFault} onClose={() => setEditFault(null)} onSave={(r) => adminAction(() => updateFaultReport(r)).then(() => setEditFault(null))} />}
     </div>

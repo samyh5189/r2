@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import SignaturePad from "signature_pad";
 import { buildBlankChecklist, buildChecklist, itemType } from "../checklistData";
-import type { ChecklistSection, ChecklistSectionConfig, ItemStatus, InspectionLog, FaultReport, EvidenceItem } from "../types";
-import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek, getChecklistConfig } from "../storage";
+import type { ChecklistSection, ChecklistSectionConfig, ItemStatus, InspectionLog, FaultReport, EvidenceItem, Operator } from "../types";
+import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek, getChecklistConfig, findLogForDate, getOperators } from "../storage";
 import { generateFaultReport } from "../faultReportAI";
 import { showPdf } from "../pdfViewer";
 import { exportInspectionPDF, exportFaultReportPDF } from "../pdfExport";
 import { processFile } from "../evidenceUtils";
 
-type Phase = "intro" | "item" | "review" | "outro" | "submitting" | "done";
+type Phase = "intro" | "item" | "review" | "outro" | "submitting" | "done" | "blocked";
 
 interface RepeatFault {
   label: string;
@@ -73,6 +73,10 @@ export default function ChecklistPage() {
 
   // Intro fields
   const [operatorName, setOperatorName] = useState("");
+  const [operators, setOperators] = useState<Operator[]>([]);
+  // undefined = still checking; null = no inspection yet today
+  const [todayLog, setTodayLog] = useState<InspectionLog | null | undefined>(undefined);
+  const [blockedMsg, setBlockedMsg] = useState("");
 
   // Outro fields
   const [overallCondition, setOverallCondition] = useState<"Excellent" | "Good" | "Poor" | "">("");
@@ -99,6 +103,11 @@ export default function ChecklistPage() {
 
   const timerRunning = phase === "item";
   const { elapsed, display: timerDisplay } = useElapsedTimer(timerRunning);
+
+  useEffect(() => {
+    getOperators().then(setOperators);
+    findLogForDate(new Date().toLocaleDateString("en-GB")).then(setTodayLog);
+  }, []);
 
   // Load the admin-configured checklist; only swap it in before any item is answered
   useEffect(() => {
@@ -204,6 +213,13 @@ export default function ChecklistPage() {
   async function handleSubmit() {
     if (!operatorName.trim() || !overallCondition) return;
     setPhase("submitting");
+    // Only one inspection per day — check before spending time on the AI report
+    const existing = await findLogForDate(new Date().toLocaleDateString("en-GB"));
+    if (existing) {
+      setBlockedMsg(`Today's inspection was already submitted by ${existing.operatorName} at ${existing.time}.`);
+      setPhase("blocked");
+      return;
+    }
     const sig = sigPad.current?.isEmpty() ? "" : (sigPad.current?.toDataURL() ?? "");
     const count = faultsSoFar;
     const now = new Date();
@@ -234,13 +250,18 @@ export default function ChecklistPage() {
         if (prior && (it.status === "NOK" || it.status === "U/S")) repeats.push({ label: it.label, reportNumber: prior.reportNumber, reportId: prior.id });
       }
       faultReport = await generateFaultReport(sections, operatorName.trim(), "", sig, new Set(reportedIn.keys()));
-      if (faultReport) {
-        faultReport.inspectionLogId = log.id;
-        await saveFaultReport(faultReport);
-      }
+      if (faultReport) faultReport.inspectionLogId = log.id;
       log.faultReportId = faultReport?.id ?? repeats[0]?.reportId;
     }
-    await saveLog(log);
+    // The server enforces one inspection per day; save the log first so a rejected log leaves no report behind
+    const rejected = await saveLog(log);
+    if (rejected) {
+      setBlockedMsg(rejected);
+      setPhase("blocked");
+      return;
+    }
+    if (faultReport) faultReport = await saveFaultReport(faultReport);
+    setTodayLog(log);
     setSavedLog(log);
     setSavedFault(faultReport);
     setRepeatFaults(repeats);
@@ -257,6 +278,21 @@ export default function ChecklistPage() {
   }
 
   // ── INTRO ────────────────────────────────────────────────────────────
+  if (phase === "blocked" || (phase === "intro" && todayLog)) {
+    return (
+      <div className="cl-screen">
+        <div className="cl-intro-card">
+          <div className="cl-intro-icon">✅</div>
+          <h2 className="cl-intro-title">Today's inspection is done</h2>
+          <p className="cl-intro-sub">
+            {blockedMsg || `Submitted by ${todayLog!.operatorName} at ${todayLog!.time}.`}
+          </p>
+          <p className="cl-intro-count">Only one daily inspection can be submitted per day. An admin can delete it from Logs if it needs to be redone.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (phase === "intro") {
     return (
       <div className="cl-screen">
@@ -268,7 +304,14 @@ export default function ChecklistPage() {
 
           <div className="cl-intro-field">
             <label>Operator Name *</label>
-            <input type="text" placeholder="Full name" value={operatorName} onChange={(e) => setOperatorName(e.target.value)} autoFocus />
+            {operators.length > 0 ? (
+              <select value={operatorName} onChange={(e) => setOperatorName(e.target.value)}>
+                <option value="">Select your name…</option>
+                {operators.map((o) => <option key={o.id} value={o.name}>{o.name}{o.rank ? ` (${o.rank})` : ""}</option>)}
+              </select>
+            ) : (
+              <input type="text" placeholder="Full name" value={operatorName} onChange={(e) => setOperatorName(e.target.value)} autoFocus />
+            )}
           </div>
           <div className="legend cl-legend-compact">
             <span className="legend-item"><span className="legend-dot" style={{ background: "var(--ok)" }} /> OK — Good</span>
@@ -276,7 +319,7 @@ export default function ChecklistPage() {
             <span className="legend-item"><span className="legend-dot" style={{ background: "var(--us)" }} /> U/S — Unserviceable</span>
             <span className="legend-item"><span className="legend-dot" style={{ background: "var(--na)" }} /> N/A — Not applicable</span>
           </div>
-          <button className="btn-submit" disabled={!operatorName.trim()} onClick={() => setPhase("item")}>
+          <button className="btn-submit" disabled={!operatorName.trim() || todayLog === undefined} onClick={() => setPhase("item")}>
             Start Inspection →
           </button>
         </div>
