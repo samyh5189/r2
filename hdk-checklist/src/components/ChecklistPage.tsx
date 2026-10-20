@@ -7,6 +7,7 @@ import { generateFaultReport } from "../faultReportAI";
 import { showPdf } from "../pdfViewer";
 import { exportInspectionPDF, exportFaultReportPDF } from "../pdfExport";
 import { processFile } from "../evidenceUtils";
+import rescue2Photo from "../assets/rescue2.jpg";
 
 type Phase = "intro" | "item" | "review" | "outro" | "submitting" | "done" | "blocked";
 
@@ -297,7 +298,7 @@ export default function ChecklistPage() {
     return (
       <div className="cl-screen">
         <div className="cl-intro-card">
-          <div className="cl-intro-icon">🚒</div>
+          <img className="cl-intro-photo" src={rescue2Photo} alt="RESCUE 2 fire vehicle" />
           <h2 className="cl-intro-title">Daily Inspection</h2>
           <p className="cl-intro-sub">RESCUE 2 · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
           <p className="cl-intro-count">{total} items across {sections.length} sections</p>
