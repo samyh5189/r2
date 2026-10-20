@@ -26,7 +26,7 @@ function header(doc: jsPDF, page: number, pages: number) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.text(
-    "RESCUE 3  |  SECTION ONE — VEHICLE OPERATORS  |  Daily Inspection Checklist",
+    "RESCUE 2  |  SECTION ONE — VEHICLE OPERATORS  |  Daily Inspection Checklist",
     105,
     23,
     { align: "center" }
@@ -551,7 +551,7 @@ export function exportWeeklyPDF(logs: InspectionLog[]) {
     doc.text("REGIONAL AIRPORTS COMPANY LTD — ARFF DEPARTMENT", PW / 2, y + 4.5, { align: "center" });
     doc.setFontSize(7);
     doc.setFont("helvetica", "normal");
-    doc.text("RESCUE 3  |  SECTION ONE — VEHICLE OPERATORS  |  Weekly Inspection Log", PW / 2, y + 9, { align: "center" });
+    doc.text("RESCUE 2  |  SECTION ONE — VEHICLE OPERATORS  |  Weekly Inspection Log", PW / 2, y + 9, { align: "center" });
     y += 13;
 
     const weekEndDate = days[6];
@@ -673,11 +673,12 @@ export function exportWeeklyPDF(logs: InspectionLog[]) {
               doc.text(it.remarks, x + DAY_W / 2, y + H_ITEM / 2 + 1.3, { align: "center" });
             }
           } else if (it.status === "OK") {
-            // Draw green checkmark
-            doc.setDrawColor(0, 140, 60); doc.setLineWidth(0.7);
-            const cx = x + DAY_W / 2 - 2; const cy = y + 0.8;
-            doc.line(cx, cy + 2.2, cx + 1.8, cy + 4);
-            doc.line(cx + 1.8, cy + 4, cx + 4.5, cy + 0.8);
+            // Draw centred green checkmark
+            doc.setDrawColor(0, 140, 60); doc.setLineWidth(0.75);
+            const cx = x + DAY_W / 2;   // horizontal centre of cell
+            const cy = y + H_ITEM / 2;  // vertical centre of cell
+            doc.line(cx - 2.5, cy, cx - 0.7, cy + 1.8);
+            doc.line(cx - 0.7, cy + 1.8, cx + 2.8, cy - 1.4);
             doc.setDrawColor(...LINE); doc.setLineWidth(0.25);
           } else if (it.status === "NOK") {
             doc.setTextColor(180, 100, 0); doc.setFont("helvetica", "bold"); doc.setFontSize(5.5);

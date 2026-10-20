@@ -12,7 +12,7 @@ export default function App() {
     <div>
       <header className="app-header">
         <h1>REGIONAL AIRPORTS COMPANY LTD — ARFF DEPARTMENT</h1>
-        <p>RESCUE 3  |  SECTION ONE — VEHICLE OPERATORS  |  Daily Inspection Checklist</p>
+        <p>RESCUE 2  |  SECTION ONE — VEHICLE OPERATORS  |  Daily Inspection Checklist</p>
         <span className="doc-badge">HDK-ARFF/R3/CHK  ·  SOP: RACL-SQ-ARF-COP-24-2</span>
       </header>
 

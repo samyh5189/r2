@@ -32,7 +32,7 @@ async function generateWithAI(faults: FaultItem[], operatorName: string) {
     })
     .join("\n");
 
-  const prompt = `You are an ARFF (Airport Rescue and Firefighting) vehicle maintenance officer at Kulhudhuffushi Airport (HDK), Maldives. Operator "${operatorName}" completed a daily inspection for RESCUE 3 and found the following faults:
+  const prompt = `You are an ARFF (Airport Rescue and Firefighting) vehicle maintenance officer at Kulhudhuffushi Airport (HDK), Maldives. Operator "${operatorName}" completed a daily inspection for RESCUE 2 and found the following faults:
 
 ${faultList}
 
@@ -82,7 +82,7 @@ Respond with only the JSON object.`;
 
   return {
     faults: enrichedFaults,
-    vehicleEquipmentLine: `RESCUE 3 (HDK-ARFF) ${parsed.faultTitle ?? "FAULT DETECTED"}`,
+    vehicleEquipmentLine: `RESCUE 2 (HDK-ARFF) ${parsed.faultTitle ?? "FAULT DETECTED"}`,
     detailsOfDefects: parsed.detailsOfDefects,
     faultSummary: parsed.faultSummary,
     assessment: parsed.assessment,
@@ -111,7 +111,7 @@ function generateLocal(faults: FaultItem[], operatorName: string) {
   const faultTitle = faults.length === 1 ? faults[0].label.toUpperCase()
     : hasUS ? `${usList[0].toUpperCase()} AND OTHER FAULTS` : "MULTIPLE FAULTS";
 
-  let detailsOfDefects = `During daily inspection of RESCUE 3 (HDK-ARFF) conducted by ${operatorName}, `;
+  let detailsOfDefects = `During daily inspection of RESCUE 2 (HDK-ARFF) conducted by ${operatorName}, `;
   detailsOfDefects += faults.length === 1
     ? `a fault was identified with the ${faults[0].label.toLowerCase()}. `
     : `${faults.length} fault(s) were identified. `;
@@ -124,14 +124,14 @@ function generateLocal(faults: FaultItem[], operatorName: string) {
     ? "Urgent inspection and repair are required to prevent further deterioration and ensure the vehicle remains safe and fully operational."
     : "The fault(s) are minor in nature; however, maintenance is recommended at the earliest opportunity to prevent escalation.";
 
-  const faultSummary = `${faults.length} fault(s) found during daily inspection of RESCUE 3 by ${operatorName}. Priority: ${priority}.`;
+  const faultSummary = `${faults.length} fault(s) found during daily inspection of RESCUE 2 by ${operatorName}. Priority: ${priority}.`;
   const assessment = priority === "Immediate Grounding"
     ? "Vehicle must be grounded immediately. Do not deploy until cleared by the ARFFS Section Head."
     : priority === "Urgent"
     ? "Vehicle has reduced operational capability. Assess risk before deployment and arrange urgent maintenance."
     : "Vehicle is operational with minor defects. Schedule routine maintenance and continue normal operations.";
 
-  return { faults: enrichedFaults, vehicleEquipmentLine: `RESCUE 3 (HDK-ARFF) ${faultTitle}`, detailsOfDefects, faultSummary, assessment, priority };
+  return { faults: enrichedFaults, vehicleEquipmentLine: `RESCUE 2 (HDK-ARFF) ${faultTitle}`, detailsOfDefects, faultSummary, assessment, priority };
 }
 
 export async function generateFaultReport(
@@ -156,7 +156,7 @@ export async function generateFaultReport(
     reportNumber: nextFaultReportNumber(),
     inspectionLogId: "",
     date, time,
-    vehicle: "RESCUE 3 (HDK-ARFF)",
+    vehicle: "RESCUE 2 (HDK-ARFF)",
     vehicleEquipmentLine: result.vehicleEquipmentLine,
     operatorName,
     fleetNumber,

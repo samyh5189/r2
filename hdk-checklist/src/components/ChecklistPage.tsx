@@ -234,7 +234,7 @@ export default function ChecklistPage() {
         <div className="cl-intro-card">
           <div className="cl-intro-icon">🚒</div>
           <h2 className="cl-intro-title">Daily Inspection</h2>
-          <p className="cl-intro-sub">RESCUE 3 · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+          <p className="cl-intro-sub">RESCUE 2 · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
           <p className="cl-intro-count">{total} items across 9 sections</p>
 
           <div className="cl-intro-field">
