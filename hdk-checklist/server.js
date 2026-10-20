@@ -393,7 +393,8 @@ app.get("/api/health", (_req, res) => {
 });
 
 // ── Serve built frontend in production ────────────────────────────────
-if (process.env.NODE_ENV === "production") {
+// (On Vercel the frontend is served as static files and this file runs as the /api function)
+if (process.env.NODE_ENV === "production" && !process.env.VERCEL) {
   const distDir = join(__dirname, "dist");
   app.use(express.static(distDir));
   app.get("/{*splat}", (_req, res) => {
@@ -401,8 +402,12 @@ if (process.env.NODE_ENV === "production") {
   });
 }
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`HDK ARFF server → http://localhost:${PORT}`);
-  console.log(`  AI: ${process.env.ANTHROPIC_API_KEY ? "✓" : "✗"}  DB: ${pool ? "✓" : "✗ (no DATABASE_URL)"}`);
-});
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => {
+    console.log(`HDK ARFF server → http://localhost:${PORT}`);
+    console.log(`  AI: ${process.env.ANTHROPIC_API_KEY ? "✓" : "✗"}  DB: ${pool ? "✓" : "✗ (no DATABASE_URL)"}`);
+  });
+}
+
+export default app;
