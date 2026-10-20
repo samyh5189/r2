@@ -81,7 +81,7 @@ export default function ChecklistPage() {
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const hoursInputRef = useRef<HTMLInputElement>(null);
 
-  const flatItems = useMemo(() => buildFlatItems(sections), []);
+  const flatItems = useMemo(() => buildFlatItems(sections), [sections]);
   const total = flatItems.length;
 
   const answeredCount = sections.reduce((a, s) => a + s.items.filter((it) => it.status !== "").length, 0);

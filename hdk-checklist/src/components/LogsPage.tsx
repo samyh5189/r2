@@ -256,7 +256,6 @@ export default function LogsPage({ showFaults }: Props) {
   const hasLocalData = !!(localStorage.getItem("hdk_inspection_logs") || localStorage.getItem("hdk_fault_reports"));
 
   const reload = useCallback(() => {
-    setLoading(true);
     Promise.all([getLogs(), getFaultReports()])
       .then(([l, f]) => { setLogs(l); setFaults(f); })
       .finally(() => setLoading(false));
@@ -269,6 +268,7 @@ export default function LogsPage({ showFaults }: Props) {
     const result = await migrateLocalStorage();
     setMigrateResult(`Migrated ${result.logs} log${result.logs !== 1 ? "s" : ""} and ${result.faults} fault report${result.faults !== 1 ? "s" : ""} to the database.`);
     setMigrating(false);
+    setLoading(true);
     reload();
   };
   const [viewLog, setViewLog] = useState<InspectionLog | null>(null);
