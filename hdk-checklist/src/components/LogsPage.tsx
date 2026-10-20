@@ -1,7 +1,32 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import type { InspectionLog, FaultReport } from "../types";
 import { getLogs, getFaultReports } from "../storage";
 import { exportInspectionPDF, exportFaultReportPDF, exportWeeklyPDF } from "../pdfExport";
+
+async function migrateLocalStorage(): Promise<{ logs: number; faults: number }> {
+  let migratedLogs = 0, migratedFaults = 0;
+  try {
+    const rawLogs = localStorage.getItem("hdk_inspection_logs");
+    if (rawLogs) {
+      const logs: InspectionLog[] = JSON.parse(rawLogs);
+      for (const log of logs) {
+        const res = await fetch("/api/logs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(log) });
+        if (res.ok) migratedLogs++;
+      }
+    }
+  } catch { /* ignore */ }
+  try {
+    const rawFaults = localStorage.getItem("hdk_fault_reports");
+    if (rawFaults) {
+      const faults: FaultReport[] = JSON.parse(rawFaults);
+      for (const fault of faults) {
+        const res = await fetch("/api/fault-reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(fault) });
+        if (res.ok) migratedFaults++;
+      }
+    }
+  } catch { /* ignore */ }
+  return { logs: migratedLogs, faults: migratedFaults };
+}
 
 interface Props {
   showFaults: boolean;
@@ -225,12 +250,27 @@ export default function LogsPage({ showFaults }: Props) {
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState("");
   const [filterOperator, setFilterOperator] = useState("");
+  const [migrating, setMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<string | null>(null);
 
-  useEffect(() => {
+  const hasLocalData = !!(localStorage.getItem("hdk_inspection_logs") || localStorage.getItem("hdk_fault_reports"));
+
+  const reload = useCallback(() => {
+    setLoading(true);
     Promise.all([getLogs(), getFaultReports()])
       .then(([l, f]) => { setLogs(l); setFaults(f); })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  const handleMigrate = async () => {
+    setMigrating(true);
+    const result = await migrateLocalStorage();
+    setMigrateResult(`Migrated ${result.logs} log${result.logs !== 1 ? "s" : ""} and ${result.faults} fault report${result.faults !== 1 ? "s" : ""} to the database.`);
+    setMigrating(false);
+    reload();
+  };
   const [viewLog, setViewLog] = useState<InspectionLog | null>(null);
   const [viewFault, setViewFault] = useState<FaultReport | null>(null);
 
@@ -258,6 +298,20 @@ export default function LogsPage({ showFaults }: Props) {
 
   return (
     <div className="container">
+      {migrateResult && (
+        <div className="migrate-banner" style={{ background: "#dcfce7", borderColor: "#86efac", color: "#15803d" }}>
+          <span>{migrateResult}</span>
+          <button onClick={() => setMigrateResult(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#15803d" }}>×</button>
+        </div>
+      )}
+      {!migrateResult && hasLocalData && (
+        <div className="migrate-banner">
+          <span>Local records found. Sync them to the database?</span>
+          <button className="btn-export" style={{ padding: "6px 14px", fontSize: 12 }} onClick={handleMigrate} disabled={migrating}>
+            {migrating ? "Syncing…" : "Sync to DB"}
+          </button>
+        </div>
+      )}
       <div className="logs-filters">
         <input
           className="filter-input"
