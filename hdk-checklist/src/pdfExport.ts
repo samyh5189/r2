@@ -2,6 +2,31 @@ import jsPDF from "jspdf";
 import type { InspectionLog, FaultReport } from "./types";
 
 type RGB = [number, number, number];
+
+// Strip near-white pixels from a PNG data URL (for transparent signature rendering).
+// Data URLs are decoded synchronously in browsers, so no async needed.
+function stripWhiteBg(dataUrl: string): string {
+  try {
+    const img = new Image();
+    img.src = dataUrl;
+    if (!img.complete || !img.naturalWidth) return dataUrl;
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return dataUrl;
+    ctx.drawImage(img, 0, 0);
+    const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = id.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] > 230 && d[i + 1] > 230 && d[i + 2] > 230) d[i + 3] = 0;
+    }
+    ctx.putImageData(id, 0, 0);
+    return canvas.toDataURL("image/png");
+  } catch {
+    return dataUrl;
+  }
+}
 const NAVY: RGB = [11, 42, 74];
 const GREY: RGB = [85, 85, 85];
 const LIGHT: RGB = [238, 241, 244];
@@ -797,7 +822,8 @@ export function exportWeeklyPDF(logs: InspectionLog[]) {
     if (dl) {
       if (dl.operatorSignature) {
         try {
-          doc.addImage(dl.operatorSignature, "PNG", x + 1, y + 5, cellW - 2, SIG_H - 10);
+          const sigData = stripWhiteBg(dl.operatorSignature);
+          doc.addImage(sigData, "PNG", x + 1, y + 5, cellW - 2, SIG_H - 10);
         } catch { /* no-op */ }
       }
       const nameParts = dl.operatorName.trim().split(" ");

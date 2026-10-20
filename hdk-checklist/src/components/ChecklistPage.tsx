@@ -94,7 +94,7 @@ export default function ChecklistPage() {
   // Set up sig pad when we enter outro phase
   useEffect(() => {
     if (phase !== "outro" || !canvasRef.current || sigPad.current) return;
-    sigPad.current = new SignaturePad(canvasRef.current, { backgroundColor: "#fafbfc", penColor: "#0B2A4A" });
+    sigPad.current = new SignaturePad(canvasRef.current, { backgroundColor: "rgba(0,0,0,0)", penColor: "#0B2A4A" });
     const resize = () => {
       if (!canvasRef.current || !sigPad.current) return;
       const data = sigPad.current.toData();
