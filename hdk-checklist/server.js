@@ -132,6 +132,8 @@ if (process.env.DATABASE_URL) {
       operator_id TEXT NOT NULL,
       at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE INDEX IF NOT EXISTS inspection_logs_page ON inspection_logs (created_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS fault_reports_page ON fault_reports (created_at DESC, id DESC);
   `)
     .then(() => console.log("✓ DB tables ready"))
     .then(() => migrateEmbeddedFiles())
@@ -420,13 +422,127 @@ adminRoutes("/api/logs", "inspection_logs");
 adminRoutes("/api/fault-reports", "fault_reports");
 
 // ── Inspection logs ───────────────────────────────────────────────────
-app.get("/api/logs", async (_req, res) => {
+// ── Lists, a page at a time ───────────────────────────────────────────
+// ?limit=&before=<cursor from the last page>, newest first, plus filters. Without any parameters
+// the whole list comes back as a plain array, for app versions still open from before paging.
+const PAGE_MAX = 200;
+const SQL_DATE = "(CASE WHEN data->>'date' ~ '^\\d{2}/\\d{2}/\\d{4}$' THEN to_date(data->>'date', 'DD/MM/YYYY') END)";
+const likeParam = (v) => `%${String(v).slice(0, 80).replace(/[\\%_]/g, "\\$&")}%`;
+
+function listRoute(path, table, addFilters) {
+  app.get(path, async (req, res) => {
+    if (!pool) return res.status(503).json({ error: "No database configured." });
+    const q = req.query;
+    try {
+      if (Object.keys(q).length === 0) {
+        const all = await pool.query(`SELECT data FROM ${table} ORDER BY created_at DESC`);
+        return res.json(all.rows.map((r) => r.data));
+      }
+      const where = [];
+      const params = [];
+      const add = (sql, value) => { params.push(value); where.push(sql.replace("?", `$${params.length}`)); };
+      if (typeof q.date === "string" && q.date) add("data->>'date' LIKE ?", likeParam(q.date));
+      if (typeof q.operator === "string" && q.operator) add("data->>'operatorName' ILIKE ?", likeParam(q.operator));
+      if (DATE_RE.test(q.from)) add(`${SQL_DATE} >= to_date(?, 'DD/MM/YYYY')`, q.from);
+      if (DATE_RE.test(q.to)) add(`${SQL_DATE} <= to_date(?, 'DD/MM/YYYY')`, q.to);
+      addFilters(q, add);
+      if (typeof q.before === "string" && q.before.includes("|")) {
+        const [at, id] = [q.before.slice(0, q.before.indexOf("|")), q.before.slice(q.before.indexOf("|") + 1)];
+        params.push(at, id);
+        where.push(`(created_at, id) < ($${params.length - 1}::timestamptz, $${params.length})`);
+      }
+      const limit = Math.min(PAGE_MAX, Math.max(1, Number(q.limit) || 50));
+      const rows = await pool.query(
+        `SELECT data, created_at::text AS at, id FROM ${table}
+         ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+         ORDER BY created_at DESC, id DESC LIMIT ${limit + 1}`,
+        params
+      );
+      const page = rows.rows.slice(0, limit);
+      const last = page[page.length - 1];
+      res.json({ items: page.map((r) => r.data), next: rows.rowCount > limit ? `${last.at}|${last.id}` : null });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "DB query failed." });
+    }
+  });
+}
+
+// Inspection logs: ?kind=daily|weekly|monthly|yearly, ?period=<periodKey>
+listRoute("/api/logs", "inspection_logs", (q, add) => {
+  if (KINDS.includes(q.kind)) add("COALESCE(data->>'kind', 'daily') = ?", q.kind);
+  if (typeof q.period === "string" && q.period) add("data->>'periodKey' = ?", q.period);
+});
+
+// Fault reports: ?status=open|resolved
+listRoute("/api/fault-reports", "fault_reports", (q, add) => {
+  if (q.status === "open") add("data->>'status' IS DISTINCT FROM ?", "Resolved");
+  if (q.status === "resolved") add("data->>'status' = ?", "Resolved");
+});
+
+// Every fault report, cut down to what age tracking and the monthly summary need (~300 bytes each)
+app.get("/api/fault-reports/brief", async (_req, res) => {
   if (!pool) return res.status(503).json({ error: "No database configured." });
   try {
-    const result = await pool.query(
-      "SELECT data FROM inspection_logs ORDER BY created_at DESC"
-    );
-    res.json(result.rows.map((r) => r.data));
+    const rows = await pool.query(`
+      SELECT jsonb_strip_nulls(jsonb_build_object(
+        'id', data->'id', 'reportNumber', data->'reportNumber', 'date', data->'date', 'time', data->'time',
+        'createdAt', data->'createdAt', 'resolvedAt', data->'resolvedAt', 'status', data->'status',
+        'priority', data->'priority', 'operatorName', data->'operatorName', 'vehicleEquipmentLine', data->'vehicleEquipmentLine',
+        'acceptance', jsonb_build_object('date', data->'acceptance'->'date', 'time', data->'acceptance'->'time'),
+        'faults', (SELECT COALESCE(jsonb_agg(jsonb_build_object('itemId', f->'itemId', 'label', f->'label')), '[]'::jsonb)
+                   FROM jsonb_array_elements(CASE WHEN jsonb_typeof(data->'faults') = 'array' THEN data->'faults' ELSE '[]'::jsonb END) f)
+      )) AS data
+      FROM fault_reports ORDER BY created_at DESC`);
+    res.json(rows.rows.map((r) => r.data));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB query failed." });
+  }
+});
+
+// Home screen and service status: counts, the latest check of each kind, open faults, engine hours
+const ENGINE_HOURS_ID = "p1-10"; // mirrors src/checklistData.ts
+app.get("/api/overview", async (_req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  try {
+    const [counts, latest, open, engine, months] = await Promise.all([
+      pool.query("SELECT COALESCE(data->>'kind', 'daily') AS kind, COUNT(*)::int AS n FROM inspection_logs GROUP BY 1"),
+      pool.query(`SELECT DISTINCT ON (kind) COALESCE(data->>'kind', 'daily') AS kind, data - 'sections' - 'operatorSignature' AS data
+                  FROM inspection_logs ORDER BY kind, ${SQL_DATE} DESC NULLS LAST, created_at DESC`),
+      pool.query("SELECT data FROM fault_reports WHERE data->>'status' IS DISTINCT FROM 'Resolved' ORDER BY created_at DESC"),
+      pool.query(`SELECT l.data->>'date' AS date, l.data->>'time' AS time, it->>'remarks' AS remarks
+                  FROM inspection_logs l,
+                       jsonb_array_elements(CASE WHEN jsonb_typeof(l.data->'sections') = 'array' THEN l.data->'sections' ELSE '[]'::jsonb END) s,
+                       jsonb_array_elements(CASE WHEN jsonb_typeof(s->'items') = 'array' THEN s->'items' ELSE '[]'::jsonb END) it
+                  WHERE it->>'id' = $1 AND COALESCE(it->>'remarks', '') <> ''`, [ENGINE_HOURS_ID]),
+      pool.query(`SELECT substr(data->>'date', 4) AS m FROM inspection_logs UNION SELECT substr(data->>'date', 4) FROM fault_reports`),
+    ]);
+    res.json({
+      counts: Object.fromEntries(KINDS.map((k) => [k, counts.rows.find((r) => r.kind === k)?.n ?? 0])),
+      latest: Object.fromEntries(KINDS.map((k) => [k, latest.rows.find((r) => r.kind === k)?.data ?? null])),
+      openFaults: open.rows.map((r) => r.data),
+      engine: engine.rows,
+      months: months.rows.map((r) => r.m).filter((m) => /^\d{2}\/\d{4}$/.test(m ?? "")),
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB query failed." });
+  }
+});
+
+// Which records saved on a device the database doesn't have (deleted ones count as known)
+app.post("/api/records/missing", async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  const ids = (v) => (Array.isArray(v) ? v.filter(isId).slice(0, 2000) : []);
+  const logs = ids(req.body?.logs);
+  const faults = ids(req.body?.faults);
+  try {
+    const known = async (table, list) => new Set((await pool.query(
+      `SELECT id FROM ${table} WHERE id = ANY($1) UNION SELECT id FROM deleted_records WHERE id = ANY($1)`, [list]
+    )).rows.map((r) => r.id));
+    const [kl, kf] = await Promise.all([known("inspection_logs", logs), known("fault_reports", faults)]);
+    res.json({ logs: logs.filter((id) => !kl.has(id)), faults: faults.filter((id) => !kf.has(id)) });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "DB query failed." });
@@ -533,19 +649,6 @@ app.post("/api/logs/:id/signoff", writeLimit, async (req, res) => {
 });
 
 // ── Fault reports ─────────────────────────────────────────────────────
-app.get("/api/fault-reports", async (_req, res) => {
-  if (!pool) return res.status(503).json({ error: "No database configured." });
-  try {
-    const result = await pool.query(
-      "SELECT data FROM fault_reports ORDER BY created_at DESC"
-    );
-    res.json(result.rows.map((r) => r.data));
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "DB query failed." });
-  }
-});
-
 app.post("/api/fault-reports", writeLimit, async (req, res) => {
   if (!pool) return res.status(503).json({ error: "No database configured." });
   const report = req.body;
@@ -626,7 +729,14 @@ app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
     const accepted = acceptance.maintenanceName && acceptance.maintenanceSignature && acceptance.arffName && acceptance.arffSignature;
     const started = Object.values(repair).some(Boolean) || Object.values(acceptance).some(Boolean);
     const status = accepted ? "Resolved" : started ? "In Progress" : report.status;
-    const saved = { ...report, repair, acceptance, status, repairUpdatedBy: check.name, ...(status === "Resolved" ? { resolvedAt: new Date().toISOString() } : {}) };
+    // Timeline: when repair work was first recorded and last updated, and by whom
+    const now = new Date().toISOString();
+    const saved = {
+      ...report, repair, acceptance, status,
+      repairUpdatedBy: check.name, repairUpdatedAt: now,
+      ...(started && !report.repairStartedAt ? { repairStartedAt: now, repairStartedBy: check.name } : {}),
+      ...(status === "Resolved" ? { resolvedAt: now } : {}),
+    };
     await client.query("UPDATE fault_reports SET data = $2 WHERE id = $1", [req.params.id, saved]);
     await client.query("COMMIT");
     res.json({ ok: true, report: saved });

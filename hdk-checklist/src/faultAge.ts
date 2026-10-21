@@ -1,4 +1,4 @@
-import type { FaultReport } from "./types";
+import type { FaultBrief, FaultReport } from "./types";
 
 const DAY_MS = 86_400_000;
 
@@ -12,10 +12,10 @@ function parseGB(date?: string, time?: string): number | null {
   return new Date(y, m - 1, d, hh || 0, mm || 0).getTime();
 }
 
-export const openedAt = (r: FaultReport) => Date.parse(r.createdAt) || parseGB(r.date, r.time) || Date.now();
+export const openedAt = (r: FaultBrief) => Date.parse(r.createdAt) || parseGB(r.date, r.time) || Date.now();
 
 /** When the report closed: the server's stamp, else the acceptance test date on older reports */
-export function closedAt(r: FaultReport): number | null {
+export function closedAt(r: FaultBrief): number | null {
   if (r.status !== "Resolved") return null;
   return (r.resolvedAt && Date.parse(r.resolvedAt)) || parseGB(r.acceptance?.date, r.acceptance?.time);
 }
@@ -27,7 +27,7 @@ export interface FaultAge {
   label: string;
 }
 
-export function faultAge(r: FaultReport, now = Date.now()): FaultAge {
+export function faultAge(r: FaultBrief, now = Date.now()): FaultAge {
   const closed = r.status === "Resolved";
   const end = closed ? closedAt(r) : now;
   const days = end == null ? NaN : Math.max(0, (end - openedAt(r)) / DAY_MS);
@@ -47,7 +47,7 @@ export interface FaultAgeSummary {
   avgDaysToClose: number | null;
 }
 
-export function summarizeAges(reports: FaultReport[], now = Date.now()): FaultAgeSummary {
+export function summarizeAges(reports: FaultBrief[], now = Date.now()): FaultAgeSummary {
   const ages = reports.map((r) => faultAge(r, now));
   const closed = ages.filter((a) => a.closed && !Number.isNaN(a.days));
   return {
@@ -55,4 +55,13 @@ export function summarizeAges(reports: FaultReport[], now = Date.now()): FaultAg
     overdue: ages.filter((a) => a.overdue).length,
     avgDaysToClose: closed.length ? closed.reduce((s, a) => s + a.days, 0) / closed.length : null,
   };
+}
+
+/** Whether the vehicle can respond, from its open faults: any grounding fault grounds it, an urgent one restricts it */
+export type VehicleState = "serviceable" | "restricted" | "grounded";
+
+export function vehicleState(openFaults: Pick<FaultReport, "priority">[]): VehicleState {
+  if (openFaults.some((r) => r.priority === "Immediate Grounding")) return "grounded";
+  if (openFaults.some((r) => r.priority === "Urgent")) return "restricted";
+  return "serviceable";
 }

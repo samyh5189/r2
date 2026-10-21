@@ -1,6 +1,7 @@
-import type { CheckKind, ServiceSettings, InspectionLog, FaultReport, ChecklistSectionConfig, Operator, ShiftSignoff, FaultRepair, FaultAcceptance } from "./types";
+import type { CheckKind, FaultBrief, ServiceSettings, InspectionLog, FaultReport, ChecklistSectionConfig, Operator, ShiftSignoff, FaultRepair, FaultAcceptance } from "./types";
 import { defaultChecklistConfig } from "./checklistData";
 import { logKind, periodKey } from "./checkKinds";
+import { engineEntries, type EngineEntry } from "./service";
 
 const LS_LOGS = "hdk_inspection_logs";
 const LS_FAULTS = "hdk_fault_reports";
@@ -47,15 +48,115 @@ export async function imageData(src: string): Promise<string> {
   });
 }
 
-// ── Inspection logs ───────────────────────────────────────────────────
+// ── Lists, a page at a time ───────────────────────────────────────────
+// The server sends 50 records at a time, newest first; `next` asks for the page after.
+// Offline, the copies saved on this device are filtered the same way.
 
-export async function getLogs(): Promise<InspectionLog[]> {
+export interface Page<T> { items: T[]; next: string | null; offline?: boolean }
+
+interface ListQuery { date?: string; operator?: string; from?: string; to?: string; limit?: number; before?: string | null }
+export interface LogQuery extends ListQuery { kind?: CheckKind; period?: string }
+export interface FaultQuery extends ListQuery { status?: "open" | "resolved" }
+
+const ymd = (dateGB: string) => dateGB.split("/").reverse().join("");
+
+function localMatch(r: { date: string; operatorName: string }, q: ListQuery) {
+  return (!q.date || r.date.includes(q.date))
+    && (!q.operator || r.operatorName.toLowerCase().includes(q.operator.toLowerCase()))
+    && (!q.from || ymd(r.date) >= ymd(q.from))
+    && (!q.to || ymd(r.date) <= ymd(q.to));
+}
+
+async function fetchPage<T extends { createdAt: string }>(path: string, q: object, localKey: string, match: (r: T) => boolean): Promise<Page<T>> {
+  const params = new URLSearchParams({ limit: "50" });
+  for (const [k, v] of Object.entries(q)) if (v != null && v !== "") params.set(k, String(v));
   try {
-    const res = await fetch("/api/logs");
+    const res = await fetch(`${path}?${params}`);
     if (res.ok) return await res.json();
   } catch { /* offline — fall through */ }
-  return lsGet<InspectionLog>(LS_LOGS);
+  const items = lsGet<T>(localKey).filter(match).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return { items, next: null, offline: true };
 }
+
+export const listLogs = (q: LogQuery) => fetchPage<InspectionLog>("/api/logs", q, LS_LOGS, (l) =>
+  localMatch(l, q) && (!q.kind || logKind(l) === q.kind) && (!q.period || periodKey(logKind(l), l.date) === q.period));
+
+export const listFaults = (q: FaultQuery) => fetchPage<FaultReport>("/api/fault-reports", q, LS_FAULTS, (r) =>
+  localMatch(r, q) && (!q.status || (q.status === "resolved") === (r.status === "Resolved")));
+
+/** Every record matching the query (for a week, a month, …), following the pages */
+async function listAll<T>(list: (q: ListQuery) => Promise<Page<T>>, q: ListQuery): Promise<T[]> {
+  const out: T[] = [];
+  let before: string | null | undefined;
+  do {
+    const page = await list({ ...q, limit: 200, before });
+    out.push(...page.items);
+    before = page.next;
+  } while (before);
+  return out;
+}
+export const listAllLogs = (q: LogQuery) => listAll((p) => listLogs({ ...q, ...p }), q);
+export const listAllFaults = (q: FaultQuery) => listAll((p) => listFaults({ ...q, ...p }), q);
+
+/** Every fault report, cut down to what age tracking and the monthly summary use */
+export async function getFaultBriefs(): Promise<FaultBrief[]> {
+  try {
+    const res = await fetch("/api/fault-reports/brief");
+    if (res.ok) return await res.json();
+  } catch { /* offline */ }
+  return lsGet<FaultReport>(LS_FAULTS);
+}
+
+/** What the home screen and service status need, without loading every record */
+export interface Overview {
+  counts: Record<CheckKind, number>;
+  /** The latest check of each kind, without its items and signature */
+  latest: Record<CheckKind, Omit<InspectionLog, "sections" | "operatorSignature"> | null>;
+  openFaults: FaultReport[];
+  engine: EngineEntry[];
+  /** MM/YYYY with any inspections or fault reports */
+  months: string[];
+  offline?: boolean;
+}
+
+function localOverview(): Overview {
+  const logs = lsGet<InspectionLog>(LS_LOGS).sort((a, b) => ymd(b.date).localeCompare(ymd(a.date)) || b.createdAt.localeCompare(a.createdAt));
+  const faults = lsGet<FaultReport>(LS_FAULTS);
+  const kinds: CheckKind[] = ["daily", "weekly", "monthly", "yearly"];
+  return {
+    counts: Object.fromEntries(kinds.map((k) => [k, logs.filter((l) => logKind(l) === k).length])) as Overview["counts"],
+    latest: Object.fromEntries(kinds.map((k) => [k, logs.find((l) => logKind(l) === k) ?? null])) as Overview["latest"],
+    openFaults: faults.filter((r) => r.status !== "Resolved"),
+    engine: engineEntries(logs),
+    months: [...new Set([...logs, ...faults].map((r) => r.date.slice(3)))],
+    offline: true,
+  };
+}
+
+let overviewCache: { at: number; data: Promise<Overview> } | null = null;
+
+/** Cached for a few seconds so screens shown together share one request; `fresh` after a save */
+export function getOverview(fresh = false): Promise<Overview> {
+  if (!fresh && overviewCache && Date.now() - overviewCache.at < 10_000) return overviewCache.data;
+  const data = fetch("/api/overview")
+    .then((res) => (res.ok ? res.json() as Promise<Overview> : localOverview()))
+    .catch(() => localOverview());
+  overviewCache = { at: Date.now(), data };
+  return data;
+}
+
+/** How many records saved on this device the database doesn't have */
+export async function countUnsynced(): Promise<number> {
+  const logs = lsGet<InspectionLog>(LS_LOGS).map((l) => l.id);
+  const faults = lsGet<FaultReport>(LS_FAULTS).map((r) => r.id);
+  if (logs.length + faults.length === 0) return 0;
+  try {
+    const data = await postJson<{ logs: string[]; faults: string[] }>("/api/records/missing", { logs, faults }, "");
+    return data.logs.length + data.faults.length;
+  } catch { return 0; }
+}
+
+// ── Inspection logs ───────────────────────────────────────────────────
 
 export interface Rejection { error: string; conflict: boolean }
 
@@ -104,11 +205,8 @@ export function deviceId(): string {
  * yearly checks are one per period for the vehicle.
  */
 export async function findLogForDate(dateGB: string, operatorName = "", kind: CheckKind = "daily"): Promise<InspectionLog | null> {
-  const logs = (await getLogs()).filter((l) => logKind(l) === kind);
-  if (kind !== "daily") {
-    const period = periodKey(kind, dateGB);
-    return logs.find((l) => periodKey(kind, l.date) === period) ?? null;
-  }
+  if (kind !== "daily") return (await listLogs({ kind, period: periodKey(kind, dateGB), limit: 1 })).items[0] ?? null;
+  const logs = await listAllLogs({ kind, from: dateGB, to: dateGB });
   const device = deviceId();
   // Logs saved before device ids existed are recognised by this device's local copy
   const savedHere = new Set(lsGet<InspectionLog>(LS_LOGS).map((l) => l.id));
@@ -119,14 +217,6 @@ export async function findLogForDate(dateGB: string, operatorName = "", kind: Ch
 }
 
 // ── Fault reports ─────────────────────────────────────────────────────
-
-export async function getFaultReports(): Promise<FaultReport[]> {
-  try {
-    const res = await fetch("/api/fault-reports");
-    if (res.ok) return await res.json();
-  } catch { /* offline */ }
-  return lsGet<FaultReport>(LS_FAULTS);
-}
 
 /**
  * Saves the report with the reporter's PIN; the server assigns the final report number, so use
@@ -161,7 +251,7 @@ export async function saveFaultReport(report: FaultReport, pin = ""): Promise<Fa
 
 /** Provisional number for display/offline; the server assigns the final one on save. */
 export async function nextFaultReportNumber(): Promise<string> {
-  const reports = await getFaultReports();
+  const reports = await getFaultBriefs();
   const year = new Date().getFullYear();
   const prefix = `HDK-ARFF/${year}/`;
   const existing = reports

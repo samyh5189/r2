@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FaultReport, InspectionLog, ItemStatus } from "../types";
-import { describeEmail, emailPdf, getFaultReports, getLogs, getServiceSettings } from "../storage";
+import type { InspectionLog, ItemStatus } from "../types";
+import { describeEmail, emailPdf, getFaultBriefs, getOverview, getServiceSettings, listAllLogs, type Overview } from "../storage";
 import { showPdf } from "../pdfViewer";
 import { exportMonthlySummaryPDF } from "../pdfExport";
 import { availableMonths, monthTitle, monthlySummary } from "../monthlySummary";
 import ServiceCard from "./ServiceCard";
 import { useServiceStatus } from "../useServiceStatus";
-import { logKind } from "../checkKinds";
 import { analyzeTrends, type Finding, type TrendReport } from "../trends";
+import { toReadings } from "../service";
 
 const WINDOWS = [30, 60, 90];
+const pad = (n: number) => String(n).padStart(2, "0");
+const gbDate = (d: Date) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 const SEVERITY_LABEL = { high: "Act now", medium: "Plan maintenance", low: "Watch" } as const;
 
 function StatusStrip({ history }: { history: ItemStatus[] }) {
@@ -59,18 +61,24 @@ function FindingCard({ f }: { f: Finding }) {
   );
 }
 
-function MonthlySummaryPanel({ logs, isAdmin }: { logs: InspectionLog[]; isAdmin: boolean }) {
-  const [reports, setReports] = useState<FaultReport[] | null>(null);
+function MonthlySummaryPanel({ overview, isAdmin }: { overview: Overview; isAdmin: boolean }) {
   const [month, setMonth] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  useEffect(() => { getFaultReports().then(setReports); }, []);
-  const months = useMemo(() => (reports ? availableMonths(logs, reports) : []), [logs, reports]);
+  const months = useMemo(() => availableMonths(overview.months), [overview]);
   const selected = month || months[0] || "";
 
+  // Loads just the month's inspections (and that year's yearly check) when the PDF is asked for
   async function build() {
-    const settings = await getServiceSettings();
-    return exportMonthlySummaryPDF(monthlySummary(selected, logs, reports!, settings));
+    const [m, y] = selected.split("/").map(Number);
+    const [inMonth, yearly, reports, settings] = await Promise.all([
+      listAllLogs({ from: `01/${selected}`, to: gbDate(new Date(y, m, 0)) }),
+      listAllLogs({ kind: "yearly", from: `01/01/${y}`, to: gbDate(new Date(y, m, 0)) }),
+      getFaultBriefs(),
+      getServiceSettings(),
+    ]);
+    const logs = [...inMonth, ...yearly.filter((l) => !inMonth.some((x) => x.id === l.id))];
+    return exportMonthlySummaryPDF(monthlySummary(selected, logs, reports, settings, toReadings(overview.engine)));
   }
 
   async function email() {
@@ -80,8 +88,6 @@ function MonthlySummaryPanel({ logs, isAdmin }: { logs: InspectionLog[]; isAdmin
     setNote(describeEmail(await emailPdf(`RESCUE 2 monthly summary — ${monthTitle(selected)}`, `Attached is the RESCUE 2 inspection and maintenance summary for ${monthTitle(selected)}.`, pdf)));
     setBusy(false);
   }
-
-  if (!reports) return null;
   return (
     <>
       <h3 className="trend-heading">Monthly summary</h3>
@@ -99,15 +105,19 @@ function MonthlySummaryPanel({ logs, isAdmin }: { logs: InspectionLog[]; isAdmin
 }
 
 export default function TrendsPage({ isAdmin = false }: { isAdmin?: boolean }) {
-  const [allLogs, setAllLogs] = useState<InspectionLog[] | null>(null);
+  const [logs, setLogs] = useState<InspectionLog[] | null>(null);
+  const [overview, setOverview] = useState<Overview | null>(null);
   const [windowDays, setWindowDays] = useState(30);
   const [advice, setAdvice] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
 
-  useEffect(() => { getLogs().then(setAllLogs); }, []);
-  // Trends follow the daily inspections, which run on a steady cadence
-  const logs = useMemo(() => allLogs?.filter((l) => logKind(l) === "daily") ?? null, [allLogs]);
-  const service = useServiceStatus(allLogs);
+  // Trends follow the daily inspections, which run on a steady cadence; the longest window is enough
+  useEffect(() => {
+    listAllLogs({ kind: "daily", from: gbDate(new Date(Date.now() - Math.max(...WINDOWS) * 86_400_000)) }).then(setLogs);
+    getOverview().then(setOverview);
+  }, []);
+  const readings = useMemo(() => (overview ? toReadings(overview.engine) : null), [overview]);
+  const service = useServiceStatus(readings);
   const report = useMemo(() => (logs ? analyzeTrends(logs, windowDays) : null), [logs, windowDays]);
 
   if (!report) return <div className="container" style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Analysing inspections…</div>;
@@ -175,7 +185,7 @@ export default function TrendsPage({ isAdmin = false }: { isAdmin?: boolean }) {
         </>
       )}
 
-      {allLogs && <MonthlySummaryPanel logs={allLogs} isAdmin={isAdmin} />}
+      {overview && <MonthlySummaryPanel overview={overview} isAdmin={isAdmin} />}
     </div>
   );
 }

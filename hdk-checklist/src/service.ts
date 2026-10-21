@@ -6,18 +6,31 @@ const DAY_MS = 86_400_000;
 
 export interface HoursReading { t: number; date: string; hours: number }
 
-/** Engine running hours recorded on inspections, oldest first */
-export function engineReadings(logs: InspectionLog[]): HoursReading[] {
-  const out: HoursReading[] = [];
+/** An engine hours entry as recorded on an inspection */
+export interface EngineEntry { date: string; time: string; remarks: string }
+
+export function engineEntries(logs: InspectionLog[]): EngineEntry[] {
+  const out: EngineEntry[] = [];
   for (const log of logs) {
     for (const sec of log.sections) {
       const it = sec.items.find((i) => i.id === ENGINE_HOURS_ID);
-      const hours = it ? Number(String(it.remarks).replace(/[^\d.]/g, "")) : NaN;
-      if (it && it.remarks && Number.isFinite(hours)) out.push({ t: logTime(log), date: log.date, hours });
+      if (it?.remarks) out.push({ date: log.date, time: log.time, remarks: it.remarks });
     }
+  }
+  return out;
+}
+
+/** Engine running hours, oldest first */
+export function toReadings(entries: EngineEntry[]): HoursReading[] {
+  const out: HoursReading[] = [];
+  for (const e of entries) {
+    const hours = Number(String(e.remarks).replace(/[^\d.]/g, ""));
+    if (e.remarks && Number.isFinite(hours)) out.push({ t: logTime(e), date: e.date, hours });
   }
   return out.sort((a, b) => a.t - b.t);
 }
+
+export const engineReadings = (logs: InspectionLog[]) => toReadings(engineEntries(logs));
 
 /** Average engine hours per day over the last 60 days of readings */
 function hoursPerDay(readings: HoursReading[]): number | null {
@@ -52,8 +65,7 @@ export interface ServiceStatus {
 const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 /** Next engine service, due by hours or by months, whichever comes first. */
-export function serviceStatus(logs: InspectionLog[], s: ServiceSettings, now = Date.now()): ServiceStatus {
-  const readings = engineReadings(logs);
+export function serviceStatus(readings: HoursReading[], s: ServiceSettings, now = Date.now()): ServiceStatus {
   const current = readings[readings.length - 1];
   const perDay = current ? hoursPerDay(readings) : null;
   const status: ServiceStatus = { state: "unset", current, perDay, reasons: [] };

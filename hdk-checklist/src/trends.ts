@@ -40,7 +40,7 @@ const isFault = (s: ItemStatus) => s === "NOK" || s === "U/S";
 const RANK: Record<Severity, number> = { high: 3, medium: 2, low: 1 };
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-export function logTime(log: InspectionLog): number {
+export function logTime(log: Pick<InspectionLog, "date" | "time">): number {
   const [d, m, y] = log.date.split("/").map(Number);
   const [hh, mm] = (log.time || "00:00").split(":").map(Number);
   return new Date(y, m - 1, d, hh || 0, mm || 0).getTime();

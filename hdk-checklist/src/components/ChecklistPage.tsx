@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { buildChecklist, defaultChecklistConfig, itemType } from "../checklistData";
-import { KIND_LABEL, PERIOD_NAME } from "../checkKinds";
+import { KIND_LABEL, PERIOD_NAME, periodKey } from "../checkKinds";
 import type { CheckKind, ChecklistSection, ChecklistSectionConfig, ItemStatus, InspectionLog, FaultReport, EvidenceItem, Operator } from "../types";
-import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek, getChecklistConfig, findLogForDate, getOperators, deviceId, emailFaultReport, describeEmail, verifyOperator, saveOperatorSignature } from "../storage";
+import { saveLog, saveFaultReport, listAllFaults, sameInspectionWeek, getChecklistConfig, findLogForDate, getOperators, deviceId, emailFaultReport, describeEmail, verifyOperator, saveOperatorSignature } from "../storage";
 import OperatorField from "./OperatorField";
 import { needsPin } from "../operators";
 import SignatureChoice from "./SignatureChoice";
@@ -12,6 +12,7 @@ import { showPdf } from "../pdfViewer";
 import { exportInspectionPDF, exportFaultReportPDF } from "../pdfExport";
 import { processFile } from "../evidenceUtils";
 import rescue2Photo from "../assets/rescue2.jpg";
+import { deleteDraft, loadDraft, saveDraft, type Draft } from "../drafts";
 
 type Phase = "intro" | "item" | "review" | "outro" | "submitting" | "faultReview" | "saving" | "done" | "blocked";
 
@@ -60,7 +61,7 @@ function useElapsedTimer(running: boolean) {
   }, [running]);
   const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
   const ss = String(seconds % 60).padStart(2, "0");
-  return { elapsed: seconds, display: `${mm}:${ss}` };
+  return { elapsed: seconds, display: `${mm}:${ss}`, setElapsed: setSeconds };
 }
 
 const MAX_EVIDENCE = 5;
@@ -105,6 +106,12 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
   const [overallCondition, setOverallCondition] = useState<"Excellent" | "Good" | "Poor" | "">("");
   const [comments, setComments] = useState("");
 
+  // Save-as-you-go: the unfinished inspection found on this device, and when this one started
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [startedAt, setStartedAt] = useState("");
+  const [markedAllOk, setMarkedAllOk] = useState(0);
+  const [confirmAllOk, setConfirmAllOk] = useState(false);
+
   // Results
   const [savedLog, setSavedLog] = useState<InspectionLog | null>(null);
   const [savedFault, setSavedFault] = useState<FaultReport | null>(null);
@@ -126,12 +133,35 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
   const timerRunning = phase === "item";
   const active = phase !== "intro" && phase !== "done" && phase !== "blocked";
   useEffect(() => { onActiveChange?.(active); }, [active, onActiveChange]);
-  const { elapsed, display: timerDisplay } = useElapsedTimer(timerRunning);
+  const { elapsed, display: timerDisplay, setElapsed } = useElapsedTimer(timerRunning);
 
   useEffect(() => {
     getOperators().then(setOperators);
-    findLogForDate(new Date().toLocaleDateString("en-GB"), "", kind).then(setTodayLog);
+    const today = new Date().toLocaleDateString("en-GB");
+    Promise.all([findLogForDate(today, "", kind), loadDraft(kind)]).then(([log, saved]) => {
+      setTodayLog(log);
+      // A draft from an earlier day/period, or for a check already done here, is no use any more
+      if (saved && !log && saved.periodKey === periodKey(kind, today)) setDraft(saved);
+      else if (saved) deleteDraft(kind);
+    });
   }, [kind]);
+
+  // Save progress on this device as the inspection goes (photos included, PIN and signature not).
+  // The timer ticks every second, so it's read from a ref and saved with the next change.
+  const inProgress = phase === "item" || phase === "review" || phase === "outro";
+  const elapsedRef = useRef(0);
+  elapsedRef.current = elapsed;
+  useEffect(() => {
+    if (!inProgress || !startedAt) return;
+    const t = setTimeout(() => {
+      saveDraft({
+        kind, operatorName: operatorName.trim(), periodKey: periodKey(kind, new Date(startedAt).toLocaleDateString("en-GB")),
+        startedAt, savedAt: new Date().toISOString(), sections, currentIdx, phase: phase as Draft["phase"],
+        elapsed: elapsedRef.current, overallCondition, comments, markedAllOk,
+      });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [inProgress, startedAt, kind, operatorName, sections, currentIdx, phase, overallCondition, comments, markedAllOk]);
 
   // Load the admin-configured checklist; only swap it in before any item is answered
   useEffect(() => {
@@ -166,7 +196,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     } else {
       setFlash(status);
       applyStatus(flat.sectionId, flat.itemId, status, "", []);
-      setTimeout(() => { setFlash(""); advance(); }, 260);
+      setTimeout(() => { setFlash(""); advanceAfterAnswer(); }, 260);
     }
   }
 
@@ -195,7 +225,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     const flat = flatItems[currentIdx];
     applyStatus(flat.sectionId, flat.itemId, pendingStatus, pendingRemarks, pendingEvidence);
     setPendingStatus(""); setPendingRemarks(""); setPendingEvidence([]);
-    advance();
+    advanceAfterAnswer();
   }
 
   function advance() {
@@ -203,10 +233,37 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     else setCurrentIdx((i) => i + 1);
   }
 
+  /** After an answer: the next unanswered item (skipping ones marked OK in one go), else the review */
+  function advanceAfterAnswer() {
+    const open = flatItems.filter((fi) => fi.globalIndex !== currentIdx && !getItem(sections, fi.sectionId, fi.itemId)?.status);
+    const nextOpen = open.find((fi) => fi.globalIndex > currentIdx) ?? open[0];
+    if (!nextOpen) setPhase("review");
+    else if (nextOpen.globalIndex === currentIdx + 1) advance();
+    else setCurrentIdx(nextOpen.globalIndex);
+  }
+
   function goBack() {
     if (pendingStatus) { setPendingStatus(""); setPendingRemarks(""); setPendingEvidence([]); return; }
     if (currentIdx === 0) { setPhase("intro"); return; }
     setCurrentIdx((i) => i - 1);
+  }
+
+  // Status items not answered yet (number and text items need a value, so they're left)
+  const unansweredOk = flatItems.filter((fi) => {
+    const it = getItem(sections, fi.sectionId, fi.itemId);
+    return it && !it.status && itemType(it) === "status";
+  });
+
+  function markRemainingOk() {
+    const ids = new Set(unansweredOk.map((fi) => fi.itemId));
+    const next = sections.map((sec) => ({ ...sec, items: sec.items.map((it) => (ids.has(it.id) ? { ...it, status: "OK" as ItemStatus, remarks: "", evidence: [] } : it)) }));
+    setSections(next);
+    setMarkedAllOk((n) => n + ids.size);
+    setConfirmAllOk(false);
+    // Readings still to enter come next; otherwise straight to the review
+    const firstValue = flatItems.find((fi) => !getItem(next, fi.sectionId, fi.itemId)?.status);
+    if (firstValue) setCurrentIdx(firstValue.globalIndex);
+    else setPhase("review");
   }
 
   function jumpToItem(globalIndex: number) {
@@ -237,6 +294,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
       overallCondition,
       comments,
       faultCount: count,
+      ...(markedAllOk ? { markedAllOk } : {}),
       createdAt: now.toISOString(),
     };
 
@@ -244,7 +302,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     const repeats: RepeatFault[] = [];
     if (count > 0) {
       // Faults already on an open report from this week link to it instead of a new report
-      const openThisWeek = (await getFaultReports()).filter((r) => r.status !== "Resolved" && sameInspectionWeek(r.date, log.date));
+      const openThisWeek = (await listAllFaults({ status: "open" })).filter((r) => sameInspectionWeek(r.date, log.date));
       const reportedIn = new Map<string, FaultReport>();
       for (const r of openThisWeek) for (const f of r.faults) if (!reportedIn.has(f.itemId)) reportedIn.set(f.itemId, r);
       for (const sec of sections) for (const it of sec.items) {
@@ -270,7 +328,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     // The server enforces the limits and the PIN; save the log first so a rejected log leaves no report behind
     const result = await saveLog(log, pin);
     if ("error" in result) {
-      if (result.conflict) { setBlockedMsg(result.error); setPhase("blocked"); }
+      if (result.conflict) { setBlockedMsg(result.error); setPhase("blocked"); deleteDraft(kind); }
       else { setSubmitError(result.error); setPhase(report ? "faultReview" : "outro"); }
       return;
     }
@@ -290,6 +348,8 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     if (saveSignature && signature && pin) {
       saveOperatorSignature(operatorName, pin, signature).catch(() => { /* optional; the inspection is saved */ });
     }
+    deleteDraft(kind);
+    setDraft(null);
     setPending(null);
     setTodayLog(result.saved);
     setSavedLog(result.saved);
@@ -299,8 +359,8 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     onSubmitted?.();
   }
 
-  async function checkAlreadyDone() {
-    const existing = await findLogForDate(new Date().toLocaleDateString("en-GB"), operatorName, kind);
+  async function checkAlreadyDone(name = operatorName) {
+    const existing = await findLogForDate(new Date().toLocaleDateString("en-GB"), name, kind);
     if (!existing) return false;
     setBlockedMsg(kind === "daily"
       ? `${existing.operatorName} already submitted today's inspection at ${existing.time}.`
@@ -309,13 +369,15 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     return true;
   }
 
-  async function handleStart() {
+  /** Starts a new inspection, or with `resume`, carries on the one saved on this device */
+  async function handleStart(resume: Draft | null = null) {
+    const name = resume?.operatorName ?? operatorName;
     setStarting(true);
     setStartError(null);
     // With an operators list, check the name and PIN now rather than after the whole inspection
     if (operators.length > 0) {
       try {
-        const { signature: saved } = await verifyOperator(operatorName, pin);
+        const { signature: saved } = await verifyOperator(name, pin);
         setSavedSignature(saved);
         setSignature(saved ?? "");
       } catch (e) {
@@ -324,9 +386,38 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
         return;
       }
     }
-    const done = await checkAlreadyDone();
+    const done = await checkAlreadyDone(name);
     setStarting(false);
-    if (!done) setPhase("item");
+    if (done) return;
+    if (resume) {
+      setSections(resume.sections);
+      setCurrentIdx(Math.min(resume.currentIdx, buildFlatItems(resume.sections).length - 1));
+      setElapsed(resume.elapsed);
+      setOverallCondition(resume.overallCondition);
+      setComments(resume.comments);
+      setMarkedAllOk(resume.markedAllOk ?? 0);
+      setStartedAt(resume.startedAt);
+      setPhase(resume.phase);
+    } else {
+      setStartedAt(new Date().toISOString());
+      setPhase("item");
+    }
+    setDraft(null);
+  }
+
+  function continueDraft() {
+    if (!draft) return;
+    setOperatorName(draft.operatorName);
+    setStartError(null);
+    // Operators with a PIN enter it first; the button below then continues
+    if (!needsPin(operators, draft.operatorName)) handleStart(draft);
+  }
+
+  function discardDraft() {
+    if (!window.confirm("Discard the unfinished inspection? Its answers and photos will be lost.")) return;
+    deleteDraft(kind);
+    setDraft(null);
+    setOperatorName("");
   }
 
   function handleNew() {
@@ -336,6 +427,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     setOverallCondition(""); setComments("");
     setSavedLog(null); setSavedFault(null); setRepeatFaults([]);
     setPin(""); setSignature(""); setSavedSignature(null); setSaveSignature(false); setPending(null); setSubmitError(null);
+    setStartedAt(""); setMarkedAllOk(0); setConfirmAllOk(false); setElapsed(0);
   }
 
   // ── INTRO ────────────────────────────────────────────────────────────
@@ -364,6 +456,26 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
           <p className="cl-intro-sub">RESCUE 2 · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
           <p className="cl-intro-count">{total} items across {sections.length} sections</p>
 
+          {draft && (() => {
+            const answered = draft.sections.reduce((a, sec) => a + sec.items.filter((it) => it.status).length, 0);
+            const all = draft.sections.reduce((a, sec) => a + sec.items.length, 0);
+            const at = new Date(draft.startedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+            const chosen = operatorName.trim().toLowerCase() === draft.operatorName.toLowerCase();
+            return (
+              <div className="cl-resume">
+                <strong>Unfinished inspection</strong>
+                <span>Started by {draft.operatorName} at {at} · {answered} of {all} items done</span>
+                {!chosen && (
+                  <div className="cl-resume-btns">
+                    <button className="cl-resume-go" onClick={continueDraft}>Continue where you left off →</button>
+                    <button className="cl-resume-discard" onClick={discardDraft}>Discard</button>
+                  </div>
+                )}
+                {chosen && needsPin(operators, draft.operatorName) && <span className="cl-resume-pin">Enter your PIN below to continue.</span>}
+              </div>
+            );
+          })()}
+
           <div className="cl-intro-field">
             <OperatorField label="Operator Name *" operators={operators} name={operatorName} pin={pin}
               onName={(n) => { setOperatorName(n); setStartError(null); }} onPin={(p) => { setPin(p); setStartError(null); }} />
@@ -375,9 +487,18 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
             <span className="legend-item"><span className="legend-dot" style={{ background: "var(--us)" }} /> U/S — Unserviceable</span>
             <span className="legend-item"><span className="legend-dot" style={{ background: "var(--na)" }} /> N/A — Not applicable</span>
           </div>
-          <button className="btn-submit" disabled={!operatorName.trim() || (needsPin(operators, operatorName) && pin.length < 4) || todayLog === undefined || starting} onClick={handleStart}>
-            {starting ? "Checking…" : "Start Inspection →"}
-          </button>
+          {(() => {
+            // Picking the draft's operator continues their inspection; anyone else starts a new one
+            const resume = draft && operatorName.trim().toLowerCase() === draft.operatorName.toLowerCase() ? draft : null;
+            return (
+              <button className="btn-submit" disabled={!operatorName.trim() || (needsPin(operators, operatorName) && pin.length < 4) || todayLog === undefined || starting} onClick={() => {
+                if (draft && !resume && !window.confirm(`Start a new inspection? The unfinished one started by ${draft.operatorName} will be discarded.`)) return;
+                handleStart(resume);
+              }}>
+                {starting ? "Checking…" : resume ? "Continue Inspection →" : "Start Inspection →"}
+              </button>
+            );
+          })()}
         </div>
       </div>
     );
@@ -720,7 +841,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
                 const n = Number(val);
                 const outOfRange = inputType === "number" && ((currentItem?.min != null && n < currentItem.min) || (currentItem?.max != null && n > currentItem.max));
                 applyStatus(flat.sectionId, flat.itemId, outOfRange ? "NOK" : "OK", val, []);
-                advance();
+                advanceAfterAnswer();
               }}
             >
               Record →
@@ -729,7 +850,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
         )}
 
         {!pendingStatus && !isValueItem && (
-          <div className="cl-status-grid">
+          <div className="cl-status-grid cl-status-big">
             {[
               { status: "OK" as ItemStatus, label: "OK", desc: "Good", color: "var(--ok)" },
               { status: "NOK" as ItemStatus, label: "NOK", desc: "Minor defect", color: "var(--nok)" },
@@ -738,7 +859,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
             ].map(({ status, label, desc, color }) => (
               <button
                 key={status}
-                className={`cl-status-btn${currentStatus === status ? " cl-status-selected" : ""}`}
+                className={`cl-status-btn${status === "OK" ? " cl-status-ok" : ""}${currentStatus === status ? " cl-status-selected" : ""}`}
                 style={{ "--btn-color": color } as React.CSSProperties}
                 onClick={() => handleStatusTap(status)}
               >
@@ -755,6 +876,21 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
             <button className="cl-skip-btn" onClick={advance}>Next →</button>
           )}
         </div>
+
+        {!pendingStatus && unansweredOk.length >= 2 && (
+          confirmAllOk ? (
+            <div className="cl-allok-confirm">
+              <p>Mark the <strong>{unansweredOk.length} unanswered items</strong> as OK?</p>
+              <p className="cl-allok-warn">Only do this if you have physically checked every one of them. The log records that they were marked OK in one go.</p>
+              <div className="cl-allok-btns">
+                <button className="cl-allok-yes" onClick={markRemainingOk}>Yes, all checked — mark OK</button>
+                <button className="cl-allok-no" onClick={() => setConfirmAllOk(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button className="cl-allok-btn" onClick={() => setConfirmAllOk(true)}>✓ Mark remaining {unansweredOk.length} OK…</button>
+          )
+        )}
       </div>
     </div>
   );

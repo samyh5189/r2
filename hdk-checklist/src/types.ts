@@ -107,6 +107,7 @@ export interface InspectionLog {
   deviceId?: string;
   kind?: CheckKind;        // absent on older logs → daily
   periodKey?: string;      // set by the server: date, week start, MM/YYYY or YYYY
+  markedAllOk?: number;    // items the operator marked OK in one go
   createdAt: string;
 }
 
@@ -142,11 +143,20 @@ export interface FaultReport {
   repair?: FaultRepair;
   acceptance?: FaultAcceptance;
   resolvedAt?: string;     // set by the server when the report closes
+  repairStartedAt?: string;  // set by the server: first repair update
+  repairStartedBy?: string;
+  repairUpdatedAt?: string;
   repairUpdatedBy?: string;
   emailedAt?: string;
   emailedTo?: number;
   createdAt: string;
 }
+
+/** A fault report cut down to what age tracking and the monthly summary need */
+export type FaultBrief = Pick<FaultReport, "id" | "reportNumber" | "date" | "time" | "createdAt" | "resolvedAt" | "status" | "priority" | "operatorName" | "vehicleEquipmentLine"> & {
+  acceptance?: Pick<FaultAcceptance, "date" | "time">;
+  faults: Pick<FaultItem, "itemId" | "label">[];
+};
 
 /** Engine service schedule (Setup) */
 export interface ServiceSettings {

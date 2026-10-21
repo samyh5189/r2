@@ -67,7 +67,7 @@ export default function App() {
         )}
       </nav>
 
-      {tab === "checklist" && <ChecklistHub initialKind={startKind} />}
+      {tab === "checklist" && <ChecklistHub initialKind={startKind} onOpenFaults={() => setTab("faults")} />}
       {tab === "logs" && <LogsPage showFaults={false} isAdmin={isAdmin} onAuthLost={signOut} />}
       {tab === "faults" && <LogsPage showFaults={true} isAdmin={isAdmin} onAuthLost={signOut} />}
       {tab === "trends" && <TrendsPage isAdmin={isAdmin} />}

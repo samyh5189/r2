@@ -638,3 +638,77 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
 .qr-card { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--navy); text-align: center; }
 .qr-card img { width: 100%; max-width: 140px; border: 1px solid var(--border); border-radius: 8px; background: white; }
 @media (max-width: 480px) { .qr-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ── Glove-friendly checklist buttons ────────────────────────────────── */
+.cl-status-btn, .cl-confirm-btn, .cl-back-btn, .cl-skip-btn, .cl-allok-btn { touch-action: manipulation; }
+.cl-status-big { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.cl-status-big .cl-status-btn { min-height: 96px; padding: 16px 8px; border-width: 2.5px; border-radius: 16px; }
+.cl-status-big .cl-status-btn.cl-status-ok { grid-column: 1 / -1; min-height: 116px; }
+.cl-status-big .cl-status-label { font-size: 28px; }
+.cl-status-big .cl-status-ok .cl-status-label { font-size: 36px; }
+.cl-status-big .cl-status-desc { font-size: 13px; }
+.cl-confirm-btn { min-height: 56px; font-size: 16px; }
+.cl-nav { gap: 12px; }
+.cl-back-btn { min-height: 52px; padding: 0 20px; font-size: 15px; font-weight: 600; border: 1.5px solid var(--border); border-radius: 12px; background: white; color: var(--muted); }
+.cl-skip-btn { min-height: 52px; padding: 0 26px; font-size: 15px; border-radius: 12px; }
+.cl-add-evidence-btn { min-height: 44px; padding: 8px 14px; font-size: 13px; }
+
+.cl-allok-btn { min-height: 52px; border: 1.5px dashed var(--ok); background: #f0fdf4; color: #15803d; border-radius: 12px; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; }
+.cl-allok-confirm { border: 2px solid var(--ok); background: #f0fdf4; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.cl-allok-warn { font-size: 12px; color: #92400e; }
+.cl-allok-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.cl-allok-yes { flex: 2; min-height: 52px; background: var(--ok); color: white; border: none; border-radius: 12px; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; }
+.cl-allok-no { flex: 1; min-height: 52px; background: white; color: var(--text); border: 1.5px solid var(--border); border-radius: 12px; font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer; }
+
+/* ── Resume an unfinished inspection ─────────────────────────────────── */
+.cl-resume { border: 2px solid var(--nok); background: #fffbeb; border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.cl-resume strong { color: #92400e; font-size: 14px; }
+.cl-resume-btns { display: flex; gap: 8px; margin-top: 4px; }
+.cl-resume-go { flex: 1; min-height: 48px; background: var(--navy); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
+.cl-resume-discard { min-height: 48px; padding: 0 16px; background: white; color: var(--us); border: 1.5px solid var(--border); border-radius: 10px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; }
+.cl-resume-pin { color: #92400e; font-weight: 600; }
+
+/* ── Home "today" panel ──────────────────────────────────────────────── */
+.today-panel { max-width: 620px; margin: 14px auto 0; background: white; border: 1px solid var(--border); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.04); }
+.today-status { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; border-radius: 12px; padding: 10px 14px; color: white; }
+.today-status.st-serviceable { background: var(--ok); }
+.today-status.st-restricted { background: var(--nok); }
+.today-status.st-grounded { background: var(--us); }
+.today-status-word { font-size: 20px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+.today-status-sub { font-size: 13px; font-weight: 600; opacity: 0.95; }
+.today-checks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.today-check { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px; min-height: 52px; border: 1.5px solid var(--border); border-radius: 10px; background: white; font-family: inherit; cursor: pointer; color: var(--text); }
+.today-check-name { font-size: 13px; font-weight: 700; }
+.today-check-state { font-size: 11px; font-weight: 700; color: var(--nok); }
+.today-check.done .today-check-state { color: var(--ok); }
+.today-check.active { border-color: var(--navy); background: var(--navy); color: white; }
+.today-check.active .today-check-state { color: #fde68a; }
+.today-check.active.done .today-check-state { color: #bbf7d0; }
+.today-faults { display: flex; flex-direction: column; gap: 4px; }
+.today-fault { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.today-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.today-dot.p-g { background: var(--us); }
+.today-dot.p-u { background: var(--nok); }
+.today-dot.p-r { background: var(--na); }
+.today-fault-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.today-fault-age { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.today-fault-age.overdue { color: var(--us); font-weight: 700; }
+.today-link { align-self: flex-start; background: none; border: none; color: var(--navy); font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer; padding: 4px 0; }
+.today-last { font-size: 12px; color: var(--muted); }
+@media (max-width: 480px) { .today-panel { margin: 12px 12px 0; } .today-check-name { font-size: 12px; } }
+
+/* ── Fault timeline ──────────────────────────────────────────────────── */
+.timeline { list-style: none; display: flex; flex-direction: column; }
+.timeline-step { position: relative; display: flex; gap: 10px; padding: 0 0 12px; }
+.timeline-step::before { content: ""; position: absolute; left: 5px; top: 14px; bottom: 0; width: 2px; background: var(--border); }
+.timeline-step:last-child::before { display: none; }
+.timeline-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--navy); flex: none; margin-top: 4px; position: relative; }
+.timeline-step.pending .timeline-dot { background: white; border: 2px dashed var(--muted); }
+.timeline-step.late .timeline-dot { border-color: var(--us); }
+.timeline-title { font-size: 13px; font-weight: 700; }
+.timeline-step.pending .timeline-title { color: var(--muted); }
+.timeline-step.late .timeline-title { color: var(--us); }
+.timeline-meta { display: flex; flex-wrap: wrap; gap: 0 10px; font-size: 12px; color: var(--muted); }
+
+.load-more { display: block; margin: 12px auto 0; min-height: 44px; padding: 0 24px; border: 1.5px solid var(--navy); background: white; color: var(--navy); border-radius: 10px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
+.load-more:disabled { opacity: 0.6; }

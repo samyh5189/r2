@@ -1,11 +1,11 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
-import type { CheckKind, InspectionLog, FaultReport } from "../types";
-import { emailFaultReport, describeEmail, uploadImages, getLogs, getFaultReports, sameInspectionWeek, updateLog, deleteLog, updateFaultReport, deleteFaultReport } from "../storage";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import type { CheckKind, InspectionLog, FaultBrief, FaultReport } from "../types";
+import { emailFaultReport, describeEmail, uploadImages, listLogs, listAllLogs, listFaults, getFaultBriefs, getOverview, countUnsynced, updateLog, deleteLog, updateFaultReport, deleteFaultReport, type FaultQuery } from "../storage";
 import { EditLogModal, EditFaultModal } from "./EditModals";
 import { SignOffModal, RepairModal } from "./WorkflowModals";
 import NewFaultModal from "./NewFaultModal";
 import { faultAge, summarizeAges, TARGET_DAYS } from "../faultAge";
-import { CHECK_KINDS, GROUP_NOUN, KIND_LABEL, logGroup, logKind } from "../checkKinds";
+import { CHECK_KINDS, GROUP_NOUN, KIND_LABEL, logGroup, logKind, periodKey } from "../checkKinds";
 import { logTime } from "../trends";
 import { showPdf } from "../pdfViewer";
 import { RACL_LOGO } from "../raclLogo";
@@ -43,6 +43,64 @@ interface Props {
   onAuthLost: () => void;
 }
 
+interface TimelineStep { at: number | null; title: string; detail?: string; pending?: boolean; late?: boolean }
+
+const fmtWhen = (t: number) => new Date(t).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const parseGB = (date?: string, time?: string) => {
+  if (!date || !/^\d{2}\/\d{2}\/\d{4}$/.test(date)) return null;
+  const [d, m, y] = date.split("/").map(Number);
+  const [hh, mm] = (time || "00:00").split(":").map(Number);
+  return new Date(y, m - 1, d, hh || 0, mm || 0).getTime();
+};
+
+/** Reported → signed off → repair started → accepted → resolved, with what's still to come */
+function faultTimeline(r: FaultReport): TimelineStep[] {
+  const steps: TimelineStep[] = [];
+  const opened = Date.parse(r.createdAt) || parseGB(r.date, r.time);
+  steps.push({ at: opened, title: "Reported", detail: `${r.operatorName}${r.inspectionLogId ? " · from an inspection" : ""}` });
+  if (r.emailedAt) steps.push({ at: Date.parse(r.emailedAt), title: "Emailed", detail: r.emailedTo ? `${r.emailedTo} recipient${r.emailedTo === 1 ? "" : "s"}` : undefined });
+  if (r.shiftSignoff) steps.push({ at: Date.parse(r.shiftSignoff.signedAt), title: "Signed off by shift in-charge", detail: r.shiftSignoff.name });
+  if (r.repairStartedAt) steps.push({ at: Date.parse(r.repairStartedAt), title: "Repair started", detail: [r.repairStartedBy && `recorded by ${r.repairStartedBy}`, r.repair?.repairedBy && `repaired by ${r.repair.repairedBy}`].filter(Boolean).join(" · ") || undefined });
+  else if (r.repair?.desiredStartDate) steps.push({ at: parseGB(r.repair.desiredStartDate, r.repair.desiredStartTime), title: "Repair planned to start", detail: r.repair.repairedBy });
+  if (r.repairUpdatedAt && r.repairUpdatedAt !== r.repairStartedAt && r.status !== "Resolved") steps.push({ at: Date.parse(r.repairUpdatedAt), title: "Repair updated", detail: r.repairUpdatedBy });
+  if (r.acceptance?.date) steps.push({ at: parseGB(r.acceptance.date, r.acceptance.time), title: "Acceptance test", detail: [r.acceptance.maintenanceName, r.acceptance.arffName].filter(Boolean).join(" & ") || undefined });
+  if (r.status === "Resolved") {
+    const age = faultAge(r);
+    steps.push({ at: r.resolvedAt ? Date.parse(r.resolvedAt) : null, title: "Resolved", detail: age.label });
+  } else {
+    const age = faultAge(r);
+    const due = opened ? opened + TARGET_DAYS[r.priority] * 86_400_000 : null;
+    if (!r.shiftSignoff && r.inspectionLogId) steps.push({ at: null, title: "Awaiting shift in-charge sign-off", pending: true });
+    steps.push({
+      at: due,
+      title: r.repairStartedAt || r.repair?.details ? "Awaiting acceptance test" : "Awaiting repair",
+      detail: due ? `${age.overdue ? "Overdue — target was" : "Target:"} ${TARGET_DAYS[r.priority]} day${TARGET_DAYS[r.priority] === 1 ? "" : "s"} (${r.priority.toLowerCase()})` : undefined,
+      pending: true,
+      late: age.overdue,
+    });
+  }
+  return steps;
+}
+
+function FaultTimeline({ report }: { report: FaultReport }) {
+  return (
+    <ol className="timeline">
+      {faultTimeline(report).map((st, i) => (
+        <li key={i} className={`timeline-step${st.pending ? " pending" : ""}${st.late ? " late" : ""}`}>
+          <span className="timeline-dot" />
+          <div>
+            <div className="timeline-title">{st.title}</div>
+            <div className="timeline-meta">
+              {st.at != null && !Number.isNaN(st.at) && <span>{st.pending ? `due ${fmtWhen(st.at)}` : fmtWhen(st.at)}</span>}
+              {st.detail && <span>{st.detail}</span>}
+            </div>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function FaultModal({ report, onClose }: { report: FaultReport; onClose: () => void }) {
   const priorityKey = report.priority === "Immediate Grounding" ? "Grounding" : report.priority;
   return (
@@ -77,6 +135,11 @@ function FaultModal({ report, onClose }: { report: FaultReport; onClose: () => v
                 {report.priority}
               </span>
             </div>
+          </div>
+
+          <div className="modal-section">
+            <h4>Timeline</h4>
+            <FaultTimeline report={report} />
           </div>
 
           <div className="modal-section">
@@ -199,6 +262,7 @@ function LogModal({ log, onClose }: { log: InspectionLog; onClose: () => void })
                   ...(log.duration ? [["Duration", `${Math.floor(log.duration / 60)}m ${log.duration % 60}s`]] : []),
                   ["Overall Condition", log.overallCondition],
                   ["Faults Found", String(log.faultCount)],
+                  ...(log.markedAllOk ? [["Marked OK in one go", `${log.markedAllOk} items`]] : []),
                   ["Comments", log.comments || "None"],
                 ].map(([k, v]) => (
                   <tr key={k}>
@@ -278,43 +342,88 @@ function LogModal({ log, onClose }: { log: InspectionLog; onClose: () => void })
   );
 }
 
-// The week sheet covers the daily inspections only
-function exportWeekFor(log: InspectionLog, allLogs: InspectionLog[]) {
-  showPdf(exportWeeklyPDF(allLogs.filter((l) => logKind(l) === "daily" && sameInspectionWeek(l.date, log.date))));
+// The week sheet covers the daily inspections only, fetched for that week (Sat–Fri)
+function exportWeekFor(dateGB: string) {
+  const start = periodKey("weekly", dateGB);
+  const [d, m, y] = start.split("/").map(Number);
+  const end = new Date(y, m - 1, d + 6).toLocaleDateString("en-GB");
+  showPdf(listAllLogs({ kind: "daily", from: start, to: end }).then(exportWeeklyPDF));
 }
 
-function localIds(key: string): string[] {
-  try { return (JSON.parse(localStorage.getItem(key) || "[]") as { id: string }[]).map((r) => r.id); } catch { return []; }
+const PAGE = 50;
+const FAULT_STATUS: Record<"active" | "overdue" | "resolved" | "all", FaultQuery["status"]> = { active: "open", overdue: "open", resolved: "resolved", all: undefined };
+
+/** The value, once it has stopped changing for a moment (typed filters) */
+function useSettled<T>(value: T, ms = 350): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => { const t = setTimeout(() => setSettled(value), ms); return () => clearTimeout(t); }, [value, ms]);
+  return settled;
 }
 
 export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
+  // Loaded so far (newest first); `next` fetches the page after
   const [logs, setLogs] = useState<InspectionLog[]>([]);
   const [faults, setFaults] = useState<FaultReport[]>([]);
+  const [next, setNext] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [counts, setCounts] = useState<Record<CheckKind, number> | null>(null);
+  const [briefs, setBriefs] = useState<FaultBrief[]>([]);
+  const [unsynced, setUnsynced] = useState(0);
   const [filterDate, setFilterDate] = useState("");
   const [filterOperator, setFilterOperator] = useState("");
+  const date = useSettled(filterDate.trim());
+  const operator = useSettled(filterOperator.trim());
   const [kindTab, setKindTab] = useState<CheckKind>("daily");
   // Groups the user opened or closed; others follow the default (newest open)
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
   const [faultView, setFaultView] = useState<"active" | "overdue" | "resolved" | "all">("active");
   const [migrating, setMigrating] = useState(false);
   const [migrateResult, setMigrateResult] = useState<string | null>(null);
+  const request = useRef(0);
 
+  const query = useCallback((before: string | null, limit = PAGE) => {
+    const common = { date, operator, before, limit };
+    return showFaults ? listFaults({ ...common, status: FAULT_STATUS[faultView] }) : listLogs({ ...common, kind: kindTab });
+  }, [showFaults, date, operator, faultView, kindTab]);
 
-  const reload = useCallback(() => {
-    Promise.all([getLogs(), getFaultReports()])
-      .then(([l, f]) => { setLogs(l); setFaults(f); })
-      .finally(() => setLoading(false));
-  }, []);
+  /** Reloads the first page; `keep` reloads as many as are showing, e.g. after an edit */
+  const reload = useCallback((keep = 0) => {
+    const id = ++request.current;
+    return Promise.all([
+      query(null, Math.min(200, Math.max(PAGE, keep))),
+      showFaults ? getFaultBriefs() : getOverview(true),
+    ]).then(([page, extra]) => {
+      if (id !== request.current) return;
+      if (showFaults) { setFaults(page.items as FaultReport[]); setBriefs(extra as FaultBrief[]); }
+      else { setLogs(page.items as InspectionLog[]); setCounts((extra as Awaited<ReturnType<typeof getOverview>>).counts); }
+      setNext(page.next);
+      setLoading(false);
+    });
+  }, [query, showFaults]);
 
   useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { countUnsynced().then(setUnsynced); }, []);
+
+  async function loadMore() {
+    if (!next) return;
+    const id = request.current;
+    setLoadingMore(true);
+    const page = await query(next);
+    if (id === request.current) {
+      if (showFaults) setFaults((f) => [...f, ...(page.items as FaultReport[])]);
+      else setLogs((l) => [...l, ...(page.items as InspectionLog[])]);
+      setNext(page.next);
+    }
+    setLoadingMore(false);
+  }
 
   const handleMigrate = async () => {
     setMigrating(true);
     const result = await migrateLocalStorage();
     setMigrateResult(`Migrated ${result.logs} log${result.logs !== 1 ? "s" : ""} and ${result.faults} fault report${result.faults !== 1 ? "s" : ""} to the database.`);
     setMigrating(false);
-    setLoading(true);
+    setUnsynced(await countUnsynced());
     reload();
   };
   const [viewLog, setViewLog] = useState<InspectionLog | null>(null);
@@ -326,16 +435,10 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
   const [newFault, setNewFault] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Every save is mirrored locally, so only offer a sync when this device holds records the DB lacks
-  const hasLocalData = useMemo(() => {
-    const dbIds = new Set([...logs, ...faults].map((r) => r.id));
-    return [...localIds("hdk_inspection_logs"), ...localIds("hdk_fault_reports")].some((id) => !dbIds.has(id));
-  }, [logs, faults]);
-
   async function adminAction(action: () => Promise<void>) {
     try {
       await action();
-      reload();
+      reload(showFaults ? faults.length : logs.length);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Request failed.";
       if (/signed in|expired/i.test(msg)) onAuthLost();
@@ -348,20 +451,8 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
     adminAction(action).catch((e) => window.alert(e instanceof Error ? e.message : "Delete failed."));
   }
 
-  const kindCounts = useMemo(() => {
-    const counts = { daily: 0, weekly: 0, monthly: 0, yearly: 0 } as Record<CheckKind, number>;
-    for (const l of logs) counts[logKind(l)]++;
-    return counts;
-  }, [logs]);
-
-  const filteredLogs = useMemo(() => {
-    return logs.filter((l) => {
-      if (logKind(l) !== kindTab) return false;
-      if (filterDate && !l.date.includes(filterDate)) return false;
-      if (filterOperator && !l.operatorName.toLowerCase().includes(filterOperator.toLowerCase())) return false;
-      return true;
-    }).sort((a, b) => logTime(b) - logTime(a));
-  }, [logs, filterDate, filterOperator, kindTab]);
+  // The server filters; this just keeps the loaded page tidy while a new one is on its way
+  const filteredLogs = useMemo(() => logs.filter((l) => logKind(l) === kindTab).sort((a, b) => logTime(b) - logTime(a)), [logs, kindTab]);
 
   // Newest group first; yearly checks form a single ungrouped list
   const logGroups = useMemo(() => {
@@ -373,19 +464,18 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
     }
     return [...groups.values()].sort((a, b) => b.key.localeCompare(a.key));
   }, [filteredLogs, kindTab]);
-  const filtering = !!(filterDate || filterOperator);
+  const filtering = !!(date || operator);
 
-  const filteredFaults = useMemo(() => {
-    return faults.filter((f) => {
-      const age = faultAge(f);
-      if (faultView === "active" && age.closed) return false;
-      if (faultView === "overdue" && !age.overdue) return false;
-      if (faultView === "resolved" && !age.closed) return false;
-      if (filterDate && !f.date.includes(filterDate)) return false;
-      if (filterOperator && !f.operatorName.toLowerCase().includes(filterOperator.toLowerCase())) return false;
-      return true;
-    });
-  }, [faults, filterDate, filterOperator, faultView]);
+  const filteredFaults = useMemo(() => faults.filter((f) => {
+    const age = faultAge(f);
+    if (faultView === "active" || faultView === "overdue") return !age.closed && (faultView === "active" || age.overdue);
+    if (faultView === "resolved") return age.closed;
+    return true;
+  }), [faults, faultView]);
+
+  const loadMoreButton = next && (
+    <button className="load-more" onClick={loadMore} disabled={loadingMore}>{loadingMore ? "Loading…" : "Load older"}</button>
+  );
 
   if (loading) return (
     <div className="container" style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>
@@ -407,9 +497,9 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
           <button onClick={() => setMigrateResult(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#15803d" }}>×</button>
         </div>
       )}
-      {!migrateResult && hasLocalData && (
+      {!migrateResult && unsynced > 0 && (
         <div className="migrate-banner">
-          <span>Local records found. Sync them to the database?</span>
+          <span>{unsynced} record{unsynced === 1 ? "" : "s"} on this device {unsynced === 1 ? "isn't" : "aren't"} in the database yet. Sync now?</span>
           <button className="btn-export" style={{ padding: "6px 14px", fontSize: 12 }} onClick={handleMigrate} disabled={migrating}>
             {migrating ? "Syncing…" : "Sync to DB"}
           </button>
@@ -437,7 +527,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
           <div className="kind-tabs" style={{ padding: 0, margin: "0 0 12px" }}>
             {CHECK_KINDS.map((k) => (
               <button key={k} className={`kind-tab${k === kindTab ? " active" : ""}`} onClick={() => setKindTab(k)}>
-                {KIND_LABEL[k]}<span className="kind-count">{kindCounts[k]}</span>
+                {KIND_LABEL[k]}{counts && <span className="kind-count">{counts[k]}</span>}
               </button>
             ))}
           </div>
@@ -464,7 +554,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
                       </span>
                     </button>
                     {kindTab === "daily" && (
-                      <button className="action-btn" onClick={() => exportWeekFor(g.logs[0], logs)}>Week PDF</button>
+                      <button className="action-btn" onClick={() => exportWeekFor(g.logs[0].date)}>Week PDF</button>
                     )}
                   </div>
                 )}
@@ -519,15 +609,16 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
               </div>
             );
           })}
+          {loadMoreButton}
           <p style={{ textAlign: "right", fontSize: 11, color: "var(--muted)", marginTop: 8 }}>
-            {filteredLogs.length} record{filteredLogs.length !== 1 ? "s" : ""}
+            {filtering || !counts ? `${filteredLogs.length} shown` : `${filteredLogs.length} of ${counts[kindTab]} shown`}
           </p>
         </>
       ) : (
         <>
           <button className="btn-report-fault" onClick={() => setNewFault(true)}>+ Report a fault</button>
           {(() => {
-            const sum = summarizeAges(faults);
+            const sum = summarizeAges(briefs);
             return (
               <>
                 <div className="age-summary">
@@ -564,7 +655,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
               </thead>
               <tbody>
                 {filteredFaults.length === 0 ? (
-                  <tr><td colSpan={8} className="empty-state">{faults.length ? "No reports match." : "No fault reports yet."}</td></tr>
+                  <tr><td colSpan={8} className="empty-state">{briefs.length ? "No reports match." : "No fault reports yet."}</td></tr>
                 ) : filteredFaults.map((fr) => {
                   const priorityKey = fr.priority === "Immediate Grounding" ? "Grounding" : fr.priority;
                   const age = faultAge(fr);
@@ -602,15 +693,16 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
               </tbody>
             </table>
           </div>
+          {loadMoreButton}
           <p style={{ textAlign: "right", fontSize: 11, color: "var(--muted)", marginTop: 8 }}>
-            {filteredFaults.length} report{filteredFaults.length !== 1 ? "s" : ""}
+            {filteredFaults.length} shown
           </p>
         </>
       )}
 
       {viewLog && <LogModal log={viewLog} onClose={() => setViewLog(null)} />}
       {viewFault && <FaultModal report={viewFault} onClose={() => setViewFault(null)} />}
-      {signOff && <SignOffModal log={signOff} onClose={() => setSignOff(null)} onDone={() => { setSignOff(null); reload(); }} />}
+      {signOff && <SignOffModal log={signOff} onClose={() => setSignOff(null)} onDone={() => { setSignOff(null); reload(logs.length); }} />}
       {newFault && <NewFaultModal onClose={() => setNewFault(false)} onDone={(r) => {
         setNewFault(false);
         reload();
@@ -619,7 +711,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
         setNotice("Emailing fault report…");
         pdf.then((file) => emailFaultReport(r, file)).then((res) => setNotice(describeEmail(res)));
       }} />}
-      {repairFault && <RepairModal report={repairFault} onClose={() => setRepairFault(null)} onDone={() => { setRepairFault(null); reload(); }} />}
+      {repairFault && <RepairModal report={repairFault} onClose={() => setRepairFault(null)} onDone={() => { setRepairFault(null); reload(faults.length); }} />}
       {editLog && <EditLogModal item={editLog} onClose={() => setEditLog(null)} onSave={(l) => adminAction(() => updateLog(l)).then(() => setEditLog(null))} />}
       {editFault && <EditFaultModal item={editFault} onClose={() => setEditFault(null)} onSave={(r) => adminAction(() => updateFaultReport(r)).then(() => setEditFault(null))} />}
     </div>

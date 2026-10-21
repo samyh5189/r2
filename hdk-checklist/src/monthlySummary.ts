@@ -1,8 +1,7 @@
-import type { FaultReport, InspectionLog, ServiceSettings } from "./types";
+import type { FaultBrief, FaultReport, InspectionLog, ServiceSettings } from "./types";
 import { logKind, periodKey } from "./checkKinds";
 import { closedAt, faultAge, openedAt, TARGET_DAYS } from "./faultAge";
-import { engineReadings, serviceStatus, type ServiceStatus } from "./service";
-import { logTime } from "./trends";
+import { engineReadings, serviceStatus, type HoursReading, type ServiceStatus } from "./service";
 
 const DAY_MS = 86_400_000;
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -31,9 +30,9 @@ export interface MonthlySummary {
   operators: { name: string; count: number }[];
 }
 
-/** Months that have any data, newest first, as MM/YYYY */
-export function availableMonths(logs: InspectionLog[], reports: FaultReport[]): string[] {
-  const set = new Set([...logs.map((l) => l.date.slice(3)), ...reports.map((r) => r.date.slice(3))]);
+/** Months that have any data (MM/YYYY, from the overview), plus this month, newest first */
+export function availableMonths(months: string[]): string[] {
+  const set = new Set(months);
   const now = new Date();
   set.add(`${pad(now.getMonth() + 1)}/${now.getFullYear()}`);
   return [...set].filter((m) => /^\d{2}\/\d{4}$/.test(m))
@@ -45,7 +44,11 @@ export const monthTitle = (month: string) => {
   return new Date(y, m - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 };
 
-export function monthlySummary(month: string, logs: InspectionLog[], reports: FaultReport[], settings: ServiceSettings, now = Date.now()): MonthlySummary {
+/**
+ * `logs`: the month's inspections plus that year's yearly check; `reports`: every fault report;
+ * `readings`: all engine hours readings.
+ */
+export function monthlySummary(month: string, logs: InspectionLog[], reports: FaultBrief[], settings: ServiceSettings, readings: HoursReading[], now = Date.now()): MonthlySummary {
   const [m, y] = month.split("/").map(Number);
   const start = new Date(y, m - 1, 1).getTime();
   const monthEnd = new Date(y, m, 1).getTime();          // exclusive
@@ -122,7 +125,7 @@ export function monthlySummary(month: string, logs: InspectionLog[], reports: Fa
     topItems,
     engine,
     // Service position as it stood at the end of the month
-    service: serviceStatus(logs.filter((l) => logTime(l) < end), settings, end),
+    service: serviceStatus(readings.filter((r) => r.t < end), settings, end),
     operators: [...opCounts].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
   };
 }

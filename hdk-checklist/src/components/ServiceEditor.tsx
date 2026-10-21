@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ServiceSettings } from "../types";
-import { getLogs, getServiceSettings, saveServiceSettings } from "../storage";
-import { engineReadings } from "../service";
+import { getOverview, getServiceSettings, saveServiceSettings } from "../storage";
+import { toReadings } from "../service";
 
 const toInputDate = (gb?: string) => (gb ? gb.split("/").reverse().join("-") : "");
 const fromInputDate = (iso: string) => (iso ? iso.split("-").reverse().join("/") : undefined);
@@ -17,7 +17,7 @@ export default function ServiceEditor({ onAuthLost }: { onAuthLost: () => void }
 
   useEffect(() => {
     getServiceSettings().then(setS);
-    getLogs().then((logs) => setCurrentHours(engineReadings(logs).pop()?.hours ?? null));
+    getOverview().then((o) => setCurrentHours(toReadings(o.engine).pop()?.hours ?? null));
   }, []);
   if (!s) return null;
 
