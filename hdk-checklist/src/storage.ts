@@ -55,8 +55,8 @@ export async function imageData(src: string): Promise<string> {
 export interface Page<T> { items: T[]; next: string | null; offline?: boolean }
 
 interface ListQuery { date?: string; operator?: string; from?: string; to?: string; limit?: number; before?: string | null }
-export interface LogQuery extends ListQuery { kind?: CheckKind; period?: string }
-export interface FaultQuery extends ListQuery { status?: "open" | "resolved" }
+export interface LogQuery extends ListQuery { kind?: CheckKind; period?: string; faults?: boolean; unsigned?: boolean }
+export interface FaultQuery extends ListQuery { status?: "open" | "resolved"; q?: string }
 
 const ymd = (dateGB: string) => dateGB.split("/").reverse().join("");
 
@@ -69,7 +69,7 @@ function localMatch(r: { date: string; operatorName: string }, q: ListQuery) {
 
 async function fetchPage<T extends { createdAt: string }>(path: string, q: object, localKey: string, match: (r: T) => boolean): Promise<Page<T>> {
   const params = new URLSearchParams({ limit: "50" });
-  for (const [k, v] of Object.entries(q)) if (v != null && v !== "") params.set(k, String(v));
+  for (const [k, v] of Object.entries(q)) if (v != null && v !== "" && v !== false) params.set(k, v === true ? "1" : String(v));
   try {
     const res = await fetch(`${path}?${params}`);
     if (res.ok) return await res.json();
@@ -79,10 +79,12 @@ async function fetchPage<T extends { createdAt: string }>(path: string, q: objec
 }
 
 export const listLogs = (q: LogQuery) => fetchPage<InspectionLog>("/api/logs", q, LS_LOGS, (l) =>
-  localMatch(l, q) && (!q.kind || logKind(l) === q.kind) && (!q.period || periodKey(logKind(l), l.date) === q.period));
+  localMatch(l, q) && (!q.kind || logKind(l) === q.kind) && (!q.period || periodKey(logKind(l), l.date) === q.period)
+  && (!q.faults || l.faultCount > 0) && (!q.unsigned || !l.shiftSignoff));
 
 export const listFaults = (q: FaultQuery) => fetchPage<FaultReport>("/api/fault-reports", q, LS_FAULTS, (r) =>
-  localMatch(r, q) && (!q.status || (q.status === "resolved") === (r.status === "Resolved")));
+  localMatch(r, q) && (!q.status || (q.status === "resolved") === (r.status === "Resolved"))
+  && (!q.q || JSON.stringify([r.reportNumber, r.vehicleEquipmentLine, r.operatorName, r.faults.map((f) => f.label)]).toLowerCase().includes(q.q.toLowerCase())));
 
 /** Every record matching the query (for a week, a month, …), following the pages */
 async function listAll<T>(list: (q: ListQuery) => Promise<Page<T>>, q: ListQuery): Promise<T[]> {

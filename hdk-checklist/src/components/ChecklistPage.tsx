@@ -420,7 +420,6 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     if (!window.confirm("Discard the unfinished inspection? Its answers and photos will be lost.")) return;
     deleteDraft(kind);
     setDraft(null);
-    setOperatorName("");
   }
 
   function handleNew() {
@@ -469,13 +468,11 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
               <div className="cl-resume">
                 <strong>Unfinished inspection</strong>
                 <span>Started by {draft.operatorName} at {at} · {answered} of {all} items done</span>
-                {!chosen && (
-                  <div className="cl-resume-btns">
-                    <button className="cl-resume-go" onClick={continueDraft}>Continue where you left off →</button>
-                    <button className="cl-resume-discard" onClick={discardDraft}>Discard</button>
-                  </div>
-                )}
-                {chosen && needsPin(operators, draft.operatorName) && <span className="cl-resume-pin">Enter your PIN below to continue.</span>}
+                {chosen && needsPin(operators, draft.operatorName) && <span className="cl-resume-pin">Enter your PIN below, then Continue Inspection.</span>}
+                <div className="cl-resume-btns">
+                  {!chosen && <button className="cl-resume-go" onClick={continueDraft}>Continue where you left off →</button>}
+                  <button className="cl-resume-discard" onClick={discardDraft}>Discard{chosen ? " and start over" : ""}</button>
+                </div>
               </div>
             );
           })()}

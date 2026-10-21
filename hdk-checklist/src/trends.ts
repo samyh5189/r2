@@ -30,7 +30,10 @@ export interface Reading {
 export interface TrendReport {
   inspections: number;
   inspectionsWithFaults: number;
+  /** Fault answers across all inspections (a fault seen on 2 inspections counts twice) */
   totalFaults: number;
+  /** Separate faults: a run of faulted inspections of the same item counts once */
+  distinctFaults: number;
   findings: Finding[];
   readings: Reading[];
 }
@@ -87,6 +90,7 @@ export function analyzeTrends(allLogs: InspectionLog[], windowDays: number, now 
 
   const findings: Finding[] = [];
   const readings: Reading[] = [];
+  let distinctFaults = 0;
 
   for (const [itemId, rec] of items) {
     const statuses = rec.entries.map((e) => e.status);
@@ -124,6 +128,7 @@ export function analyzeTrends(allLogs: InspectionLog[], windowDays: number, now 
       statuses.forEach((s, i) => { if (isFault(s) && (i === 0 || !isFault(statuses[i - 1]))) episodes++; });
       const recent = rec.entries.filter((e) => e.t >= midpoint && isFault(e.status)).length;
       const earlier = faults - recent;
+      distinctFaults += episodes;
       const last = statuses[statuses.length - 1];
       const prevFault = statuses.slice(0, -1).reverse().find(isFault);
 
@@ -131,9 +136,9 @@ export function analyzeTrends(allLogs: InspectionLog[], windowDays: number, now 
       if (streak >= 2) raise(last === "U/S" ? "high" : "medium", `Faulted in the last ${streak} inspections — still unresolved`);
       else if (streak === 1 && last === "U/S") raise("high", "Unserviceable at the latest inspection");
       if (episodes >= 2) raise("medium", `Fault returned ${episodes} times after being cleared — likely intermittent; find the root cause`);
-      else if (faults >= 3 && streak < 2) raise("medium", `${faults} faults in the last ${windowDays} days`);
+      else if (faults >= 3 && streak < 2) raise("medium", `Faulted on ${faults} inspections in the last ${windowDays} days`);
       if (recent >= 2 && recent > earlier * 1.5 && earlier > 0) raise("medium", `Faults increasing (${earlier} → ${recent} in the last ${windowDays / 2} days)`);
-      if (!severity && faults >= 1) raise("low", `${faults} fault${faults > 1 ? "s" : ""} in the last ${windowDays} days — keep an eye on it`);
+      if (!severity && faults >= 1) raise("low", `Faulted on ${plural(faults, "inspection")} in the last ${windowDays} days — keep an eye on it`);
     }
 
     if (severity) findings.push({ itemId, label: rec.label, section: rec.section, severity, reasons, history: statuses.slice(-14), faults });
@@ -144,6 +149,7 @@ export function analyzeTrends(allLogs: InspectionLog[], windowDays: number, now 
     inspections: logs.length,
     inspectionsWithFaults: logs.filter((l) => l.sections.some((s) => s.items.some((it) => isFault(it.status)))).length,
     totalFaults,
+    distinctFaults,
     findings,
     readings,
   };

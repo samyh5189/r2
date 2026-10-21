@@ -442,7 +442,8 @@ function listRoute(path, table, addFilters) {
       }
       const where = [];
       const params = [];
-      const add = (sql, value) => { params.push(value); where.push(sql.replace("?", `$${params.length}`)); };
+      // `?` is the value's placeholder; `$X` repeats it
+      const add = (sql, value) => { params.push(value); where.push(sql.replace("?", `$${params.length}`).replaceAll("$X", `$${params.length}`)); };
       if (typeof q.date === "string" && q.date) add("data->>'date' LIKE ?", likeParam(q.date));
       if (typeof q.operator === "string" && q.operator) add("data->>'operatorName' ILIKE ?", likeParam(q.operator));
       if (DATE_RE.test(q.from)) add(`${SQL_DATE} >= to_date(?, 'DD/MM/YYYY')`, q.from);
@@ -474,12 +475,18 @@ function listRoute(path, table, addFilters) {
 listRoute("/api/logs", "inspection_logs", (q, add) => {
   if (KINDS.includes(q.kind)) add("COALESCE(data->>'kind', 'daily') = ?", q.kind);
   if (typeof q.period === "string" && q.period) add("data->>'periodKey' = ?", q.period);
+  if (q.faults === "1") add("jsonb_typeof(data->'faultCount') = 'number' AND (data->'faultCount')::numeric > ?", 0);
+  if (q.unsigned === "1") add("COALESCE(jsonb_typeof(data->'shiftSignoff'), 'null') = ?", "null");
 });
 
 // Fault reports: ?status=open|resolved
 listRoute("/api/fault-reports", "fault_reports", (q, add) => {
   if (q.status === "open") add("data->>'status' IS DISTINCT FROM ?", "Resolved");
   if (q.status === "resolved") add("data->>'status' = ?", "Resolved");
+  // Search: report number, fault title, operator or fault item
+  if (typeof q.q === "string" && q.q.trim()) {
+    add("(data->>'reportNumber' ILIKE ? OR data->>'vehicleEquipmentLine' ILIKE $X OR data->>'operatorName' ILIKE $X OR (data->'faults')::text ILIKE $X)", likeParam(q.q.trim()));
+  }
 });
 
 // Every fault report, cut down to what age tracking and the monthly summary need (~300 bytes each)

@@ -1,12 +1,14 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import type { CheckKind, InspectionLog, FaultBrief, FaultReport } from "../types";
-import { emailFaultReport, describeEmail, uploadImages, listLogs, listAllLogs, listFaults, getFaultBriefs, getOverview, countUnsynced, updateLog, deleteLog, updateFaultReport, deleteFaultReport, type FaultQuery } from "../storage";
+import type { CheckKind, InspectionLog, FaultBrief, FaultReport, Operator } from "../types";
+import { ChevronRight, FileText } from "lucide-react";
+import { emailFaultReport, describeEmail, uploadImages, listLogs, listAllLogs, listFaults, getFaultBriefs, getOverview, countUnsynced, getOperators, updateLog, deleteLog, updateFaultReport, deleteFaultReport, type FaultQuery } from "../storage";
 import { EditLogModal, EditFaultModal } from "./EditModals";
 import { SignOffModal, RepairModal } from "./WorkflowModals";
 import NewFaultModal from "./NewFaultModal";
 import { faultAge, summarizeAges, TARGET_DAYS } from "../faultAge";
 import { CHECK_KINDS, GROUP_NOUN, KIND_LABEL, logGroup, logKind, periodKey } from "../checkKinds";
 import { logTime } from "../trends";
+import { availableMonths, monthTitle } from "../monthlySummary";
 import { showPdf } from "../pdfViewer";
 import { RACL_LOGO } from "../raclLogo";
 import { exportInspectionPDF, exportFaultReportPDF, exportWeeklyPDF } from "../pdfExport";
@@ -101,7 +103,7 @@ function FaultTimeline({ report }: { report: FaultReport }) {
   );
 }
 
-function FaultModal({ report, onClose }: { report: FaultReport; onClose: () => void }) {
+function FaultModal({ report, onClose, actions }: { report: FaultReport; onClose: () => void; actions?: React.ReactNode }) {
   const priorityKey = report.priority === "Immediate Grounding" ? "Grounding" : report.priority;
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -227,13 +229,9 @@ function FaultModal({ report, onClose }: { report: FaultReport; onClose: () => v
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-            <button className="btn-export secondary" onClick={onClose} style={{ border: "1.5px solid var(--border)", background: "white", color: "var(--text)" }}>
-              Close
-            </button>
-            <button className="btn-export" onClick={() => showPdf(exportFaultReportPDF(report))}>
-              View PDF
-            </button>
+          <div className="sheet-actions">
+            <button className="btn-export" onClick={() => showPdf(exportFaultReportPDF(report))}>View PDF</button>
+            {actions}
           </div>
         </div>
       </div>
@@ -241,7 +239,7 @@ function FaultModal({ report, onClose }: { report: FaultReport; onClose: () => v
   );
 }
 
-function LogModal({ log, onClose }: { log: InspectionLog; onClose: () => void }) {
+function LogModal({ log, onClose, actions }: { log: InspectionLog; onClose: () => void; actions?: React.ReactNode }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -328,13 +326,9 @@ function LogModal({ log, onClose }: { log: InspectionLog; onClose: () => void })
             ) : <p style={{ fontSize: 12, color: "var(--muted)" }}>Not signed off yet.</p>}
           </div>
 
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-            <button className="btn-export secondary" onClick={onClose} style={{ border: "1.5px solid var(--border)", background: "white", color: "var(--text)" }}>
-              Close
-            </button>
-            <button className="btn-export" onClick={() => showPdf(exportInspectionPDF(log))}>
-              View PDF
-            </button>
+          <div className="sheet-actions">
+            <button className="btn-export" onClick={() => showPdf(exportInspectionPDF(log))}>View PDF</button>
+            {actions}
           </div>
         </div>
       </div>
@@ -351,6 +345,8 @@ function exportWeekFor(dateGB: string) {
 }
 
 const PAGE = 50;
+const FAULT_VIEW_LABEL = { active: "Active", overdue: "Overdue", resolved: "Closed", all: "All" } as const;
+const PRIORITY_RANK: Record<FaultReport["priority"], number> = { "Immediate Grounding": 3, Urgent: 2, Routine: 1 };
 const FAULT_STATUS: Record<"active" | "overdue" | "resolved" | "all", FaultQuery["status"]> = { active: "open", overdue: "open", resolved: "resolved", all: undefined };
 
 /** The value, once it has stopped changing for a moment (typed filters) */
@@ -370,10 +366,20 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
   const [counts, setCounts] = useState<Record<CheckKind, number> | null>(null);
   const [briefs, setBriefs] = useState<FaultBrief[]>([]);
   const [unsynced, setUnsynced] = useState(0);
-  const [filterDate, setFilterDate] = useState("");
-  const [filterOperator, setFilterOperator] = useState("");
-  const date = useSettled(filterDate.trim());
-  const operator = useSettled(filterOperator.trim());
+  // Filters: month (YYYY-MM from the picker), operator, quick toggles, and text search for faults
+  const [month, setMonth] = useState("");
+  const [operator, setOperator] = useState("");
+  const [faultsOnly, setFaultsOnly] = useState(false);
+  const [unsignedOnly, setUnsignedOnly] = useState(false);
+  const [search, setSearch] = useState("");
+  const q = useSettled(search.trim());
+  const date = month; // MM/YYYY
+  const [operators, setOperators] = useState<Operator[]>([]);
+  const [months, setMonths] = useState<string[]>([]);
+  useEffect(() => {
+    getOperators().then(setOperators);
+    getOverview().then((o) => setMonths(availableMonths(o.months)));
+  }, []);
   const [kindTab, setKindTab] = useState<CheckKind>("daily");
   // Groups the user opened or closed; others follow the default (newest open)
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
@@ -384,8 +390,10 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
 
   const query = useCallback((before: string | null, limit = PAGE) => {
     const common = { date, operator, before, limit };
-    return showFaults ? listFaults({ ...common, status: FAULT_STATUS[faultView] }) : listLogs({ ...common, kind: kindTab });
-  }, [showFaults, date, operator, faultView, kindTab]);
+    return showFaults
+      ? listFaults({ ...common, status: FAULT_STATUS[faultView], q })
+      : listLogs({ ...common, kind: kindTab, faults: faultsOnly, unsigned: unsignedOnly });
+  }, [showFaults, date, operator, faultView, kindTab, q, faultsOnly, unsignedOnly]);
 
   /** Reloads the first page; `keep` reloads as many as are showing, e.g. after an edit */
   const reload = useCallback((keep = 0) => {
@@ -464,17 +472,61 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
     }
     return [...groups.values()].sort((a, b) => b.key.localeCompare(a.key));
   }, [filteredLogs, kindTab]);
-  const filtering = !!(date || operator);
+  const filtering = !!(date || operator || faultsOnly || unsignedOnly || q);
 
-  const filteredFaults = useMemo(() => faults.filter((f) => {
-    const age = faultAge(f);
-    if (faultView === "active" || faultView === "overdue") return !age.closed && (faultView === "active" || age.overdue);
-    if (faultView === "resolved") return age.closed;
-    return true;
-  }), [faults, faultView]);
+  // Open faults: most serious first, then oldest. Closed ones: newest first, grouped by month.
+  const filteredFaults = useMemo(() => {
+    const list = faults.filter((f) => {
+      const age = faultAge(f);
+      if (faultView === "active" || faultView === "overdue") return !age.closed && (faultView === "active" || age.overdue);
+      if (faultView === "resolved") return age.closed;
+      return true;
+    });
+    if (faultView === "active" || faultView === "overdue") {
+      list.sort((a, b) => PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority] || faultAge(b).days - faultAge(a).days);
+    }
+    return list;
+  }, [faults, faultView]);
+  const faultGroups = useMemo(() => {
+    if (faultView === "active" || faultView === "overdue") return [{ key: "all", label: "", items: filteredFaults }];
+    const groups = new Map<string, { key: string; label: string; items: FaultReport[] }>();
+    for (const f of filteredFaults) {
+      const [, m, y] = f.date.split("/");
+      const key = `${y}-${m}`;
+      if (!groups.has(key)) groups.set(key, { key, label: new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" }), items: [] });
+      groups.get(key)!.items.push(f);
+    }
+    return [...groups.values()].sort((a, b) => b.key.localeCompare(a.key));
+  }, [filteredFaults, faultView]);
+
+  const viewCounts = useMemo(() => {
+    const ages = briefs.map((b) => faultAge(b));
+    return { active: ages.filter((a) => !a.closed).length, overdue: ages.filter((a) => a.overdue).length, resolved: ages.filter((a) => a.closed).length, all: briefs.length };
+  }, [briefs]);
 
   const loadMoreButton = next && (
     <button className="load-more" onClick={loadMore} disabled={loadingMore}>{loadingMore ? "Loading…" : "Load older"}</button>
+  );
+
+  const isOpen = (key: string, index: number) => key === "all" || filtering || (toggled[key] ?? index === 0);
+  const groupHead = (key: string, open: boolean, title: React.ReactNode, meta: React.ReactNode, extra?: React.ReactNode) => (
+    <div className="rec-group-head">
+      <button className="rec-group-toggle" onClick={() => setToggled((t) => ({ ...t, [key]: !open }))} aria-expanded={open}>
+        <ChevronRight size={16} className={`rec-caret${open ? " open" : ""}`} />
+        <span className="rec-group-title">{title}</span>
+        <span className="rec-group-meta">{meta}</span>
+      </button>
+      {extra}
+    </div>
+  );
+
+  const operatorFilter = operators.length > 0 ? (
+    <select className="filter-input" value={operator} onChange={(e) => setOperator(e.target.value)} aria-label="Operator">
+      <option value="">All operators</option>
+      {operators.map((o) => <option key={o.id} value={o.name}>{o.name}</option>)}
+    </select>
+  ) : (
+    <input className="filter-input" placeholder="Operator" value={operator} onChange={(e) => setOperator(e.target.value)} />
   );
 
   if (loading) return (
@@ -484,7 +536,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
   );
 
   return (
-    <div className="container">
+    <div className="container records">
       {notice && (
         <div className="migrate-banner">
           <span>{notice}</span>
@@ -505,112 +557,75 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
           </button>
         </div>
       )}
-      <div className="logs-filters">
-        <input
-          className="filter-input"
-          type="text"
-          placeholder="Date DD/MM/YYYY"
-          value={filterDate}
-          onChange={(e) => setFilterDate(e.target.value)}
-        />
-        <input
-          className="filter-input"
-          type="text"
-          placeholder="Operator"
-          value={filterOperator}
-          onChange={(e) => setFilterOperator(e.target.value)}
-        />
-      </div>
 
       {!showFaults ? (
         <>
-          <div className="kind-tabs" style={{ padding: 0, margin: "0 0 12px" }}>
+          <div className="seg seg-full" role="tablist">
             {CHECK_KINDS.map((k) => (
-              <button key={k} className={`kind-tab${k === kindTab ? " active" : ""}`} onClick={() => setKindTab(k)}>
-                {KIND_LABEL[k]}{counts && <span className="kind-count">{counts[k]}</span>}
+              <button key={k} role="tab" aria-selected={k === kindTab} className={`seg-btn${k === kindTab ? " active" : ""}`} onClick={() => setKindTab(k)}>
+                {KIND_LABEL[k]}{counts && <span className="seg-count">{counts[k]}</span>}
               </button>
             ))}
           </div>
+          <div className="rec-filters">
+            <select className="filter-input" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Month">
+              <option value="">All months</option>
+              {months.map((m) => <option key={m} value={m}>{monthTitle(m)}</option>)}
+            </select>
+            {operatorFilter}
+          </div>
+          <div className="chip-row">
+            <button className={`chip${faultsOnly ? " on" : ""}`} onClick={() => setFaultsOnly((v) => !v)}>With faults</button>
+            <button className={`chip${unsignedOnly ? " on" : ""}`} onClick={() => setUnsignedOnly((v) => !v)}>Needs sign-off</button>
+            {filtering && <button className="chip clear" onClick={() => { setMonth(""); setOperator(""); setFaultsOnly(false); setUnsignedOnly(false); }}>Clear</button>}
+          </div>
+
           {logGroups.length === 0 && (
             <p className="empty-state log-empty">
               {filtering ? "No inspections match." : `No ${KIND_LABEL[kindTab].toLowerCase()} inspections yet.`}
             </p>
           )}
           {logGroups.map((g, gi) => {
-            const open = g.key === "all" || filtering || (toggled[g.key] ?? gi === 0);
+            const open = isOpen(g.key, gi);
             const withFaults = g.logs.filter((l) => l.faultCount > 0).length;
             return (
-              <div key={g.key} className="log-group">
-                {g.key !== "all" && (
-                  <div className="log-group-head">
-                    <button className="log-group-toggle" onClick={() => setToggled((t) => ({ ...t, [g.key]: !open }))} aria-expanded={open}>
-                      <span className="log-group-caret">{open ? "▾" : "▸"}</span>
-                      <span className="log-group-title">
-                        <span className="log-group-noun">{GROUP_NOUN[kindTab]}</span> {g.label}
-                      </span>
-                      <span className="log-group-meta">
-                        {g.logs.length} inspection{g.logs.length !== 1 ? "s" : ""}
-                        {withFaults > 0 && <span className="log-group-faults"> · {withFaults} with faults</span>}
-                      </span>
-                    </button>
-                    {kindTab === "daily" && (
-                      <button className="action-btn" onClick={() => exportWeekFor(g.logs[0].date)}>Week PDF</button>
-                    )}
-                  </div>
+              <section key={g.key} className="rec-group">
+                {g.key !== "all" && groupHead(g.key, open,
+                  <><span className="rec-group-noun">{GROUP_NOUN[kindTab]}</span> {g.label}</>,
+                  <>{g.logs.length}{withFaults > 0 && <span className="rec-group-bad"> · {withFaults} with faults</span>}</>,
+                  kindTab === "daily" && <button className="rec-group-pdf" onClick={() => exportWeekFor(g.logs[0].date)} aria-label={`Week PDF ${g.label}`}><FileText size={16} /> PDF</button>,
                 )}
                 {open && (
-                  <div className="log-table-wrap">
-                    <table className="log-table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>Time</th>
-                          <th>Operator</th>
-                          <th>Condition</th>
-                          <th>Faults</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {g.logs.map((log) => (
-                          <tr key={log.id}>
-                            <td className="ga-a" data-label="Date">{log.date}</td>
-                            <td className="ga-b" data-label="Time">{log.time}</td>
-                            <td className="ga-line" data-label="Operator">{log.operatorName}</td>
-                            <td className="ga-c" data-label="Condition">
-                              <span className={`badge badge-${log.overallCondition === "Excellent" || log.overallCondition === "Good" ? "ok" : "critical"}`}>
-                                {log.overallCondition}
-                              </span>
-                            </td>
-                            <td className="ga-d" data-label="Faults">
-                              {log.faultCount > 0 ? (
-                                <span className={`badge ${log.faultCount >= 3 ? "badge-critical" : "badge-fault"}`}>
-                                  {log.faultCount} fault{log.faultCount > 1 ? "s" : ""}
-                                </span>
-                              ) : (
-                                <span className="badge badge-ok">None</span>
-                              )}
-                            </td>
-                            <td className="log-actions">
-                              <button className="action-btn" onClick={() => setViewLog(log)}>View</button>
-                              <button className="action-btn" onClick={() => showPdf(exportInspectionPDF(log))}>PDF</button>
-                              {!log.shiftSignoff && <button className="action-btn accent" onClick={() => setSignOff(log)}>Sign off</button>}
-                              {isAdmin && <>
-                                <button className="action-btn" onClick={() => setEditLog(log)}>Edit</button>
-                                <button className="action-btn danger" onClick={() => confirmDelete(`the log from ${log.date}`, () => deleteLog(log.id))}>Delete</button>
-                              </>}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ul className="rec-list">
+                    {g.logs.map((log) => {
+                      const [d, m, y] = log.date.split("/").map(Number);
+                      const day = new Date(y, m - 1, d);
+                      return (
+                        <li key={log.id}>
+                          <button className="rec-row" onClick={() => setViewLog(log)}>
+                            <span className="rec-date">
+                              <strong>{d}</strong>
+                              <small>{day.toLocaleDateString("en-GB", kindTab === "daily" ? { weekday: "short" } : { month: "short" })}</small>
+                            </span>
+                            <span className="rec-main">
+                              <span className="rec-title">{log.operatorName}</span>
+                              <span className="rec-sub">{log.time}{log.overallCondition ? ` · ${log.overallCondition}` : ""}{!log.shiftSignoff ? " · not signed off" : ""}</span>
+                            </span>
+                            <span className={`rec-pill ${log.faultCount === 0 ? "ok" : log.faultCount >= 3 ? "bad" : "warn"}`}>
+                              {log.faultCount === 0 ? "OK" : `${log.faultCount} fault${log.faultCount > 1 ? "s" : ""}`}
+                            </span>
+                            <ChevronRight size={18} className="rec-chev" />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
-              </div>
+              </section>
             );
           })}
           {loadMoreButton}
-          <p style={{ textAlign: "right", fontSize: 11, color: "var(--muted)", marginTop: 8 }}>
+          <p className="rec-foot">
             {filtering || !counts ? `${filteredLogs.length} shown` : `${filteredLogs.length} of ${counts[kindTab]} shown`}
           </p>
         </>
@@ -620,88 +635,92 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
           {(() => {
             const sum = summarizeAges(briefs);
             return (
-              <>
-                <div className="age-summary">
-                  <div><strong>{sum.active}</strong>active</div>
-                  <div className={sum.overdue ? "bad" : ""}><strong>{sum.overdue}</strong>overdue</div>
-                  <div><strong>{sum.avgDaysToClose == null ? "—" : sum.avgDaysToClose.toFixed(1)}</strong>avg days to fix</div>
-                </div>
-                <div className="age-filters">
-                  {(["active", "overdue", "resolved", "all"] as const).map((v) => (
-                    <button key={v} className={`trend-window${faultView === v ? " active" : ""}`} onClick={() => setFaultView(v)}>
-                      {v[0].toUpperCase() + v.slice(1)}
-                    </button>
-                  ))}
-                </div>
-                <p className="editor-hint" style={{ margin: "0 0 8px" }}>
-                  Overdue: open longer than {TARGET_DAYS["Immediate Grounding"]} day (grounding), {TARGET_DAYS.Urgent} days (urgent) or {TARGET_DAYS.Routine} days (routine).
-                </p>
-              </>
+              <div className="age-summary">
+                <div><strong>{sum.active}</strong>active</div>
+                <div className={sum.overdue ? "bad" : ""}><strong>{sum.overdue}</strong>overdue</div>
+                <div><strong>{sum.avgDaysToClose == null ? "—" : sum.avgDaysToClose.toFixed(1)}</strong>avg days to fix</div>
+              </div>
             );
           })()}
-          <div className="log-table-wrap">
-            <table className="log-table">
-              <thead>
-                <tr>
-                  <th>Report No.</th>
-                  <th>Date</th>
-                  <th>Operator</th>
-                  <th>Faults</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                  <th>Age</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredFaults.length === 0 ? (
-                  <tr><td colSpan={8} className="empty-state">{briefs.length ? "No reports match." : "No fault reports yet."}</td></tr>
-                ) : filteredFaults.map((fr) => {
-                  const priorityKey = fr.priority === "Immediate Grounding" ? "Grounding" : fr.priority;
-                  const age = faultAge(fr);
-                  return (
-                    <tr key={fr.id}>
-                      <td className="ga-a" data-label="Report No." style={{ fontWeight: 600 }}>{fr.reportNumber}</td>
-                      <td className="ga-b" data-label="Date">{fr.date}</td>
-                      <td className="ga-line" data-label="Operator">{fr.operatorName}</td>
-                      <td className="ga-meta" data-label="Faults">{fr.faults.length} fault{fr.faults.length !== 1 ? "s" : ""}</td>
-                      <td className="ga-c" data-label="Priority">
-                        <span className={`priority-label priority-${priorityKey}`} style={{ padding: "2px 8px", fontSize: 11 }}>
-                          {fr.priority === "Immediate Grounding" ? "Grounding" : fr.priority}
-                        </span>
-                      </td>
-                      <td className="ga-d" data-label="Status">
-                        <span className={`badge badge-${fr.status === "Resolved" ? "resolved" : fr.status === "Open" ? "open" : "fault"}`}>
-                          {fr.status}
-                        </span>
-                      </td>
-                      <td className="ga-age" data-label="Age">
-                        <span className={`age-badge${age.overdue ? " overdue" : age.closed ? " closed" : ""}`}>{age.overdue ? "⚠ " : ""}{age.label}</span>
-                      </td>
-                      <td className="log-actions">
-                        <button className="action-btn" onClick={() => setViewFault(fr)}>View</button>
-                        <button className="action-btn" onClick={() => showPdf(exportFaultReportPDF(fr))}>PDF</button>
-                        {fr.status !== "Resolved" && <button className="action-btn accent" onClick={() => setRepairFault(fr)}>Repair</button>}
-                        {isAdmin && <>
-                          <button className="action-btn" onClick={() => setEditFault(fr)}>Edit</button>
-                          <button className="action-btn danger" onClick={() => confirmDelete(fr.reportNumber, () => deleteFaultReport(fr.id))}>Delete</button>
-                        </>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="seg seg-full" role="tablist">
+            {(["active", "overdue", "resolved", "all"] as const).map((v) => (
+              <button key={v} role="tab" aria-selected={faultView === v} className={`seg-btn${faultView === v ? " active" : ""}`} onClick={() => setFaultView(v)}>
+                {FAULT_VIEW_LABEL[v]}<span className={`seg-count${v === "overdue" && viewCounts.overdue ? " bad" : ""}`}>{viewCounts[v]}</span>
+              </button>
+            ))}
           </div>
-          {loadMoreButton}
-          <p style={{ textAlign: "right", fontSize: 11, color: "var(--muted)", marginTop: 8 }}>
-            {filteredFaults.length} shown
+          <div className="rec-filters">
+            <input className="filter-input" type="search" placeholder="Search faults" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <select className="filter-input" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Month">
+              <option value="">All months</option>
+              {months.map((m) => <option key={m} value={m}>{monthTitle(m)}</option>)}
+            </select>
+          </div>
+          <p className="editor-hint" style={{ margin: "0 0 10px" }}>
+            Overdue: open longer than {TARGET_DAYS["Immediate Grounding"]} day (grounding), {TARGET_DAYS.Urgent} days (urgent) or {TARGET_DAYS.Routine} days (routine).
           </p>
+
+          {filteredFaults.length === 0 && (
+            <p className="empty-state log-empty">{briefs.length ? (faultView === "active" ? "No open faults. 👍" : "No reports match.") : "No fault reports yet."}</p>
+          )}
+          {faultGroups.map((g, gi) => {
+            const open = isOpen(g.key, gi);
+            return (
+              <section key={g.key} className="rec-group">
+                {g.key !== "all" && g.items.length > 0 && groupHead(g.key, open, g.label, g.items.length)}
+                {open && g.items.length > 0 && (
+                  <ul className="rec-list">
+                    {g.items.map((fr) => {
+                      const age = faultAge(fr);
+                      const p = fr.priority === "Immediate Grounding" ? "g" : fr.priority === "Urgent" ? "u" : "r";
+                      const title = fr.vehicleEquipmentLine.replace(/^RESCUE 2 \(HDK-ARFF\)\s*/, "") || fr.faults.map((f) => f.label).join(", ");
+                      return (
+                        <li key={fr.id}>
+                          <button className={`rec-row prio-${p}`} onClick={() => setViewFault(fr)}>
+                            <span className="rec-main">
+                              <span className="rec-title">{title}</span>
+                              <span className="rec-sub">{fr.reportNumber} · {fr.date} · {fr.operatorName}</span>
+                            </span>
+                            <span className="rec-side">
+                              <span className={`rec-pill ${fr.status === "Resolved" ? "ok" : fr.status === "In Progress" ? "info" : p === "g" ? "bad" : "warn"}`}>
+                                {fr.status === "Open" ? (p === "g" ? "Grounding" : fr.priority) : fr.status}
+                              </span>
+                              <span className={`rec-age${age.overdue ? " overdue" : ""}`}>{age.overdue ? "⚠ " : ""}{age.label}</span>
+                            </span>
+                            <ChevronRight size={18} className="rec-chev" />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+            );
+          })}
+          {loadMoreButton}
+          <p className="rec-foot">{filteredFaults.length} shown</p>
         </>
       )}
 
-      {viewLog && <LogModal log={viewLog} onClose={() => setViewLog(null)} />}
-      {viewFault && <FaultModal report={viewFault} onClose={() => setViewFault(null)} />}
+      {viewLog && (
+        <LogModal log={viewLog} onClose={() => setViewLog(null)} actions={<>
+          {!viewLog.shiftSignoff && <button className="btn-export secondary" onClick={() => { setSignOff(viewLog); setViewLog(null); }}>Sign off</button>}
+          {logKind(viewLog) === "daily" && <button className="btn-export secondary" onClick={() => exportWeekFor(viewLog.date)}>Week PDF</button>}
+          {isAdmin && <>
+            <button className="btn-export secondary" onClick={() => { setEditLog(viewLog); setViewLog(null); }}>Edit</button>
+            <button className="btn-export danger" onClick={() => { const l = viewLog; setViewLog(null); confirmDelete(`the log from ${l.date}`, () => deleteLog(l.id)); }}>Delete</button>
+          </>}
+        </>} />
+      )}
+      {viewFault && (
+        <FaultModal report={viewFault} onClose={() => setViewFault(null)} actions={<>
+          {viewFault.status !== "Resolved" && <button className="btn-export secondary" onClick={() => { setRepairFault(viewFault); setViewFault(null); }}>Repair</button>}
+          {isAdmin && <>
+            <button className="btn-export secondary" onClick={() => { setEditFault(viewFault); setViewFault(null); }}>Edit</button>
+            <button className="btn-export danger" onClick={() => { const r = viewFault; setViewFault(null); confirmDelete(r.reportNumber, () => deleteFaultReport(r.id)); }}>Delete</button>
+          </>}
+        </>} />
+      )}
       {signOff && <SignOffModal log={signOff} onClose={() => setSignOff(null)} onDone={() => { setSignOff(null); reload(logs.length); }} />}
       {newFault && <NewFaultModal onClose={() => setNewFault(false)} onDone={(r) => {
         setNewFault(false);

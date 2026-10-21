@@ -25,7 +25,7 @@ function StatusStrip({ history }: { history: ItemStatus[] }) {
 async function askAI(report: TrendReport, windowDays: number): Promise<string> {
   const lines = report.findings.slice(0, 15).map((f) => `- ${f.label} (${f.section}): ${f.reasons.join("; ")}. Recent: ${f.history.join(" ")}`);
   const readings = report.readings.map((r) => `- ${r.label}: latest ${r.latest}${r.unit ? ` ${r.unit}` : ""}${r.perDay != null ? `, ${r.perDay.toFixed(2)}/day` : ""}${r.max != null ? `, max ${r.max}` : ""}${r.min != null ? `, min ${r.min}` : ""}`);
-  const prompt = `You are an ARFF vehicle maintenance officer at Kulhudhuffushi Airport (HDK), Maldives, reviewing ${report.inspections} daily inspections of RESCUE 2 over the last ${windowDays} days (${report.totalFaults} faults recorded).
+  const prompt = `You are an ARFF vehicle maintenance officer at Kulhudhuffushi Airport (HDK), Maldives, reviewing ${report.inspections} daily inspections of RESCUE 2 over the last ${windowDays} days (${report.distinctFaults} separate faults, recorded ${report.totalFaults} times in total).
 
 Items flagged by trend analysis:
 ${lines.join("\n") || "- none"}
@@ -146,7 +146,7 @@ export default function TrendsPage({ isAdmin = false }: { isAdmin?: boolean }) {
 
       <div className="trend-stats">
         <div><strong>{report.inspections}</strong>inspections</div>
-        <div><strong>{report.totalFaults}</strong>faults</div>
+        <div><strong>{report.distinctFaults}</strong>faults</div>
         <div><strong>{faultRate}%</strong>with faults</div>
         <div><strong>{report.findings.filter((f) => f.severity !== "low").length}</strong>need attention</div>
       </div>
