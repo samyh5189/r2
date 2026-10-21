@@ -1044,3 +1044,12 @@ button, a, input, select, textarea, label { touch-action: manipulation; }
 .thread-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
 .thread-pdf { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--section-bg); color: var(--text); font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer; overflow-wrap: anywhere; text-align: left; }
 .thread-note { font-size: 12px; color: var(--muted); }
+
+/* Thread composer: followers and a message box */
+.composer { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--section-bg); }
+.composer textarea { width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 16px; font-family: inherit; resize: vertical; background: var(--card); }
+.composer-followers { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
+.composer-followers > span:first-child { font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.composer-followers em { color: var(--muted); font-style: normal; }
+.follower-chip { background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; font-weight: 600; }
+.composer-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }

@@ -265,11 +265,11 @@ function adminRoutes(path, table) {
             const e = sent.get(u.id);
             return e && u.kind === "action" ? { ...u, text: String(e.text ?? u.text).slice(0, 2000), recommendation: String(e.recommendation ?? u.recommendation ?? "").slice(0, 2000) } : u;
           });
-          const changed = Object.keys({ ...old, ...item }).filter((k) => !["updates", "emailedAt", "emailedTo"].includes(k) && JSON.stringify(old[k]) !== JSON.stringify(item[k]));
+          const changed = Object.keys({ ...old, ...item }).filter((k) => !["updates", "emailedAt", "emailedTo", "followers"].includes(k) && JSON.stringify(old[k]) !== JSON.stringify(item[k]));
           if (updates.some((u, i) => JSON.stringify(u) !== JSON.stringify(old.updates?.[i]))) changed.push("updates");
           if (changed.length) updates.push({ id: randomBytes(8).toString("hex"), at: new Date().toISOString(), by: "Admin", role: "admin", kind: "edit", text: `Edited: ${changed.map((k) => FIELD_NAMES[k] ?? k).join(", ")}` });
           item.updates = updates;
-          for (const k of ["emailedAt", "emailedTo"]) if (old[k] !== undefined) item[k] = old[k];
+          for (const k of ["emailedAt", "emailedTo", "followers"]) if (old[k] !== undefined) item[k] = old[k];
         }
       }
       // An edited date can move a periodic inspection into another period
@@ -373,7 +373,8 @@ async function loadOperators(q) {
   return (await q.query("SELECT data FROM app_config WHERE key = 'operators'")).rows[0]?.data ?? [];
 }
 
-const publicOperator = ({ pinHash, pinSalt: _salt, signature, ...o }) => ({ ...o, hasPin: !!pinHash, hasSignature: !!signature });
+// Email addresses stay on the server too (admin sees them in Setup); the app only learns whether one is set
+const publicOperator = ({ pinHash, pinSalt: _salt, signature, email, ...o }) => ({ ...o, hasPin: !!pinHash, hasSignature: !!signature, hasEmail: !!email });
 
 /**
  * Checks a name (and PIN, when that operator has one) against the operators list.
@@ -414,7 +415,19 @@ app.get("/api/operators", async (_req, res) => {
   }
 });
 
+// Admin: each operator's email address, for Setup → People
+app.get("/api/operators/emails", requireAdmin, async (_req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  try {
+    res.json({ emails: Object.fromEntries((await loadOperators(pool)).filter((o) => o.email).map((o) => [o.id, o.email])) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB query failed." });
+  }
+});
+
 // Admin: replace the list. Each operator may carry a new `pin` or `clearPin`; otherwise its PIN is kept.
+// `email` left out keeps the saved address; "" removes it.
 app.put("/api/operators", requireAdmin, async (req, res) => {
   if (!pool) return res.status(503).json({ error: "No database configured." });
   const list = req.body?.config;
@@ -424,6 +437,7 @@ app.put("/api/operators", requireAdmin, async (req, res) => {
     const name = String(o?.name || "").trim().toLowerCase();
     if (!isId(o?.id) || !name || name.length > 80 || names.has(name)) return res.status(400).json({ error: "Each operator needs a different name." });
     if (o.pin !== undefined && o.pin !== "" && !PIN_RE.test(o.pin)) return res.status(400).json({ error: "PINs are 4 to 8 digits." });
+    if (typeof o.email === "string" && o.email.trim() && !EMAIL_RE.test(o.email.trim())) return res.status(400).json({ error: `${o.name}: that email address doesn't look right.` });
     names.add(name);
   }
   const client = await pool.connect();
@@ -439,6 +453,8 @@ app.put("/api/operators", requireAdmin, async (req, res) => {
       if (o.pin) { out.pinSalt = randomBytes(16).toString("hex"); out.pinHash = hashPin(o.pin, out.pinSalt); }
       else if (!o.clearPin && prev.pinHash) { out.pinSalt = prev.pinSalt; out.pinHash = prev.pinHash; }
       if (!o.clearSignature && prev.signature) out.signature = prev.signature;
+      const email = typeof o.email === "string" ? o.email.trim().slice(0, 120) : prev.email;
+      if (email) out.email = email;
       return out;
     });
     await client.query(
@@ -777,7 +793,7 @@ app.post("/api/fault-reports", writeLimit, async (req, res) => {
        FROM fault_reports WHERE (data->>'reportNumber' LIKE $1 OR data->>'reportNumber' LIKE $2) AND data->>'reportNumber' ~ '/[0-9]+$'`,
       [`HDK/FR/ARFF/${year}/%`, `HDK-ARFF/${year}/%`]
     );
-    const saved = { ...incoming, reportNumber: `HDK/FR/ARFF/${year}/${String(max.rows[0].n + 1).padStart(3, "0")}` };
+    const saved = { ...incoming, reportNumber: `HDK/FR/ARFF/${year}/${String(max.rows[0].n + 1).padStart(3, "0")}`, followers: [check.name] };
     await client.query("INSERT INTO fault_reports (id, data, created_at) VALUES ($1, $2, $3)", [saved.id, saved, saved.createdAt]);
     await client.query("COMMIT");
     res.json({ ok: true, report: saved });
@@ -811,6 +827,92 @@ function pickFields(input, keys) {
   }
   return out;
 }
+
+// ── Followers and messages (a fault report's thread) ──────────────────
+// Whoever raises a report, posts an update or a message follows it; anyone can follow or leave.
+// Updates and messages are emailed to the followers (not the whole recipient list).
+const sameName = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+const withFollower = (list, name) => (Array.isArray(list) ? list : []).some((n) => sameName(n, name)) ? list : [...(Array.isArray(list) ? list : []), name];
+
+/**
+ * Emails the report's followers, leaving out `exclude` (the author). A report nobody with an email
+ * follows (older reports, or no addresses set) goes to the Setup recipients instead.
+ */
+async function notifyFollowers(report, mail, exclude) {
+  const settings = await loadEmailSettings();
+  const problem = emailProblem(settings);
+  if (problem) return { status: 503, error: problem };
+  if (!settings.faultEmails) return { status: 200, sent: 0, skipped: "Fault report emails are turned off in Setup." };
+  const ops = await loadOperators(pool);
+  const emailOf = (name) => ops.find((o) => sameName(o.name, name))?.email;
+  const following = (report.followers ?? []).map(emailOf).filter(Boolean);
+  const to = following.length
+    ? [...new Set((report.followers ?? []).filter((n) => !exclude || !sameName(n, exclude)).map(emailOf).filter(Boolean))]
+    : settings.to;
+  if (to.length === 0) return { status: 200, sent: 0, skipped: "No other followers to email." };
+  return sendToRecipients(mail, { ...settings, to, cc: following.length ? [] : settings.cc });
+}
+
+/** Runs `fn(report)` on the locked report row and saves what it returns (null: no change) */
+async function withReport(id, fn) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const row = await client.query("SELECT data FROM fault_reports WHERE id = $1 FOR UPDATE", [id]);
+    if (row.rowCount === 0) { await client.query("ROLLBACK"); return null; }
+    const next = await fn(row.rows[0].data, client);
+    if (next) await client.query("UPDATE fault_reports SET data = $2 WHERE id = $1", [id, next]);
+    await client.query("COMMIT");
+    return next ?? row.rows[0].data;
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+app.post("/api/fault-reports/:id/comments", writeLimit, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  const text = typeof req.body?.text === "string" ? req.body.text.trim().slice(0, 2000) : "";
+  if (!text) return res.status(400).json({ error: "Write a message first." });
+  const check = await checkOperator(pool, req.body?.name, req.body?.pin).catch(() => ({ status: 500, error: "Check failed." }));
+  if (check.error) return res.status(check.status).json({ error: check.error });
+  const role = check.op?.role === "maintenance" ? "maintenance" : "arff";
+  try {
+    const report = await withReport(req.params.id, (r) => ({
+      ...r,
+      updates: [...(r.updates ?? []), { id: randomBytes(8).toString("hex"), at: new Date().toISOString(), by: check.name, role, kind: "comment", text }],
+      followers: withFollower(r.followers, check.name),
+    }));
+    if (!report) return res.status(404).json({ error: "Report not found." });
+    const email = await notifyFollowers(report, {
+      subject: `Re: Fault report ${report.reportNumber} — RESCUE 2`,
+      text: `${check.name} wrote on fault report ${report.reportNumber} (${report.status}):\n\n${text}\n\nOpen the HDK ARFF app (Faults tab) to reply.`,
+    }, check.name).catch((e) => { console.error("Message email failed:", e); return { status: 502, error: "Email could not be sent." }; });
+    res.json({ ok: true, report, email: email.status === 200 ? { sent: email.sent, skipped: email.skipped } : { error: email.error } });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Could not post the message." });
+  }
+});
+
+app.post("/api/fault-reports/:id/follow", writeLimit, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  const check = await checkOperator(pool, req.body?.name, req.body?.pin).catch(() => ({ status: 500, error: "Check failed." }));
+  if (check.error) return res.status(check.status).json({ error: check.error });
+  try {
+    const report = await withReport(req.params.id, (r) => ({
+      ...r,
+      followers: req.body?.follow === false ? (r.followers ?? []).filter((n) => !sameName(n, check.name)) : withFollower(r.followers, check.name),
+    }));
+    if (!report) return res.status(404).json({ error: "Report not found." });
+    res.json({ ok: true, report, noEmail: req.body?.follow !== false && !!check.op && !check.op.email });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Could not update followers." });
+  }
+});
 
 app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
   if (!pool) return res.status(503).json({ error: "No database configured." });
@@ -869,8 +971,9 @@ app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
       }
     }
     if (status === "Resolved" && report.status !== "Resolved") updates.push(entry({ kind: "closed", text: "Accepted and closed" }));
+    const followers = updates.length > (report.updates?.length ?? 0) ? withFollower(report.followers, check.name) : report.followers;
     const saved = {
-      ...report, repair, acceptance, status, updates,
+      ...report, repair, acceptance, status, updates, followers,
       repairUpdatedBy: check.name, repairUpdatedAt: now,
       // The repair counts as started once repair work (not just a comment) is recorded
       ...(Object.values(repair).some(Boolean) && !report.repairStartedAt ? { repairStartedAt: now, repairStartedBy: check.name } : {}),
@@ -1072,15 +1175,15 @@ app.post("/api/fault-reports/:id/updates/:uid/email", writeLimit, async (req, re
     if (!got) return res.status(409).json({ error: "Already emailed, or not a new update." });
     const { r, u } = got;
     const n = r.updates.filter((x) => x.kind === "action").findIndex((x) => x.id === u.id) + 1;
-    const result = await sendToRecipients({
+    const result = await notifyFollowers(r, {
       subject: `Fault report ${r.reportNumber} — Update ${n} — RESCUE 2`,
       text: `Update ${n} on fault report ${r.reportNumber} (RESCUE 2, HDK-ARFF).\n\nBy: ${u.by}\nAction taken: ${u.text}\n${u.recommendation ? `Recommendation: ${u.recommendation}\n` : ""}Status: ${r.status}\n\nThe update report is attached.`,
       pdf: req.body.pdf,
       filename: req.body?.filename,
-    }, settings);
+    }, u.by);
     await claim((_r, x) => { if (result.status !== 200) delete x.emailedAt; else x.emailedTo = result.sent; return true; });
     if (result.status !== 200) return res.status(result.status).json({ error: result.error });
-    res.json({ ok: true, sent: result.sent });
+    res.json({ ok: true, sent: result.sent, skipped: result.skipped });
   } catch (e) {
     console.error("Update email failed:", e);
     await claim((_r, x) => { delete x.emailedAt; return true; }).catch(() => {});

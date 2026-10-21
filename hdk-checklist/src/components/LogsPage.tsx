@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import type { CheckKind, InspectionLog, FaultBrief, FaultReport, Operator } from "../types";
 import { ChevronRight, FileText } from "lucide-react";
-import { emailFaultReport, describeEmail, uploadImages, listLogs, listAllLogs, listFaults, getFaultBriefs, getOverview, countUnsynced, getOperators, updateLog, deleteLog, updateFaultReport, deleteFaultReport, type FaultQuery } from "../storage";
+import { needsPin } from "../operators";
+import OperatorField from "./OperatorField";
+import { emailFaultReport, describeEmail, postComment, setFollowing, uploadImages, listLogs, listAllLogs, listFaults, getFaultBriefs, getOverview, countUnsynced, getOperators, updateLog, deleteLog, updateFaultReport, deleteFaultReport, type FaultQuery } from "../storage";
 import { EditLogModal, EditFaultModal } from "./EditModals";
 import { SignOffModal, RepairModal } from "./WorkflowModals";
 import NewFaultModal from "./NewFaultModal";
@@ -96,7 +98,8 @@ function faultThread(r: FaultReport): ThreadEntry[] {
       n++;
       out.push({ key: u.id, at, who: u.by, role: u.role, title: `Update ${n} · Action taken`, body: u.text, rec: u.recommendation, sig: u.signature, pdf: u.id, note: emailed(u.emailedAt, u.emailedTo) });
     } else {
-      out.push({ key: u.id, at, who: u.by, role: u.role, title: u.kind === "acceptance" ? "Acceptance test" : u.kind === "closed" ? "Closed" : "Edited the report", body: u.text, sig: u.kind === "acceptance" ? u.signature : undefined });
+      const title = { comment: "", acceptance: "Acceptance test", closed: "Closed", edit: "Edited the report" }[u.kind];
+      out.push({ key: u.id, at, who: u.by, role: u.role, title, body: u.text, sig: u.kind === "acceptance" ? u.signature : undefined });
     }
   }
   // Reports from before updates existed: their single repair record
@@ -120,6 +123,64 @@ function faultThread(r: FaultReport): ThreadEntry[] {
   return out;
 }
 
+/**
+ * Below the thread: who follows the report, and a message box. Posting or following needs your name
+ * (and PIN); a message is emailed to the other followers and makes you one.
+ */
+function ThreadComposer({ report, onChange }: { report: FaultReport; onChange: (r: FaultReport) => void }) {
+  const [operators, setOperators] = useState<Operator[]>([]);
+  const [name, setName] = useState("");
+  const [pin, setPin] = useState("");
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState<"send" | "follow" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { getOperators().then(setOperators); }, []);
+
+  const followers = report.followers ?? [];
+  const me = name.trim();
+  const following = !!me && followers.some((n) => n.toLowerCase() === me.toLowerCase());
+  const ready = !!me && (!needsPin(operators, me) || pin.length >= 4);
+
+  async function run(kind: "send" | "follow") {
+    setBusy(kind);
+    setError(null);
+    try {
+      if (kind === "send") {
+        const { report: r, email } = await postComment(report.id, me, pin, text.trim());
+        onChange(r);
+        setText("");
+        toast(`Message posted. ${"error" in email ? `Email not sent: ${email.error}` : email.sent ? `Emailed to ${email.sent} follower${email.sent === 1 ? "" : "s"}.` : email.skipped ?? ""}`, "error" in email ? "error" : "info");
+      } else {
+        const { report: r, noEmail } = await setFollowing(report.id, me, pin, !following);
+        onChange(r);
+        toast(following ? "You no longer follow this report." : noEmail ? "Following. There's no email address for you in Setup → People, so you won't get emails yet." : "Following: you'll get its updates and messages by email.", noEmail ? "error" : "info");
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : "Something went wrong."); }
+    setBusy(null);
+  }
+
+  return (
+    <div className="composer">
+      <div className="composer-followers">
+        <span>Followers</span>
+        {followers.length === 0 ? <em>None yet: updates go to the Setup recipients</em> : followers.map((n) => <span key={n} className="follower-chip">{n}</span>)}
+      </div>
+      <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder="Write a message, e.g. any update on this?" />
+      <OperatorField label="Posting as" operators={operators} withMaintenance rememberAs="thread" name={name} pin={pin}
+        onName={(n) => { setName(n); setError(null); }} onPin={setPin} />
+      {error && <p className="form-error" style={{ margin: 0 }}>{error}</p>}
+      <div className="composer-actions">
+        <button type="button" className="btn-export secondary" disabled={!ready || !!busy} onClick={() => run("follow")}>
+          {busy === "follow" ? "…" : following ? "Unfollow" : "Follow"}
+        </button>
+        <button type="button" className="btn-export" disabled={!ready || !text.trim() || !!busy} onClick={() => run("send")}>
+          {busy === "send" ? "Sending…" : "Send message"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "·";
 
 function FaultThread({ report }: { report: FaultReport }) {
@@ -134,7 +195,7 @@ function FaultThread({ report }: { report: FaultReport }) {
               {e.role && <span className="thread-role">{ROLE_LABEL[e.role]}</span>}
               {e.at != null && !Number.isNaN(e.at) && !e.pending && <time>{fmtWhen(e.at)}</time>}
             </div>
-            <div className="thread-title">{e.title}</div>
+            {e.title && <div className="thread-title">{e.title}</div>}
             {e.body && <p className="thread-body">{e.body}</p>}
             {e.rec && <p className="thread-rec"><span>Recommendation</span> {e.rec}</p>}
             {e.sig && <img className="thread-sig" src={e.sig} alt="signature" />}
@@ -155,7 +216,7 @@ function FaultThread({ report }: { report: FaultReport }) {
   );
 }
 
-function FaultModal({ report, onClose, actions }: { report: FaultReport; onClose: () => void; actions?: React.ReactNode }) {
+function FaultModal({ report, onClose, onChange, actions }: { report: FaultReport; onClose: () => void; onChange?: (r: FaultReport) => void; actions?: React.ReactNode }) {
   const priorityKey = report.priority === "Immediate Grounding" ? "Grounding" : report.priority;
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -194,6 +255,7 @@ function FaultModal({ report, onClose, actions }: { report: FaultReport; onClose
           <div className="modal-section">
             <h4>Activity</h4>
             <FaultThread report={report} />
+            {onChange && <ThreadComposer report={report} onChange={onChange} />}
           </div>
 
           <div className="modal-section">
@@ -725,7 +787,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
         </>} />
       )}
       {viewFault && (
-        <FaultModal report={viewFault} onClose={() => setViewFault(null)} actions={<>
+        <FaultModal report={viewFault} onClose={() => setViewFault(null)} onChange={(r) => { setViewFault(r); reload(faults.length); }} actions={<>
           {viewFault.status !== "Resolved" && <button className="btn-export secondary" onClick={() => { setRepairFault(viewFault); setViewFault(null); }}>Repair</button>}
           {isAdmin && <>
             <button className="btn-export secondary" onClick={() => { setEditFault(viewFault); setViewFault(null); }}>Edit</button>

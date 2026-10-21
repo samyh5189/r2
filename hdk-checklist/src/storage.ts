@@ -389,8 +389,10 @@ export const getOperators = () => getConfig<Operator[]>("/api/operators", "hdk_o
 /** Admin: new PINs go to the server only; the local cache keeps just whether one is set */
 export async function saveOperators(ops: Operator[]) {
   await adminRequest("PUT", "/api/operators", { config: ops });
-  const cached = ops.map(({ pin, clearPin, clearSignature, ...o }) => ({
+  // Addresses stay off the device, like PINs
+  const cached = ops.map(({ pin, clearPin, clearSignature, email, ...o }) => ({
     ...o,
+    hasEmail: email === undefined ? o.hasEmail : !!email,
     hasPin: pin ? true : clearPin ? false : o.hasPin,
     hasSignature: clearSignature ? false : o.hasSignature,
   }));
@@ -507,6 +509,27 @@ async function postEmail(path: string, body: object, admin: boolean): Promise<Em
 /** Emails a newly created fault report's PDF to the recipients set in Setup (once per report). */
 export async function emailFaultReport(report: FaultReport, pdf: { blob: Blob; filename: string }): Promise<EmailResult> {
   return postEmail(`/api/fault-reports/${report.id}/email`, { pdf: await blobToBase64(pdf.blob), filename: pdf.filename }, false);
+}
+
+/** Posts a message on a report's thread; the server emails its followers */
+export async function postComment(reportId: string, name: string, pin: string, text: string): Promise<{ report: FaultReport; email: EmailResult }> {
+  const data = await postJson<{ report: FaultReport; email: EmailResult }>(`/api/fault-reports/${reportId}/comments`, { name, pin, text }, "Could not post the message.");
+  lsReplace(LS_FAULTS, reportId, data.report);
+  return data;
+}
+
+/** Follows (or leaves) a report; `noEmail` when this person has no address to be emailed at */
+export async function setFollowing(reportId: string, name: string, pin: string, follow: boolean): Promise<{ report: FaultReport; noEmail: boolean }> {
+  const data = await postJson<{ report: FaultReport; noEmail: boolean }>(`/api/fault-reports/${reportId}/follow`, { name, pin, follow }, "Could not update followers.");
+  lsReplace(LS_FAULTS, reportId, data.report);
+  return data;
+}
+
+/** Admin: operators' email addresses by id */
+export async function getOperatorEmails(): Promise<Record<string, string>> {
+  const res = await fetch("/api/operators/emails", { headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` } });
+  if (!res.ok) throw new Error("Could not load email addresses.");
+  return (await res.json()).emails ?? {};
 }
 
 /** Emails a maintenance update's own report (once, when it's new). */

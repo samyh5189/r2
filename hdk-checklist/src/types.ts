@@ -62,6 +62,8 @@ export interface Operator {
   role?: "arff" | "maintenance";
   hasPin?: boolean;         // from the server; the PIN itself never leaves it
   hasSignature?: boolean;
+  hasEmail?: boolean;       // from the server; the address itself is admin-only
+  email?: string;           // admin: Setup → People
   pin?: string;             // admin: set a new PIN
   clearPin?: boolean;
   clearSignature?: boolean;
@@ -164,6 +166,8 @@ export interface FaultReport {
   reporterDesignation?: string;
   /** Activity after the report was raised, oldest first (written by the server) */
   updates?: FaultUpdate[];
+  /** Operator names emailed about updates and messages */
+  followers?: string[];
   createdAt: string;
 }
 
@@ -176,8 +180,8 @@ export interface FaultUpdate {
   at: string;
   by: string;
   role: "arff" | "maintenance" | "admin";
-  kind: "action" | "acceptance" | "closed" | "edit";
-  /** action: action taken · acceptance: comments · edit: what changed */
+  kind: "action" | "acceptance" | "closed" | "edit" | "comment";
+  /** action: action taken · acceptance: comments · edit: what changed · comment: the message */
   text?: string;
   recommendation?: string;
   designation?: string;
