@@ -4,6 +4,7 @@ import { dirname, join } from "path";
 import { readFileSync } from "fs";
 import { createHmac, timingSafeEqual } from "crypto";
 import pg from "pg";
+import nodemailer from "nodemailer";
 import "dotenv/config";
 
 const { Pool } = pg;
@@ -122,6 +123,11 @@ function adminRoutes(path, table) {
       const item = { ...req.body, id: req.params.id };
       // An edited date can move a periodic inspection into another period
       if (table === "inspection_logs" && KINDS.includes(item.kind) && DATE_RE.test(item.date)) item.periodKey = periodKey(item.kind, item.date);
+      // Fault age tracking: stamp when a report is closed, clear it if reopened
+      if (table === "fault_reports") {
+        if (item.status === "Resolved") item.resolvedAt ??= new Date().toISOString();
+        else delete item.resolvedAt;
+      }
       const result = await pool.query(`UPDATE ${table} SET data = $2 WHERE id = $1`, [req.params.id, item]);
       if (result.rowCount === 0) return res.status(404).json({ error: "Not found." });
       res.json({ ok: true });
@@ -145,9 +151,10 @@ function adminRoutes(path, table) {
   });
 }
 
-// ── Admin-editable config (checklist, operators); null → client uses its default ──
-function configRoutes(path, key) {
-  app.get(path, async (_req, res) => {
+// ── Admin-editable config (checklist, operators, …); null → client uses its default ──
+const isArray = (c) => Array.isArray(c);
+function configRoutes(path, key, { validate = isArray, adminRead = false } = {}) {
+  app.get(path, ...(adminRead ? [requireAdmin] : []), async (_req, res) => {
     if (!pool) return res.status(503).json({ error: "No database configured." });
     try {
       const result = await pool.query("SELECT data FROM app_config WHERE key = $1", [key]);
@@ -161,7 +168,7 @@ function configRoutes(path, key) {
   app.put(path, requireAdmin, async (req, res) => {
     if (!pool) return res.status(503).json({ error: "No database configured." });
     const config = req.body?.config;
-    if (config !== null && !Array.isArray(config)) return res.status(400).json({ error: "Invalid config." });
+    if (config !== null && !validate(config)) return res.status(400).json({ error: "Invalid config." });
     try {
       if (config === null) await pool.query("DELETE FROM app_config WHERE key = $1", [key]);
       else await pool.query(
@@ -179,6 +186,19 @@ function configRoutes(path, key) {
 
 configRoutes("/api/checklist-config", "checklist");
 for (const kind of KINDS.slice(1)) configRoutes(`/api/checklist-config/${kind}`, `checklist_${kind}`);
+// Who gets fault reports and summaries by email (admin-only: addresses aren't public)
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+configRoutes("/api/notify-emails", "notify_emails", {
+  adminRead: true,
+  validate: (c) => Array.isArray(c) && c.length <= 20 && c.every((e) => typeof e === "string" && e.length <= 254 && EMAIL_RE.test(e)),
+});
+// Engine service interval and the last service done
+const optNum = (v) => v === undefined || (typeof v === "number" && Number.isFinite(v) && v >= 0);
+configRoutes("/api/service-settings", "service", {
+  validate: (c) => c && typeof c === "object" && !Array.isArray(c)
+    && ["intervalHours", "intervalMonths", "lastServiceHours", "warnHours"].every((k) => optNum(c[k]))
+    && (c.lastServiceDate === undefined || DATE_RE.test(c.lastServiceDate)),
+});
 configRoutes("/api/operators", "operators");
 
 adminRoutes("/api/logs", "inspection_logs");
@@ -379,7 +399,7 @@ app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
     const accepted = acceptance.maintenanceName && acceptance.maintenanceSignature && acceptance.arffName && acceptance.arffSignature;
     const started = Object.values(repair).some(Boolean) || Object.values(acceptance).some(Boolean);
     const status = accepted ? "Resolved" : started ? "In Progress" : report.status;
-    const saved = { ...report, repair, acceptance, status };
+    const saved = { ...report, repair, acceptance, status, ...(status === "Resolved" ? { resolvedAt: new Date().toISOString() } : {}) };
     await client.query("UPDATE fault_reports SET data = $2 WHERE id = $1", [req.params.id, saved]);
     await client.query("COMMIT");
     res.json({ ok: true, report: saved });
@@ -389,6 +409,88 @@ app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
     res.status(500).json({ error: "Repair update failed." });
   } finally {
     client.release();
+  }
+});
+
+// ── Email (fault reports, monthly summaries) ─────────────────────────
+// SMTP_USER / SMTP_PASS: for Gmail, the address and an app password. Recipients are set in Setup.
+const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
+const mailer = process.env.SMTP_USER && process.env.SMTP_PASS
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: SMTP_PORT,
+      secure: SMTP_PORT === 465,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    })
+  : null;
+const MAX_PDF_BYTES = 3_000_000; // stays under Vercel's 4.5 MB request limit once base64-encoded
+
+async function sendToRecipients({ subject, text, pdf, filename }) {
+  if (!mailer) return { status: 503, error: "Email isn't set up on the server yet." };
+  const result = await pool.query("SELECT data FROM app_config WHERE key = 'notify_emails'");
+  const to = result.rows[0]?.data ?? [];
+  if (to.length === 0) return { status: 503, error: "No email recipients set. An admin can add them under Setup." };
+  // The PDF is optional (a test email has none), but if given it must be a real, modest PDF
+  const content = pdf === undefined ? null : typeof pdf === "string" ? Buffer.from(pdf, "base64") : Buffer.alloc(0);
+  if (content && (content.length > MAX_PDF_BYTES || content.subarray(0, 5).toString() !== "%PDF-")) {
+    return { status: 400, error: "Invalid or too large PDF." };
+  }
+  await mailer.sendMail({
+    from: { name: "HDK ARFF — RESCUE 2", address: process.env.MAIL_FROM || process.env.SMTP_USER },
+    to,
+    subject: String(subject).replace(/[\r\n]+/g, " ").slice(0, 200),
+    text,
+    attachments: content ? [{ filename: String(filename).replace(/[^\w.\- ]/g, "_").slice(0, 120) || "report.pdf", content, contentType: "application/pdf" }] : [],
+  });
+  return { status: 200, sent: to.length };
+}
+
+// A new fault report is emailed once, by the device that created it, within a day
+app.post("/api/fault-reports/:id/email", writeLimit, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  if (!mailer) return res.status(503).json({ error: "Email isn't set up on the server yet." });
+  if (typeof req.body?.pdf !== "string") return res.status(400).json({ error: "PDF missing." });
+  try {
+    // Claim the report atomically so it can't be sent twice
+    const claimed = await pool.query(
+      `UPDATE fault_reports SET data = data || jsonb_build_object('emailedAt', $2::text)
+       WHERE id = $1 AND NOT (data ? 'emailedAt') AND created_at > NOW() - INTERVAL '1 day'
+       RETURNING data`,
+      [req.params.id, new Date().toISOString()]
+    );
+    if (claimed.rowCount === 0) return res.status(409).json({ error: "Already emailed, or not a new report." });
+    const r = claimed.rows[0].data;
+    const faults = (r.faults ?? []).map((f) => `  • [${f.status}] ${f.label}${f.remarks ? ` — ${f.remarks}` : ""}`).join("\n");
+    const result = await sendToRecipients({
+      subject: `Fault report ${r.reportNumber} — ${r.priority} — RESCUE 2`,
+      text: `A new fault report was raised for RESCUE 2 (HDK-ARFF).\n\nReport: ${r.reportNumber}\nDate: ${r.date} ${r.time}\nReported by: ${r.operatorName}\nPriority: ${r.priority}\n\nFaults:\n${faults}\n\n${r.detailsOfDefects ?? ""}\n\nThe full report is attached.`,
+      pdf: req.body?.pdf,
+      filename: req.body?.filename,
+    });
+    if (result.status !== 200) {
+      await pool.query("UPDATE fault_reports SET data = data - 'emailedAt' WHERE id = $1", [req.params.id]);
+      return res.status(result.status).json({ error: result.error });
+    }
+    await pool.query("UPDATE fault_reports SET data = data || jsonb_build_object('emailedTo', $2::int) WHERE id = $1", [req.params.id, result.sent]);
+    res.json({ ok: true, sent: result.sent });
+  } catch (e) {
+    console.error("Fault report email failed:", e);
+    await pool.query("UPDATE fault_reports SET data = data - 'emailedAt' WHERE id = $1", [req.params.id]).catch(() => {});
+    res.status(502).json({ error: "Email could not be sent." });
+  }
+});
+
+// Admin: email a document (monthly summary, test) to the recipients
+app.post("/api/email", requireAdmin, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  try {
+    const { subject, text, pdf, filename } = req.body ?? {};
+    const result = await sendToRecipients({ subject: subject || "HDK ARFF — RESCUE 2", text: String(text || "").slice(0, 5000), pdf, filename });
+    if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+    res.json({ ok: true, sent: result.sent });
+  } catch (e) {
+    console.error("Email failed:", e);
+    res.status(502).json({ error: "Email could not be sent. Check the SMTP settings." });
   }
 });
 
@@ -430,7 +532,7 @@ app.post("/api/fault-report", aiLimit, async (req, res) => {
 
 // ── Health check ──────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, ai: !!process.env.ANTHROPIC_API_KEY, db: !!pool, ts: new Date().toISOString() });
+  res.json({ ok: true, ai: !!process.env.ANTHROPIC_API_KEY, db: !!pool, mail: !!mailer, ts: new Date().toISOString() });
 });
 
 // ── Serve built frontend in production ────────────────────────────────

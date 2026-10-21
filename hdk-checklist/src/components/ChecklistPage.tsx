@@ -3,7 +3,7 @@ import SignaturePad from "signature_pad";
 import { buildChecklist, defaultChecklistConfig, itemType } from "../checklistData";
 import { KIND_LABEL, PERIOD_NAME } from "../checkKinds";
 import type { CheckKind, ChecklistSection, ChecklistSectionConfig, ItemStatus, InspectionLog, FaultReport, EvidenceItem, Operator } from "../types";
-import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek, getChecklistConfig, findLogForDate, getOperators, deviceId } from "../storage";
+import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek, getChecklistConfig, findLogForDate, getOperators, deviceId, emailFaultReport, describeEmail } from "../storage";
 import { generateFaultReport } from "../faultReportAI";
 import { showPdf } from "../pdfViewer";
 import { exportInspectionPDF, exportFaultReportPDF } from "../pdfExport";
@@ -97,6 +97,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
   const [savedLog, setSavedLog] = useState<InspectionLog | null>(null);
   const [savedFault, setSavedFault] = useState<FaultReport | null>(null);
   const [repeatFaults, setRepeatFaults] = useState<RepeatFault[]>([]);
+  const [emailNote, setEmailNote] = useState("");
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sigPad = useRef<SignaturePad | null>(null);
@@ -270,7 +271,13 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
       setPhase("blocked");
       return;
     }
-    if (faultReport) faultReport = await saveFaultReport(faultReport);
+    if (faultReport) {
+      const saved = await saveFaultReport(faultReport);
+      faultReport = saved;
+      // Email the PDF in the background; the result shows on the done screen
+      setEmailNote("Emailing fault report…");
+      exportFaultReportPDF(saved).then((pdf) => emailFaultReport(saved, pdf)).then((r) => setEmailNote(describeEmail(r)));
+    }
     setTodayLog(log);
     setSavedLog(log);
     setSavedFault(faultReport);
@@ -391,6 +398,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
               {repeatFaults.map((r) => <div key={r.label}>{r.label} · {r.reportNumber}</div>)}
             </div>
           )}
+          {savedFault && emailNote && <p className="email-note">{emailNote}</p>}
           {savedFault?.aiAssessment && (
             <p style={{ maxWidth: 500, margin: "0 auto 16px", fontSize: 13, color: isCritical ? "#991b1b" : "#92400e" }}>
               {savedFault.aiAssessment}

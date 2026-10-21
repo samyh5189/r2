@@ -59,7 +59,7 @@ export default function App() {
       {tab === "checklist" && <ChecklistHub />}
       {tab === "logs" && <LogsPage showFaults={false} isAdmin={isAdmin} onAuthLost={signOut} />}
       {tab === "faults" && <LogsPage showFaults={true} isAdmin={isAdmin} onAuthLost={signOut} />}
-      {tab === "trends" && <TrendsPage />}
+      {tab === "trends" && <TrendsPage isAdmin={isAdmin} />}
       {tab === "setup" && isAdmin && <ChecklistEditor onAuthLost={signOut} />}
 
       <PdfViewer />

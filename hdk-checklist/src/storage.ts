@@ -1,4 +1,4 @@
-import type { CheckKind, InspectionLog, FaultReport, ChecklistSectionConfig, Operator, ShiftSignoff, FaultRepair, FaultAcceptance } from "./types";
+import type { CheckKind, ServiceSettings, InspectionLog, FaultReport, ChecklistSectionConfig, Operator, ShiftSignoff, FaultRepair, FaultAcceptance } from "./types";
 import { defaultChecklistConfig } from "./checklistData";
 import { logKind, periodKey } from "./checkKinds";
 
@@ -257,3 +257,55 @@ export async function updateRepair(reportId: string, repair: FaultRepair, accept
   lsReplace(LS_FAULTS, reportId, data.report);
   return data.report;
 }
+
+// ── Service schedule and email ────────────────────────────────────────
+
+export const getServiceSettings = () => getConfig<ServiceSettings>("/api/service-settings", "hdk_service_settings", () => ({}));
+export const saveServiceSettings = (settings: ServiceSettings) => putConfig("/api/service-settings", "hdk_service_settings", settings);
+
+/** Email recipients are admin-only on the server, so this needs the admin token */
+export async function getNotifyEmails(): Promise<string[]> {
+  const res = await fetch("/api/notify-emails", { headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` } });
+  if (res.status === 401) signOutAdmin();
+  if (!res.ok) throw new Error("Could not load email recipients.");
+  return (await res.json()).config ?? [];
+}
+export const saveNotifyEmails = (emails: string[]) => adminRequest("PUT", "/api/notify-emails", { config: emails });
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+type EmailResult = { sent: number } | { error: string };
+
+async function postEmail(path: string, body: object, admin: boolean): Promise<EmailResult> {
+  try {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(admin ? { Authorization: `Bearer ${getAdminToken() ?? ""}` } : {}) },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    return res.ok ? { sent: data.sent ?? 0 } : { error: data.error ?? `Email failed (${res.status})` };
+  } catch {
+    return { error: "No connection — email not sent." };
+  }
+}
+
+/** Emails a newly created fault report's PDF to the recipients set in Setup (once per report). */
+export async function emailFaultReport(report: FaultReport, pdf: { blob: Blob; filename: string }): Promise<EmailResult> {
+  return postEmail(`/api/fault-reports/${report.id}/email`, { pdf: await blobToBase64(pdf.blob), filename: pdf.filename }, false);
+}
+
+/** Admin: email any PDF (monthly summary) to the recipients. */
+export async function emailPdf(subject: string, text: string, pdf?: { blob: Blob; filename: string }): Promise<EmailResult> {
+  return postEmail("/api/email", { subject, text, ...(pdf ? { pdf: await blobToBase64(pdf.blob), filename: pdf.filename } : {}) }, true);
+}
+
+export const describeEmail = (r: EmailResult) =>
+  "sent" in r ? `📧 Emailed to ${r.sent} recipient${r.sent === 1 ? "" : "s"}.` : `Email not sent: ${r.error}`;

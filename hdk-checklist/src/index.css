@@ -296,7 +296,7 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
   .log-table tr {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto auto;
-    grid-template-areas: "a b c d" "line line line meta" "act act act act";
+    grid-template-areas: "a b c d" "line line line meta" "age age age age" "act act act act";
     align-items: center;
     gap: 4px 8px;
     background: white;
@@ -313,6 +313,7 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
   .log-table .ga-d { grid-area: d; }
   .log-table .ga-line { grid-area: line; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
   .log-table .ga-meta { grid-area: meta; color: var(--muted); font-size: 12px; }
+  .log-table .ga-age { grid-area: age; }
   .log-table td.log-actions { grid-area: act; display: flex; gap: 6px; padding-top: 6px; }
   .log-table td.log-actions .action-btn { flex: 1; margin-right: 0; padding: 6px 4px; font-size: 12px; }
   .log-table td.empty-state { grid-column: 1 / -1; text-align: center; white-space: normal; }
@@ -572,3 +573,34 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
 .kind-chip.done { background: #dcfce7; color: #15803d; }
 @media (max-width: 480px) { .kind-tabs { padding: 0 12px; gap: 4px; } .kind-tab { font-size: 12px; flex-direction: column; gap: 2px; padding: 7px 2px; } }
 .kind-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 99px; background: #e0e7ff; color: #3730a3; font-size: 10px; font-weight: 700; vertical-align: middle; }
+.email-note { font-size: 12px; color: var(--muted); margin: -4px 0 12px; }
+
+/* Fault age tracking */
+.age-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 8px; }
+.age-summary div { background: white; border: 1px solid var(--border); border-radius: 10px; padding: 8px; text-align: center; font-size: 11px; color: var(--muted); }
+.age-summary strong { display: block; font-size: 20px; color: var(--navy); }
+.age-summary .bad strong { color: var(--us); }
+.age-filters { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+.age-badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; background: #eef2ff; color: #3730a3; white-space: nowrap; }
+.age-badge.overdue { background: #fee2e2; color: #991b1b; }
+.age-badge.closed { background: #dcfce7; color: #15803d; }
+
+/* Engine service */
+.service-card { background: white; border: 1.5px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+.service-card.st-soon { border-color: #f59e0b; }
+.service-card.st-overdue { border-color: var(--us); }
+.service-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.service-state { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: #e5e7eb; color: #374151; }
+.service-state.st-ok { background: #dcfce7; color: #15803d; }
+.service-state.st-soon { background: #fef3c7; color: #92400e; }
+.service-state.st-overdue { background: #fee2e2; color: #991b1b; }
+.service-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.service-grid div { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); }
+.service-grid strong { font-size: 16px; color: var(--navy); }
+.service-grid em { font-style: normal; font-size: 11px; }
+.service-banner { max-width: 620px; margin: 10px auto 0; padding: 8px 12px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.service-banner.st-soon { background: #fef3c7; color: #92400e; }
+.service-banner.st-overdue { background: #fee2e2; color: #991b1b; }
+@media (max-width: 480px) { .service-banner { margin: 10px 12px 0; } }
+.summary-bar { display: flex; gap: 8px; align-items: center; }
+.summary-bar select { flex: 1; min-width: 0; }

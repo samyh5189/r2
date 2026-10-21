@@ -3,6 +3,7 @@ import type { CheckKind } from "../types";
 import { getLogs } from "../storage";
 import { CHECK_KINDS, KIND_LABEL, logKind, periodKey } from "../checkKinds";
 import ChecklistPage from "./ChecklistPage";
+import { ServiceBanner } from "./ServiceCard";
 
 /** Checklist tab: pick the daily, weekly, monthly or yearly check. */
 export default function ChecklistHub() {
@@ -35,6 +36,7 @@ export default function ChecklistHub() {
           ))}
         </div>
       )}
+      {!active && <ServiceBanner />}
       <ChecklistPage key={kind} kind={kind} onSubmitted={refresh} onActiveChange={setActive} />
     </>
   );

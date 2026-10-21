@@ -136,5 +136,17 @@ export interface FaultReport {
   shiftSignoff?: ShiftSignoff;
   repair?: FaultRepair;
   acceptance?: FaultAcceptance;
+  resolvedAt?: string;     // set by the server when the report closes
+  emailedAt?: string;
+  emailedTo?: number;
   createdAt: string;
+}
+
+/** Engine service schedule (Setup) */
+export interface ServiceSettings {
+  intervalHours?: number;
+  intervalMonths?: number;
+  lastServiceHours?: number;
+  lastServiceDate?: string;  // DD/MM/YYYY
+  warnHours?: number;
 }

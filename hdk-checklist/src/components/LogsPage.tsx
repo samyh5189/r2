@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import type { CheckKind, InspectionLog, FaultReport } from "../types";
-import { getLogs, getFaultReports, sameInspectionWeek, updateLog, deleteLog, updateFaultReport, deleteFaultReport } from "../storage";
+import { emailFaultReport, describeEmail, getLogs, getFaultReports, sameInspectionWeek, updateLog, deleteLog, updateFaultReport, deleteFaultReport } from "../storage";
 import { EditLogModal, EditFaultModal } from "./EditModals";
 import { SignOffModal, RepairModal } from "./WorkflowModals";
 import NewFaultModal from "./NewFaultModal";
+import { faultAge, summarizeAges, TARGET_DAYS } from "../faultAge";
 import { CHECK_KINDS, KIND_LABEL, logKind } from "../checkKinds";
 import { showPdf } from "../pdfViewer";
 import { RACL_LOGO } from "../raclLogo";
@@ -291,6 +292,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
   const [filterDate, setFilterDate] = useState("");
   const [filterOperator, setFilterOperator] = useState("");
   const [filterKind, setFilterKind] = useState<CheckKind | "">("");
+  const [faultView, setFaultView] = useState<"active" | "overdue" | "resolved" | "all">("active");
   const [migrating, setMigrating] = useState(false);
   const [migrateResult, setMigrateResult] = useState<string | null>(null);
 
@@ -318,6 +320,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
   const [signOff, setSignOff] = useState<InspectionLog | null>(null);
   const [repairFault, setRepairFault] = useState<FaultReport | null>(null);
   const [newFault, setNewFault] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Every save is mirrored locally, so only offer a sync when this device holds records the DB lacks
   const hasLocalData = useMemo(() => {
@@ -352,11 +355,15 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
 
   const filteredFaults = useMemo(() => {
     return faults.filter((f) => {
+      const age = faultAge(f);
+      if (faultView === "active" && age.closed) return false;
+      if (faultView === "overdue" && !age.overdue) return false;
+      if (faultView === "resolved" && !age.closed) return false;
       if (filterDate && !f.date.includes(filterDate)) return false;
       if (filterOperator && !f.operatorName.toLowerCase().includes(filterOperator.toLowerCase())) return false;
       return true;
     });
-  }, [faults, filterDate, filterOperator]);
+  }, [faults, filterDate, filterOperator, faultView]);
 
   if (loading) return (
     <div className="container" style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>
@@ -366,6 +373,12 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
 
   return (
     <div className="container">
+      {notice && (
+        <div className="migrate-banner">
+          <span>{notice}</span>
+          <button onClick={() => setNotice(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16 }}>×</button>
+        </div>
+      )}
       {migrateResult && (
         <div className="migrate-banner" style={{ background: "#dcfce7", borderColor: "#86efac", color: "#15803d" }}>
           <span>{migrateResult}</span>
@@ -464,6 +477,28 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
       ) : (
         <>
           <button className="btn-report-fault" onClick={() => setNewFault(true)}>+ Report a fault</button>
+          {(() => {
+            const sum = summarizeAges(faults);
+            return (
+              <>
+                <div className="age-summary">
+                  <div><strong>{sum.active}</strong>active</div>
+                  <div className={sum.overdue ? "bad" : ""}><strong>{sum.overdue}</strong>overdue</div>
+                  <div><strong>{sum.avgDaysToClose == null ? "—" : sum.avgDaysToClose.toFixed(1)}</strong>avg days to fix</div>
+                </div>
+                <div className="age-filters">
+                  {(["active", "overdue", "resolved", "all"] as const).map((v) => (
+                    <button key={v} className={`trend-window${faultView === v ? " active" : ""}`} onClick={() => setFaultView(v)}>
+                      {v[0].toUpperCase() + v.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                <p className="editor-hint" style={{ margin: "0 0 8px" }}>
+                  Overdue: open longer than {TARGET_DAYS["Immediate Grounding"]} day (grounding), {TARGET_DAYS.Urgent} days (urgent) or {TARGET_DAYS.Routine} days (routine).
+                </p>
+              </>
+            );
+          })()}
           <div className="log-table-wrap">
             <table className="log-table">
               <thead>
@@ -474,14 +509,16 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
                   <th>Faults</th>
                   <th>Priority</th>
                   <th>Status</th>
+                  <th>Age</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredFaults.length === 0 ? (
-                  <tr><td colSpan={7} className="empty-state">No fault reports yet.</td></tr>
+                  <tr><td colSpan={8} className="empty-state">{faults.length ? "No reports match." : "No fault reports yet."}</td></tr>
                 ) : filteredFaults.map((fr) => {
                   const priorityKey = fr.priority === "Immediate Grounding" ? "Grounding" : fr.priority;
+                  const age = faultAge(fr);
                   return (
                     <tr key={fr.id}>
                       <td className="ga-a" data-label="Report No." style={{ fontWeight: 600 }}>{fr.reportNumber}</td>
@@ -490,13 +527,16 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
                       <td className="ga-meta" data-label="Faults">{fr.faults.length} fault{fr.faults.length !== 1 ? "s" : ""}</td>
                       <td className="ga-c" data-label="Priority">
                         <span className={`priority-label priority-${priorityKey}`} style={{ padding: "2px 8px", fontSize: 11 }}>
-                          {fr.priority}
+                          {fr.priority === "Immediate Grounding" ? "Grounding" : fr.priority}
                         </span>
                       </td>
                       <td className="ga-d" data-label="Status">
                         <span className={`badge badge-${fr.status === "Resolved" ? "resolved" : fr.status === "Open" ? "open" : "fault"}`}>
                           {fr.status}
                         </span>
+                      </td>
+                      <td className="ga-age" data-label="Age">
+                        <span className={`age-badge${age.overdue ? " overdue" : age.closed ? " closed" : ""}`}>{age.overdue ? "⚠ " : ""}{age.label}</span>
                       </td>
                       <td className="log-actions">
                         <button className="action-btn" onClick={() => setViewFault(fr)}>View</button>
@@ -522,7 +562,14 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
       {viewLog && <LogModal log={viewLog} onClose={() => setViewLog(null)} />}
       {viewFault && <FaultModal report={viewFault} onClose={() => setViewFault(null)} />}
       {signOff && <SignOffModal log={signOff} onClose={() => setSignOff(null)} onDone={() => { setSignOff(null); reload(); }} />}
-      {newFault && <NewFaultModal onClose={() => setNewFault(false)} onDone={(r) => { setNewFault(false); reload(); showPdf(exportFaultReportPDF(r)); }} />}
+      {newFault && <NewFaultModal onClose={() => setNewFault(false)} onDone={(r) => {
+        setNewFault(false);
+        reload();
+        const pdf = exportFaultReportPDF(r);
+        showPdf(pdf);
+        setNotice("Emailing fault report…");
+        pdf.then((file) => emailFaultReport(r, file)).then((res) => setNotice(describeEmail(res)));
+      }} />}
       {repairFault && <RepairModal report={repairFault} onClose={() => setRepairFault(null)} onDone={() => { setRepairFault(null); reload(); }} />}
       {editLog && <EditLogModal item={editLog} onClose={() => setEditLog(null)} onSave={(l) => adminAction(() => updateLog(l)).then(() => setEditLog(null))} />}
       {editFault && <EditFaultModal item={editFault} onClose={() => setEditFault(null)} onSave={(r) => adminAction(() => updateFaultReport(r)).then(() => setEditFault(null))} />}

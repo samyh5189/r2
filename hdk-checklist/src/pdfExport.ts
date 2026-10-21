@@ -3,6 +3,7 @@ import type { InspectionLog, FaultReport } from "./types";
 import { RACL_LOGO } from "./raclLogo";
 import { KIND_LABEL, logKind } from "./checkKinds";
 import { ENGINE_HOURS_ID, itemType } from "./checklistData";
+import type { MonthlySummary } from "./monthlySummary";
 
 type RGB = [number, number, number];
 
@@ -901,4 +902,167 @@ export async function exportWeeklyPDF(logs: InspectionLog[]) {
   const ws = `${String(days[0].getDate()).padStart(2,"0")}-${MONTHS[days[0].getMonth()]}`;
   const we = `${String(days[6].getDate()).padStart(2,"0")}-${MONTHS[days[6].getMonth()]}-${days[6].getFullYear()}`;
   return toFile(doc, `HDK-Weekly-${ws}-to-${we}.pdf`);
+}
+
+// ── Monthly summary (management report) ───────────────────────────────
+
+export async function exportMonthlySummaryPDF(sum: MonthlySummary) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const M = 12, W = 186, BOTTOM = 280;
+  let y = 0;
+
+  function pageHeader() {
+    doc.setFillColor(...NAVY);
+    doc.rect(10, 8, 190, 18, "F");
+    logoTile(doc, 174, 9.5, 24, 15);
+    doc.setTextColor(...WHITE);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("REGIONAL AIRPORTS COMPANY LTD", 92, 14, { align: "center" });
+    doc.setFontSize(8.5);
+    doc.text("AIRPORT RESCUE AND FIREFIGHTING DEPARTMENT — KULHUDHUFFUSHI AIRPORT (HDK)", 92, 18.5, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.text(`RESCUE 2  |  Monthly Summary — ${sum.title}`, 92, 23, { align: "center" });
+    y = 34;
+  }
+
+  function ensure(h: number) {
+    if (y + h > BOTTOM) { doc.addPage(); pageHeader(); }
+  }
+
+  function heading(text: string) {
+    ensure(14);
+    doc.setFillColor(...NAVY);
+    doc.rect(M, y, W, 6.5, "F");
+    doc.setTextColor(...WHITE);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text(text.toUpperCase(), M + 2, y + 4.4);
+    y += 11;
+  }
+
+  function line(label: string, value: string, color: RGB = [0, 0, 0]) {
+    ensure(6);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...GREY);
+    doc.text(label, M + 2, y);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...color);
+    const lines = doc.splitTextToSize(value, W - 72) as string[];
+    doc.text(lines, M + 70, y);
+    y += 4.6 * lines.length + 0.8;
+  }
+
+  /** Simple striped table; widths in mm */
+  function table(head: string[], rows: string[][], widths: number[], colors?: (RGB | null)[][]) {
+    ensure(12);
+    doc.setFillColor(...LIGHT);
+    doc.rect(M, y - 3.6, W, 5.4, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.2);
+    doc.setTextColor(...NAVY);
+    let x = M + 2;
+    head.forEach((h, i) => { doc.text(h, x, y); x += widths[i]; });
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    rows.forEach((row, ri) => {
+      const cells = row.map((c, i) => doc.splitTextToSize(c, widths[i] - 3) as string[]);
+      const h = Math.max(...cells.map((c) => c.length)) * 3.6 + 1.6;
+      ensure(h + 2);
+      if (ri % 2) { doc.setFillColor(248, 249, 251); doc.rect(M, y - 3.4, W, h, "F"); }
+      x = M + 2;
+      cells.forEach((c, i) => {
+        doc.setTextColor(...(colors?.[ri]?.[i] ?? ([30, 30, 30] as RGB)));
+        doc.text(c, x, y);
+        x += widths[i];
+      });
+      y += h;
+    });
+    y += 2;
+  }
+
+  pageHeader();
+
+  // Key figures
+  const cov = sum.daysInPeriod ? Math.round((sum.daily.daysCovered / sum.daysInPeriod) * 100) : 0;
+  const figures: [string, string][] = [
+    [`${sum.daily.daysCovered}/${sum.daysInPeriod}`, `days inspected (${cov}%)`],
+    [String(sum.faults.raised), "fault reports raised"],
+    [String(sum.faults.resolvedInMonth), "faults resolved"],
+    [sum.faults.avgDaysToClose == null ? "—" : sum.faults.avgDaysToClose.toFixed(1), "avg days to fix"],
+    [String(sum.faults.openAtEnd.length), "open at month end"],
+  ];
+  const bw = (W - 4 * 3) / 5;
+  figures.forEach(([v, l], i) => {
+    const bx = M + i * (bw + 3);
+    doc.setFillColor(...LIGHT);
+    doc.roundedRect(bx, y, bw, 16, 1.5, 1.5, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.setTextColor(...NAVY);
+    doc.text(v, bx + bw / 2, y + 7.5, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(...GREY);
+    doc.text(l, bx + bw / 2, y + 12.5, { align: "center" });
+  });
+  y += 23;
+
+  heading("Daily inspections");
+  line("Inspections submitted", String(sum.daily.inspections));
+  line("Days covered", `${sum.daily.daysCovered} of ${sum.daysInPeriod} days`);
+  line("Days missed", sum.daily.missedDates.length ? sum.daily.missedDates.map((d) => d.slice(0, 5)).join(", ") : "None", sum.daily.missedDates.length ? [180, 30, 30] : [0, 120, 60]);
+  line("Inspections with faults", String(sum.daily.withFaults));
+  line("Overall condition", Object.entries(sum.daily.conditions).map(([k, v]) => `${k}: ${v}`).join("   ") || "—");
+
+  heading("Weekly, monthly and yearly checks");
+  line("Weekly checks", sum.weekly.length ? sum.weekly.map((w) => `${w.date.slice(0, 5)} (${w.operator})`).join(", ") : "None this month", sum.weekly.length ? [0, 0, 0] : [180, 30, 30]);
+  line("Monthly check", sum.monthly ? `Done ${sum.monthly.date} by ${sum.monthly.operator}` : "Not done", sum.monthly ? [0, 120, 60] : [180, 30, 30]);
+  line(`Yearly check (${sum.month.slice(3)})`, sum.yearly ? `Done ${sum.yearly.date} by ${sum.yearly.operator}` : "Not done yet");
+
+  heading("Faults");
+  const p = sum.faults.byPriority;
+  line("Raised by priority", `Immediate grounding: ${p["Immediate Grounding"]}   Urgent: ${p.Urgent}   Routine: ${p.Routine}`);
+  line("Resolved this month", `${sum.faults.resolvedInMonth}${sum.faults.avgDaysToClose == null ? "" : ` — average ${sum.faults.avgDaysToClose.toFixed(1)} days to fix`}`);
+  if (sum.faults.openAtEnd.length) {
+    y += 1;
+    table(
+      ["Report", "Fault", "Priority", "Status", "Open"],
+      sum.faults.openAtEnd.map((f) => [f.reportNumber, f.title, f.priority, f.status, `${Math.floor(f.ageDays)} d${f.overdue ? " (overdue)" : ""}`]),
+      [34, 78, 30, 22, 22],
+      sum.faults.openAtEnd.map((f) => [null, null, null, null, f.overdue ? ([180, 30, 30] as RGB) : null]),
+    );
+  } else {
+    line("Open at month end", "None", [0, 120, 60]);
+  }
+
+  if (sum.topItems.length) {
+    heading("Most frequent fault items");
+    table(["Item", "Times marked NOK / U/S"], sum.topItems.map((t) => [t.label, String(t.count)]), [140, 46]);
+  }
+
+  heading("Engine and service");
+  line("Engine hours", sum.engine.end == null ? "No readings this month" : `${sum.engine.start!.toFixed(1)} to ${sum.engine.end.toFixed(1)} h (${(sum.engine.used ?? 0).toFixed(1)} h used)`);
+  const sv = sum.service;
+  const svColor: RGB = sv.state === "overdue" ? [180, 30, 30] : sv.state === "soon" ? [200, 120, 0] : [0, 0, 0];
+  line("Service status", sv.state === "unset" ? "Service schedule not set up" : sv.state === "ok" ? "OK" : sv.reasons.join("; "), svColor);
+  if (sv.nextHours != null) line("Next service", `${sv.nextHours} h${sv.hoursLeft != null ? ` (${Math.round(sv.hoursLeft)} h left)` : ""}`);
+  if (sv.dueByDate) line("Calendar due", sv.dueByDate.toLocaleDateString("en-GB"));
+
+  if (sum.operators.length) {
+    heading("Inspections by operator");
+    table(["Operator", "Inspections"], sum.operators.map((o) => [o.name, String(o.count)]), [140, 46]);
+  }
+
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(...GREY);
+    doc.text(`Generated ${new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}  ·  Page ${i} of ${pages}`, 105, 290, { align: "center" });
+  }
+  return toFile(doc, `HDK-Monthly-Summary-${sum.month.replace("/", "-")}.pdf`);
 }

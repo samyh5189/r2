@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import type { InspectionLog, ItemStatus } from "../types";
-import { getLogs } from "../storage";
+import type { FaultReport, InspectionLog, ItemStatus } from "../types";
+import { describeEmail, emailPdf, getFaultReports, getLogs, getServiceSettings } from "../storage";
+import { showPdf } from "../pdfViewer";
+import { exportMonthlySummaryPDF } from "../pdfExport";
+import { availableMonths, monthTitle, monthlySummary } from "../monthlySummary";
+import ServiceCard from "./ServiceCard";
+import { useServiceStatus } from "../useServiceStatus";
 import { logKind } from "../checkKinds";
 import { analyzeTrends, type Finding, type TrendReport } from "../trends";
 
@@ -54,14 +59,55 @@ function FindingCard({ f }: { f: Finding }) {
   );
 }
 
-export default function TrendsPage() {
-  const [logs, setLogs] = useState<InspectionLog[] | null>(null);
+function MonthlySummaryPanel({ logs, isAdmin }: { logs: InspectionLog[]; isAdmin: boolean }) {
+  const [reports, setReports] = useState<FaultReport[] | null>(null);
+  const [month, setMonth] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => { getFaultReports().then(setReports); }, []);
+  const months = useMemo(() => (reports ? availableMonths(logs, reports) : []), [logs, reports]);
+  const selected = month || months[0] || "";
+
+  async function build() {
+    const settings = await getServiceSettings();
+    return exportMonthlySummaryPDF(monthlySummary(selected, logs, reports!, settings));
+  }
+
+  async function email() {
+    setBusy(true);
+    setNote("Emailing summary…");
+    const pdf = await build();
+    setNote(describeEmail(await emailPdf(`RESCUE 2 monthly summary — ${monthTitle(selected)}`, `Attached is the RESCUE 2 inspection and maintenance summary for ${monthTitle(selected)}.`, pdf)));
+    setBusy(false);
+  }
+
+  if (!reports) return null;
+  return (
+    <>
+      <h3 className="trend-heading">Monthly summary</h3>
+      <div className="summary-bar">
+        <select className="filter-input" value={selected} onChange={(e) => { setMonth(e.target.value); setNote(null); }}>
+          {months.map((m) => <option key={m} value={m}>{monthTitle(m)}</option>)}
+        </select>
+        <button className="btn-export" onClick={() => showPdf(build())} disabled={!selected}>View PDF</button>
+        {isAdmin && <button className="btn-export secondary" onClick={email} disabled={!selected || busy}>Email</button>}
+      </div>
+      {note && <p className="email-note" style={{ marginTop: 6 }}>{note}</p>}
+      <p className="editor-hint" style={{ marginTop: 6 }}>Inspection coverage, missed days, faults raised and fixed, open faults with their age, engine hours and service status.</p>
+    </>
+  );
+}
+
+export default function TrendsPage({ isAdmin = false }: { isAdmin?: boolean }) {
+  const [allLogs, setAllLogs] = useState<InspectionLog[] | null>(null);
   const [windowDays, setWindowDays] = useState(30);
   const [advice, setAdvice] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
 
+  useEffect(() => { getLogs().then(setAllLogs); }, []);
   // Trends follow the daily inspections, which run on a steady cadence
-  useEffect(() => { getLogs().then((all) => setLogs(all.filter((l) => logKind(l) === "daily"))); }, []);
+  const logs = useMemo(() => allLogs?.filter((l) => logKind(l) === "daily") ?? null, [allLogs]);
+  const service = useServiceStatus(allLogs);
   const report = useMemo(() => (logs ? analyzeTrends(logs, windowDays) : null), [logs, windowDays]);
 
   if (!report) return <div className="container" style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Analysing inspections…</div>;
@@ -85,6 +131,8 @@ export default function TrendsPage() {
           ))}
         </div>
       </div>
+
+      {service && <ServiceCard status={service} />}
 
       <div className="trend-stats">
         <div><strong>{report.inspections}</strong>inspections</div>
@@ -126,6 +174,8 @@ export default function TrendsPage() {
             : <button className="btn-export" onClick={getAdvice} disabled={asking}>{asking ? "Analysing…" : "Get preventive maintenance advice"}</button>}
         </>
       )}
+
+      {allLogs && <MonthlySummaryPanel logs={allLogs} isAdmin={isAdmin} />}
     </div>
   );
 }
