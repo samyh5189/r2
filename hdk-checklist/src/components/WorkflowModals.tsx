@@ -122,7 +122,7 @@ export function RepairModal({ report, onClose, onDone }: { report: FaultReport; 
           <h4 className="repair-step">3 · Acceptance test</h4>
           {dateTime("Test", acceptance.date, acceptance.time, (d, t) => a({ date: d, time: t }))}
           <label>Comments<textarea rows={2} value={acceptance.comments ?? ""} onChange={(e) => a({ comments: e.target.value })} /></label>
-          <NameField label="Maintenance team (RUL)" value={acceptance.maintenanceName ?? ""} onChange={(v) => a({ maintenanceName: v })} />
+          <NameField label="Maintenance team (HDK)" value={acceptance.maintenanceName ?? ""} onChange={(v) => a({ maintenanceName: v })} />
           <SignedOrPad existing={signed.maintenanceSignature} onChange={(v) => a({ maintenanceSignature: v })} />
           <NameField label="ARFF (name)" value={acceptance.arffName ?? ""} onChange={(v) => a({ arffName: v })} operators={operators} />
           <SignedOrPad existing={signed.arffSignature} onChange={(v) => a({ arffSignature: v })} />

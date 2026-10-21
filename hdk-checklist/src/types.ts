@@ -97,6 +97,7 @@ export interface InspectionLog {
   faultCount: number;
   faultReportId?: string;
   shiftSignoff?: ShiftSignoff;
+  deviceId?: string;
   createdAt: string;
 }
 

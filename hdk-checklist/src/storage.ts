@@ -42,9 +42,26 @@ export async function saveLog(log: InspectionLog): Promise<string | null> {
   return null;
 }
 
-/** Today's inspection, if one has already been submitted (one per day). */
-export async function findLogForDate(dateGB: string): Promise<InspectionLog | null> {
-  return (await getLogs()).find((l) => l.date === dateGB) ?? null;
+const LS_DEVICE = "hdk_device_id";
+
+/** A random id kept on this device, so each device submits at most one inspection a day. */
+export function deviceId(): string {
+  try {
+    let id = localStorage.getItem(LS_DEVICE);
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem(LS_DEVICE, id); }
+    return id;
+  } catch { return ""; }
+}
+
+/** An inspection already submitted on this date from this device, or by this operator (one each per day). */
+export async function findLogForDate(dateGB: string, operatorName = ""): Promise<InspectionLog | null> {
+  const device = deviceId();
+  // Logs saved before device ids existed are recognised by this device's local copy
+  const savedHere = new Set(lsGet<InspectionLog>(LS_LOGS).map((l) => l.id));
+  const name = operatorName.trim().toLowerCase();
+  return (await getLogs()).find((l) => l.date === dateGB && (
+    (device && l.deviceId === device) || savedHere.has(l.id) || (name && l.operatorName.trim().toLowerCase() === name)
+  )) ?? null;
 }
 
 // ── Fault reports ─────────────────────────────────────────────────────

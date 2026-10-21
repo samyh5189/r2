@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import SignaturePad from "signature_pad";
 import { buildBlankChecklist, buildChecklist, itemType } from "../checklistData";
 import type { ChecklistSection, ChecklistSectionConfig, ItemStatus, InspectionLog, FaultReport, EvidenceItem, Operator } from "../types";
-import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek, getChecklistConfig, findLogForDate, getOperators } from "../storage";
+import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek, getChecklistConfig, findLogForDate, getOperators, deviceId } from "../storage";
 import { generateFaultReport } from "../faultReportAI";
 import { showPdf } from "../pdfViewer";
 import { exportInspectionPDF, exportFaultReportPDF } from "../pdfExport";
@@ -78,6 +78,7 @@ export default function ChecklistPage() {
   // undefined = still checking; null = no inspection yet today
   const [todayLog, setTodayLog] = useState<InspectionLog | null | undefined>(undefined);
   const [blockedMsg, setBlockedMsg] = useState("");
+  const [starting, setStarting] = useState(false);
 
   // Outro fields
   const [overallCondition, setOverallCondition] = useState<"Excellent" | "Good" | "Poor" | "">("");
@@ -214,13 +215,8 @@ export default function ChecklistPage() {
   async function handleSubmit() {
     if (!operatorName.trim() || !overallCondition) return;
     setPhase("submitting");
-    // Only one inspection per day — check before spending time on the AI report
-    const existing = await findLogForDate(new Date().toLocaleDateString("en-GB"));
-    if (existing) {
-      setBlockedMsg(`Today's inspection was already submitted by ${existing.operatorName} at ${existing.time}.`);
-      setPhase("blocked");
-      return;
-    }
+    // One inspection per device and per operator a day — check before spending time on the AI report
+    if (await checkAlreadyDone()) return;
     const sig = sigPad.current?.isEmpty() ? "" : (sigPad.current?.toDataURL() ?? "");
     const count = faultsSoFar;
     const now = new Date();
@@ -230,6 +226,7 @@ export default function ChecklistPage() {
       time: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
       duration: elapsed,
       operatorName: operatorName.trim(),
+      deviceId: deviceId(),
       fleetNumber: "",
       operatorSignature: sig,
       sections,
@@ -269,6 +266,21 @@ export default function ChecklistPage() {
     setPhase("done");
   }
 
+  async function checkAlreadyDone() {
+    const existing = await findLogForDate(new Date().toLocaleDateString("en-GB"), operatorName);
+    if (!existing) return false;
+    setBlockedMsg(`${existing.operatorName} already submitted today's inspection at ${existing.time}.`);
+    setPhase("blocked");
+    return true;
+  }
+
+  async function handleStart() {
+    setStarting(true);
+    const done = await checkAlreadyDone();
+    setStarting(false);
+    if (!done) setPhase("item");
+  }
+
   function handleNew() {
     setSections(config ? buildChecklist(config) : buildBlankChecklist());
     setPhase("intro"); setCurrentIdx(0);
@@ -283,12 +295,11 @@ export default function ChecklistPage() {
     return (
       <div className="cl-screen">
         <div className="cl-intro-card">
-          <div className="cl-intro-icon">✅</div>
+          <img className="cl-intro-photo" src={rescue2Photo} alt="RESCUE 2 fire vehicle" />
           <h2 className="cl-intro-title">Today's inspection is done</h2>
           <p className="cl-intro-sub">
             {blockedMsg || `Submitted by ${todayLog!.operatorName} at ${todayLog!.time}.`}
           </p>
-          <p className="cl-intro-count">Only one daily inspection can be submitted per day. An admin can delete it from Logs if it needs to be redone.</p>
         </div>
       </div>
     );
@@ -320,8 +331,8 @@ export default function ChecklistPage() {
             <span className="legend-item"><span className="legend-dot" style={{ background: "var(--us)" }} /> U/S — Unserviceable</span>
             <span className="legend-item"><span className="legend-dot" style={{ background: "var(--na)" }} /> N/A — Not applicable</span>
           </div>
-          <button className="btn-submit" disabled={!operatorName.trim() || todayLog === undefined} onClick={() => setPhase("item")}>
-            Start Inspection →
+          <button className="btn-submit" disabled={!operatorName.trim() || todayLog === undefined || starting} onClick={handleStart}>
+            {starting ? "Checking…" : "Start Inspection →"}
           </button>
         </div>
       </div>
@@ -348,7 +359,7 @@ export default function ChecklistPage() {
     return (
       <div className="cl-screen">
         <div className="success-screen">
-          <div className="success-icon">{isCritical ? "🚨" : faultsSoFar > 0 ? "⚠️" : "✅"}</div>
+          <img className="success-photo" src={rescue2Photo} alt="RESCUE 2 fire vehicle" />
           <h2>{isCritical ? "Vehicle Grounded" : "Inspection Complete"}</h2>
           <p>{savedLog.date} · {savedLog.time} · <strong>{savedLog.operatorName}</strong></p>
           <p style={{ fontSize: 12 }}>Duration: {durMin}m {durSec}s · {savedLog.faultCount} fault{savedLog.faultCount !== 1 ? "s" : ""}</p>
@@ -375,7 +386,7 @@ export default function ChecklistPage() {
             )}
           </div>
           <br />
-          <button className="btn-new" onClick={handleNew}>+ New Inspection</button>
+          <button className="btn-new" onClick={handleNew}>Done</button>
         </div>
       </div>
     );

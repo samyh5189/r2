@@ -3,6 +3,7 @@ import type { InspectionLog, FaultReport } from "../types";
 import { getLogs, getFaultReports, sameInspectionWeek, updateLog, deleteLog, updateFaultReport, deleteFaultReport } from "../storage";
 import { EditLogModal, EditFaultModal } from "./EditModals";
 import { SignOffModal, RepairModal } from "./WorkflowModals";
+import NewFaultModal from "./NewFaultModal";
 import { showPdf } from "../pdfViewer";
 import { RACL_LOGO } from "../raclLogo";
 import { exportInspectionPDF, exportFaultReportPDF, exportWeeklyPDF } from "../pdfExport";
@@ -128,7 +129,7 @@ function FaultModal({ report, onClose }: { report: FaultReport; onClose: () => v
                     ["Remarks", report.repair?.remarks],
                     ["Acceptance test", [report.acceptance?.date, report.acceptance?.time].filter(Boolean).join(" ")],
                     ["Comments", report.acceptance?.comments],
-                    ["Maintenance (RUL)", report.acceptance?.maintenanceName],
+                    ["Maintenance (HDK)", report.acceptance?.maintenanceName],
                     ["ARFF", report.acceptance?.arffName],
                   ] as [string, string | undefined][]).filter(([, v]) => v).map(([k, v]) => (
                     <tr key={k}>
@@ -313,6 +314,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
   const [editFault, setEditFault] = useState<FaultReport | null>(null);
   const [signOff, setSignOff] = useState<InspectionLog | null>(null);
   const [repairFault, setRepairFault] = useState<FaultReport | null>(null);
+  const [newFault, setNewFault] = useState(false);
 
   // Every save is mirrored locally, so only offer a sync when this device holds records the DB lacks
   const hasLocalData = useMemo(() => {
@@ -448,6 +450,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
         </>
       ) : (
         <>
+          <button className="btn-report-fault" onClick={() => setNewFault(true)}>+ Report a fault</button>
           <div className="log-table-wrap">
             <table className="log-table">
               <thead>
@@ -506,6 +509,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
       {viewLog && <LogModal log={viewLog} onClose={() => setViewLog(null)} />}
       {viewFault && <FaultModal report={viewFault} onClose={() => setViewFault(null)} />}
       {signOff && <SignOffModal log={signOff} onClose={() => setSignOff(null)} onDone={() => { setSignOff(null); reload(); }} />}
+      {newFault && <NewFaultModal onClose={() => setNewFault(false)} onDone={(r) => { setNewFault(false); reload(); showPdf(exportFaultReportPDF(r)); }} />}
       {repairFault && <RepairModal report={repairFault} onClose={() => setRepairFault(null)} onDone={() => { setRepairFault(null); reload(); }} />}
       {editLog && <EditLogModal item={editLog} onClose={() => setEditLog(null)} onSave={(l) => adminAction(() => updateLog(l)).then(() => setEditLog(null))} />}
       {editFault && <EditFaultModal item={editFault} onClose={() => setEditFault(null)} onSave={(r) => adminAction(() => updateFaultReport(r)).then(() => setEditFault(null))} />}

@@ -1,4 +1,4 @@
-import type { ChecklistSection, FaultItem, FaultReport } from "./types";
+import type { ChecklistSection, EvidenceItem, FaultItem, FaultReport } from "./types";
 import { nextFaultReportNumber } from "./storage";
 
 function collectFaults(sections: ChecklistSection[]): FaultItem[] {
@@ -20,6 +20,26 @@ function collectFaults(sections: ChecklistSection[]): FaultItem[] {
     }
   }
   return faults;
+}
+
+// The model sometimes wraps the JSON in a code fence
+function parseJson(text: string) {
+  return JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+}
+
+async function askAI(prompt: string) {
+  const response = await fetch("/api/fault-report", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1200,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!response.ok) throw new Error(`AI error ${response.status}`);
+  const data = await response.json();
+  return parseJson(data.content[0].text);
 }
 
 async function generateWithAI(faults: FaultItem[], operatorName: string) {
@@ -58,19 +78,7 @@ Priority rules:
 
 Respond with only the JSON object.`;
 
-  const response = await fetch("/api/fault-report", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1200,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-
-  if (!response.ok) throw new Error(`AI error ${response.status}`);
-  const data = await response.json();
-  const parsed = JSON.parse(data.content[0].text);
+  const parsed = await askAI(prompt);
 
   const enrichedFaults = faults.map((f) => {
     const match = parsed.faults?.find((pf: { label: string }) =>
@@ -168,6 +176,116 @@ export async function generateFaultReport(
     faultSummary: result.faultSummary,
     aiAssessment: result.assessment,
     priority: result.priority,
+    status: "Open",
+    createdAt: now.toISOString(),
+  };
+}
+
+// ── Fault reported outside the daily inspection ───────────────────────
+
+export interface ManualFaultInput {
+  operatorName: string;
+  description: string;
+  status: "NOK" | "U/S";
+  evidence: EvidenceItem[];
+  signature: string;
+}
+
+const PRIORITIES = ["Routine", "Urgent", "Immediate Grounding"] as const;
+const SEVERITIES = ["Minor", "Major", "Critical"];
+
+async function enhanceWithAI(input: ManualFaultInput) {
+  const prompt = `You are an ARFF (Airport Rescue and Firefighting) vehicle maintenance officer at Kulhudhuffushi Airport (HDK), Maldives. Operator "${input.operatorName}" reported a fault on RESCUE 2 outside the daily inspection. Their own words:
+
+"""
+${input.description}
+"""
+
+Status given by the operator: ${input.status === "U/S" ? "U/S — Unserviceable" : "NOK — Minor defect, vehicle still operational"}
+${input.evidence.length > 0 ? `${input.evidence.length} photo/video evidence item(s) attached.` : ""}
+
+Rewrite this as a formal ARFF fault report. Keep every fact the operator gave; correct spelling and grammar; do not invent measurements, causes or parts the operator did not mention or clearly imply. Return valid JSON:
+{
+  "faultTitle": "<ALL-CAPS SHORT TITLE, e.g. GEAR OIL LEAK>",
+  "itemLabel": "<the affected component, short, e.g. Gear oil seal>",
+  "section": "<vehicle system, e.g. Engine, Brakes, Firefighting system, Lights, Body & cab>",
+  "detailsOfDefects": "<Formal 2-4 sentence narrative describing the defect as reported, any evidence, and urgency. Official ARFF maintenance report tone.>",
+  "faultSummary": "<1 sentence plain summary>",
+  "assessment": "<1 sentence on vehicle operational status>",
+  "priority": "Routine|Urgent|Immediate Grounding",
+  "severity": "Minor|Major|Critical",
+  "recommendedAction": "<specific action>"
+}
+
+Priority rules:
+- "Immediate Grounding": unserviceable firefighting system, brakes, steering or fuel
+- "Urgent": any other unserviceable item
+- "Routine": minor defect, vehicle operational
+
+Respond with only the JSON object.`;
+  const p = await askAI(prompt);
+  return {
+    title: String(p.faultTitle || "FAULT REPORTED"),
+    label: String(p.itemLabel || "Reported fault"),
+    section: String(p.section || "Reported outside inspection"),
+    detailsOfDefects: String(p.detailsOfDefects || input.description),
+    faultSummary: String(p.faultSummary || ""),
+    assessment: String(p.assessment || ""),
+    priority: PRIORITIES.includes(p.priority) ? p.priority as FaultReport["priority"] : input.status === "U/S" ? "Urgent" : "Routine",
+    severity: SEVERITIES.includes(p.severity) ? String(p.severity) : input.status === "U/S" ? "Critical" : "Minor",
+    recommendedAction: String(p.recommendedAction || "Inspect and repair as required."),
+  };
+}
+
+function enhanceLocal(input: ManualFaultInput) {
+  const us = input.status === "U/S";
+  const text = input.description.trim().replace(/\s+/g, " ");
+  const firstLine = text.split(/[.\n]/)[0].slice(0, 60);
+  return {
+    title: firstLine.toUpperCase(),
+    label: firstLine,
+    section: "Reported outside inspection",
+    detailsOfDefects: `${input.operatorName} reported the following fault on RESCUE 2 (HDK-ARFF): ${text}${/[.!?]$/.test(text) ? "" : "."}${input.evidence.length ? ` ${input.evidence.length} photo/video evidence item(s) have been attached to this report.` : ""}`,
+    faultSummary: `Fault reported on RESCUE 2 by ${input.operatorName}.`,
+    assessment: us ? "Item is unserviceable. Assess risk before deployment and arrange urgent maintenance." : "Vehicle is operational with a minor defect. Schedule maintenance.",
+    priority: (us ? "Urgent" : "Routine") as FaultReport["priority"],
+    severity: us ? "Critical" : "Minor",
+    recommendedAction: us ? "Inspect and repair before return to full operation." : "Schedule maintenance at earliest opportunity.",
+  };
+}
+
+/** Builds a fault report from an operator's own description, polished by AI when available. */
+export async function generateManualFaultReport(input: ManualFaultInput): Promise<FaultReport> {
+  let r;
+  try { r = await enhanceWithAI(input); }
+  catch { r = enhanceLocal(input); }
+
+  const now = new Date();
+  return {
+    id: crypto.randomUUID(),
+    reportNumber: await nextFaultReportNumber(),
+    inspectionLogId: "",
+    date: now.toLocaleDateString("en-GB"),
+    time: now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+    vehicle: "RESCUE 2 (HDK-ARFF)",
+    vehicleEquipmentLine: `RESCUE 2 (HDK-ARFF) ${r.title}`,
+    operatorName: input.operatorName,
+    fleetNumber: "",
+    operatorSignature: input.signature,
+    faults: [{
+      itemId: `manual-${crypto.randomUUID().slice(0, 8)}`,
+      section: r.section,
+      label: r.label,
+      status: input.status,
+      remarks: input.description.trim(),
+      evidence: input.evidence,
+      severity: r.severity,
+      recommendedAction: r.recommendedAction,
+    }],
+    detailsOfDefects: r.detailsOfDefects,
+    faultSummary: r.faultSummary,
+    aiAssessment: r.assessment,
+    priority: r.priority,
     status: "Open",
     createdAt: now.toISOString(),
   };

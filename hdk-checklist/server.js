@@ -191,18 +191,25 @@ app.post("/api/logs", writeLimit, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    // Serialise submissions so two devices can't both create today's inspection
+    // Serialise submissions so the same device or operator can't submit twice in a day
     await client.query("SELECT pg_advisory_xact_lock(hashtext('inspection_logs'))");
     const existing = await client.query("SELECT data FROM inspection_logs WHERE id = $1", [log.id]);
     if (existing.rowCount > 0) { await client.query("COMMIT"); return res.json({ ok: true }); }
+    const device = typeof log.deviceId === "string" ? log.deviceId.slice(0, 64) : "";
     const sameDay = await client.query(
-      "SELECT data->>'operatorName' AS name, data->>'time' AS time FROM inspection_logs WHERE data->>'date' = $1 LIMIT 1",
-      [log.date]
+      `SELECT data->>'operatorName' AS name, data->>'time' AS time, ($2 <> '' AND data->>'deviceId' = $2) AS by_device
+       FROM inspection_logs
+       WHERE data->>'date' = $1 AND (($2 <> '' AND data->>'deviceId' = $2) OR lower(trim(data->>'operatorName')) = lower(trim($3)))
+       LIMIT 1`,
+      [log.date, device, String(log.operatorName)]
     );
     if (sameDay.rowCount > 0) {
       await client.query("ROLLBACK");
-      const { name, time } = sameDay.rows[0];
-      return res.status(409).json({ error: `Today's inspection was already submitted by ${name} at ${time}.`, operatorName: name, time });
+      const { name, time, by_device } = sameDay.rows[0];
+      const error = by_device
+        ? `Today's inspection on this device was already submitted by ${name} at ${time}.`
+        : `${name} already submitted an inspection today at ${time}.`;
+      return res.status(409).json({ error, operatorName: name, time });
     }
     await client.query(
       `INSERT INTO inspection_logs (id, data, created_at)

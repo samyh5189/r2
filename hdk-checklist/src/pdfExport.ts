@@ -452,7 +452,7 @@ export async function exportFaultReportPDF(report: FaultReport) {
   dtBlock("DATE / TIME", "REQUIRED END DATE / TIME", digits(ac.date), digits(ac.time), digits(ac.requiredEndDate), digits(ac.requiredEndTime));
 
   blankRow("Comments :", 16, ac.comments);
-  maintRow("MAINTENANCE TEAM (RUL) :", ac.maintenanceName, maintSig);
+  maintRow("MAINTENANCE TEAM (HDK) :", ac.maintenanceName, maintSig);
   maintRow("ARFF (Name) :", ac.arffName, arffSig);
 
   // ── PHOTOGRAPHIC EVIDENCE (new page if faults have evidence) ──────────

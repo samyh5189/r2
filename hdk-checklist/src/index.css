@@ -161,6 +161,7 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
 /* ── Success screen ─────────────────────────────────────────────────── */
 .success-screen { text-align: center; padding: 48px 20px; max-width: 480px; margin: 0 auto; }
 .success-icon { font-size: 60px; margin-bottom: 16px; }
+.success-photo { display: block; width: 100%; max-width: 420px; margin: 0 auto 16px; aspect-ratio: 16 / 10; object-fit: cover; object-position: center 60%; border-radius: 14px; }
 .success-screen h2 { font-size: 24px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
 .success-screen p { color: var(--muted); margin-bottom: 6px; font-size: 14px; }
 .fault-badge { display: inline-block; background: #fef3c7; border: 1.5px solid var(--nok); color: #92400e; border-radius: 10px; padding: 8px 18px; font-size: 13px; font-weight: 600; margin: 10px 0 20px; }
@@ -553,3 +554,11 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
 @media (max-width: 600px) { .log-table td.log-actions { flex-wrap: wrap; } .log-table td.log-actions .action-btn { min-width: 22%; } }
 .cl-intro-photo { width: calc(100% + 56px); margin: -36px -28px 0; aspect-ratio: 16 / 10; object-fit: cover; object-position: center 60%; border-radius: 20px 20px 0 0; display: block; }
 @media (max-width: 480px) { .cl-intro-photo { width: calc(100% + 36px); margin: -28px -18px 0; border-radius: 16px 16px 0 0; } }
+
+/* Report a fault (outside the daily inspection) */
+.btn-report-fault { width: 100%; margin: 10px 0 4px; padding: 12px; border: 1.5px dashed var(--nok); border-radius: 10px; background: #fff7ed; color: #9a3412; font-weight: 700; font-size: 14px; font-family: inherit; cursor: pointer; }
+.btn-report-fault:hover { background: #ffedd5; }
+.nf-status { display: flex; gap: 8px; }
+.nf-status-btn { flex: 1; padding: 10px 8px; border: 1.5px solid var(--border); border-radius: 8px; background: white; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; color: var(--muted); }
+.nf-status-btn.nok.on { border-color: var(--nok); background: #fff7ed; color: #9a3412; }
+.nf-status-btn.us.on { border-color: var(--us); background: #fef2f2; color: #991b1b; }
