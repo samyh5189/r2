@@ -251,11 +251,17 @@ function loadArt(): Promise<FaultReportArt> {
   return artPromise;
 }
 
-/** The fault report in the RACL template (see faultReportPdf.ts) */
-export async function exportFaultReportPDF(report: FaultReport) {
+/**
+ * The fault report in the RACL template (see faultReportPdf.ts). With `updateId`, that maintenance
+ * update printed as its own report under the same number.
+ */
+export async function exportFaultReportPDF(report: FaultReport, updateId?: string) {
+  const actions = (report.updates ?? []).filter((u) => u.kind === "action");
+  const i = updateId ? actions.findIndex((u) => u.id === updateId) : -1;
+  const view = i >= 0 ? { entry: actions[i], n: i + 1, withAcceptance: report.status === "Resolved" && i === actions.length - 1 } : undefined;
   const clean = (d?: string) => (d ? stripWhiteBg(d) : Promise.resolve(undefined));
   const photoSrcs = report.faults.flatMap((f) => f.evidence ?? []).filter((ev) => ev.type === "photo").map((ev) => ev.dataUrl);
-  const [art, operators, operator, shift, repair, maintenance, arff, photos] = await Promise.all([
+  const [art, operators, operator, shift, repair, maintenance, arff, update, photos] = await Promise.all([
     loadArt(),
     getOperators().catch(() => []),
     clean(report.operatorSignature),
@@ -263,15 +269,16 @@ export async function exportFaultReportPDF(report: FaultReport) {
     clean(report.repair?.repairedBySignature),
     clean(report.acceptance?.maintenanceSignature),
     clean(report.acceptance?.arffSignature),
+    clean(view?.entry.signature),
     Promise.all(photoSrcs.map((src) => imageData(src).catch(() => ""))),
   ]);
   const me = operators.find((o) => o.name.trim().toLowerCase() === report.operatorName.trim().toLowerCase());
   const doc = buildFaultReportPdf(report, {
     designation: me?.rank?.trim() || "ARFF",
-    signatures: { operator, shift, repair, maintenance, arff },
+    signatures: { operator, shift, repair, maintenance, arff, update },
     photos: photos.filter(Boolean),
-  }, art);
-  return toFile(doc, `${report.reportNumber.replace(/\//g, "-")}.pdf`);
+  }, art, view);
+  return toFile(doc, `${report.reportNumber.replace(/\//g, "-")}${view ? `-Update-${view.n}` : ""}.pdf`);
 }
 
 /**

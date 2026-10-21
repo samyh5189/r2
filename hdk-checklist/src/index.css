@@ -1011,3 +1011,36 @@ button, a, input, select, textarea, label { touch-action: manipulation; }
 .target-field em { white-space: nowrap; }
 .dlg-btns button:focus:not(:focus-visible) { outline: none; }
 .dlg-btns button:focus-visible { outline: 3px solid rgba(11, 42, 74, 0.35); outline-offset: 2px; }
+
+/* Repair modal: earlier maintenance updates */
+.ro-update { border-left: 3px solid var(--border); padding: 4px 0 4px 10px; display: flex; flex-direction: column; gap: 2px; }
+.ro-update span { font-size: 12px; color: var(--muted); font-weight: 600; }
+.ro-update p { font-size: 14px; margin: 0; white-space: pre-wrap; }
+.ro-update .ro-update-rec { font-size: 13px; color: var(--muted); }
+
+/* Fault report activity: a thread of the report, its updates and sign-offs */
+.thread { list-style: none; display: flex; flex-direction: column; gap: 0; }
+.thread-msg { position: relative; display: flex; gap: 10px; padding-bottom: 14px; }
+.thread-msg::before { content: ""; position: absolute; left: 15px; top: 34px; bottom: 0; width: 2px; background: var(--border); }
+.thread-msg:last-child::before { display: none; }
+.thread-avatar { width: 32px; height: 32px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: white; background: var(--navy); }
+.thread-avatar.role-maintenance { background: #b45309; }
+.thread-avatar.role-admin { background: var(--na); }
+.thread-avatar.role-none { background: var(--ok); }
+.thread-msg.pending .thread-avatar { background: white; border: 2px dashed var(--muted); }
+.thread-msg.late .thread-avatar { border-color: var(--us); }
+.thread-card { flex: 1; min-width: 0; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; }
+.thread-msg.pending .thread-card { background: transparent; border-style: dashed; }
+.thread-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 13px; }
+.thread-role { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--section-bg); border-radius: 999px; padding: 1px 7px; }
+.thread-head time { margin-left: auto; font-size: 12px; color: var(--muted); }
+.thread-title { font-size: 13px; font-weight: 700; margin-top: 2px; }
+.thread-msg.pending .thread-title { color: var(--muted); }
+.thread-msg.late .thread-title { color: var(--us); }
+.thread-body { font-size: 13px; margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.thread-rec { font-size: 13px; margin: 4px 0 0; color: var(--muted); }
+.thread-rec span { font-weight: 700; color: var(--text); }
+.thread-sig { display: block; max-height: 40px; max-width: 140px; margin-top: 6px; }
+.thread-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.thread-pdf { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--section-bg); color: var(--text); font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer; overflow-wrap: anywhere; text-align: left; }
+.thread-note { font-size: 12px; color: var(--muted); }

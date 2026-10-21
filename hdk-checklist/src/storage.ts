@@ -429,9 +429,13 @@ export async function signOffLog(logId: string, name: string, pin: string, signa
 // ── Repair workflow ───────────────────────────────────────────────────
 
 /** Repair progress, recorded by an ARFF operator identified with their PIN */
-export async function updateRepair(reportId: string, recordedBy: string, pin: string, repair: FaultRepair, acceptance: FaultAcceptance): Promise<FaultReport> {
+/** A maintenance update for the report's activity: action taken, recommendation, signature */
+export interface UpdateInput { text: string; recommendation: string; signature?: string }
+
+export async function updateRepair(reportId: string, recordedBy: string, pin: string, repair: FaultRepair, acceptance: FaultAcceptance, update?: UpdateInput): Promise<FaultReport> {
   const data = await postJson<{ report: FaultReport }>(`/api/fault-reports/${reportId}/repair`, {
     recordedBy, pin, repair: await uploadImages(repair), acceptance: await uploadImages(acceptance),
+    ...(update ? { update: await uploadImages(update) } : {}),
   }, "Could not save the repair.");
   lsReplace(LS_FAULTS, reportId, data.report);
   return data.report;
@@ -503,6 +507,11 @@ async function postEmail(path: string, body: object, admin: boolean): Promise<Em
 /** Emails a newly created fault report's PDF to the recipients set in Setup (once per report). */
 export async function emailFaultReport(report: FaultReport, pdf: { blob: Blob; filename: string }): Promise<EmailResult> {
   return postEmail(`/api/fault-reports/${report.id}/email`, { pdf: await blobToBase64(pdf.blob), filename: pdf.filename }, false);
+}
+
+/** Emails a maintenance update's own report (once, when it's new). */
+export async function emailFaultUpdate(report: FaultReport, updateId: string, pdf: { blob: Blob; filename: string }): Promise<EmailResult> {
+  return postEmail(`/api/fault-reports/${report.id}/updates/${updateId}/email`, { pdf: await blobToBase64(pdf.blob), filename: pdf.filename }, false);
 }
 
 /** Admin: email any PDF (monthly summary) to the recipients. */

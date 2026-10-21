@@ -1,5 +1,6 @@
 import type { CheckKind, ChecklistSection, EvidenceItem, FaultItem, FaultReport } from "./types";
 import { nextFaultReportNumber } from "./storage";
+import { DEFAULT_RECOMMENDATION, defaultActionTaken } from "./faultReportPdf";
 
 function collectFaults(sections: ChecklistSection[]): FaultItem[] {
   const faults: FaultItem[] = [];
@@ -67,9 +68,11 @@ Write this up as a formal ARFF fault report. Report only what the inspection rec
   "assessment": "<1 sentence on vehicle operational status>",
   "priority": "Routine|Urgent|Immediate Grounding",
   "faults": [
-    { "label": "<item name>", "severity": "Minor|Major|Critical", "recommendedAction": "<specific action>" }
+    { "label": "<item name>", "severity": "Minor|Major|Critical", "recommendedAction": "<polite request, e.g. Kindly inspect and repair the tyre at the earliest for the proper functioning of the vehicle.>" }
   ]
 }
+
+Tone for recommendedAction: courteous and constructive, addressed to the maintenance team. Never write "remove from service immediately", "ground the vehicle" or similar orders.
 
 Priority rules:
 - "Immediate Grounding": any U/S item in firefighting systems, brakes, steering, or fuel
@@ -85,7 +88,7 @@ Respond with only the JSON object.`;
       f.label.toLowerCase().includes(pf.label.toLowerCase().substring(0, 8)) ||
       pf.label.toLowerCase().includes(f.label.toLowerCase().substring(0, 8))
     );
-    return { ...f, severity: match?.severity ?? f.severity, recommendedAction: match?.recommendedAction ?? "Inspect and repair as required." };
+    return { ...f, severity: match?.severity ?? f.severity, recommendedAction: match?.recommendedAction ?? "Kindly inspect and repair as required." };
   });
 
   return {
@@ -109,8 +112,8 @@ function generateLocal(faults: FaultItem[], operatorName: string, kind: CheckKin
     ...f,
     severity: f.status === "U/S" ? "Critical" : faults.length > 3 ? "Major" : "Minor",
     recommendedAction: f.status === "U/S"
-      ? "Remove from service immediately. Full inspection and repair required before return to operation."
-      : "Schedule maintenance at earliest opportunity. Monitor condition during operations.",
+      ? "Kindly inspect and repair at the earliest for the proper functioning of the vehicle."
+      : "Kindly inspect and attend to this at the next convenient opportunity.",
   }));
 
   const usList = faults.filter((f) => f.status === "U/S").map((f) => f.label);
@@ -178,6 +181,8 @@ export async function generateFaultReport(
     aiAssessment: result.assessment,
     priority: result.priority,
     status: "Open",
+    actionTaken: defaultActionTaken(result.priority),
+    recommendation: DEFAULT_RECOMMENDATION,
     createdAt: now.toISOString(),
   };
 }
@@ -215,8 +220,10 @@ Rewrite this as a formal ARFF fault report. Keep every fact the operator gave; c
   "assessment": "<1 sentence on vehicle operational status>",
   "priority": "Routine|Urgent|Immediate Grounding",
   "severity": "Minor|Major|Critical",
-  "recommendedAction": "<specific action>"
+  "recommendedAction": "<polite request, e.g. Kindly inspect and repair the reported issue at the earliest for the proper functioning of the vehicle.>"
 }
+
+Tone for recommendedAction: courteous and constructive, addressed to the maintenance team. Never write "remove from service immediately", "ground the vehicle" or similar orders.
 
 Priority rules:
 - "Immediate Grounding": unserviceable firefighting system, brakes, steering or fuel
@@ -234,7 +241,7 @@ Respond with only the JSON object.`;
     assessment: String(p.assessment || ""),
     priority: PRIORITIES.includes(p.priority) ? p.priority as FaultReport["priority"] : input.status === "U/S" ? "Urgent" : "Routine",
     severity: SEVERITIES.includes(p.severity) ? String(p.severity) : input.status === "U/S" ? "Critical" : "Minor",
-    recommendedAction: String(p.recommendedAction || "Inspect and repair as required."),
+    recommendedAction: String(p.recommendedAction || "Kindly inspect and repair as required."),
   };
 }
 
@@ -251,7 +258,7 @@ function enhanceLocal(input: ManualFaultInput) {
     assessment: us ? "Item is unserviceable. Assess risk before deployment and arrange urgent maintenance." : "Vehicle is operational with a minor defect. Schedule maintenance.",
     priority: (us ? "Urgent" : "Routine") as FaultReport["priority"],
     severity: us ? "Critical" : "Minor",
-    recommendedAction: us ? "Inspect and repair before return to full operation." : "Schedule maintenance at earliest opportunity.",
+    recommendedAction: us ? "Kindly inspect and repair at the earliest for the proper functioning of the vehicle." : "Kindly inspect and attend to this at the next convenient opportunity.",
   };
 }
 
@@ -288,6 +295,8 @@ export async function generateManualFaultReport(input: ManualFaultInput): Promis
     aiAssessment: r.assessment,
     priority: r.priority,
     status: "Open",
+    actionTaken: defaultActionTaken(r.priority),
+    recommendation: DEFAULT_RECOMMENDATION,
     createdAt: now.toISOString(),
   };
 }

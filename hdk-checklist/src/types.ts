@@ -157,7 +157,33 @@ export interface FaultReport {
   repairUpdatedBy?: string;
   emailedAt?: string;
   emailedTo?: number;
+  /** Fault report template fields (absent on older reports: defaults in faultReportPdf.ts) */
+  actionTaken?: string;
+  recommendation?: string;
+  location?: string;
+  reporterDesignation?: string;
+  /** Activity after the report was raised, oldest first (written by the server) */
+  updates?: FaultUpdate[];
   createdAt: string;
+}
+
+/**
+ * One entry in a fault report's activity. An "action" is a maintenance update: it prints as its own
+ * fault report under the same report number, with its action taken and recommendation.
+ */
+export interface FaultUpdate {
+  id: string;
+  at: string;
+  by: string;
+  role: "arff" | "maintenance" | "admin";
+  kind: "action" | "acceptance" | "closed" | "edit";
+  /** action: action taken · acceptance: comments · edit: what changed */
+  text?: string;
+  recommendation?: string;
+  designation?: string;
+  signature?: string;
+  emailedAt?: string;
+  emailedTo?: number;
 }
 
 /** A fault report cut down to what age tracking and the monthly summary need */

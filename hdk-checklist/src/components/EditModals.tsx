@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { InspectionLog, FaultReport, ItemStatus } from "../types";
 import { itemType } from "../checklistData";
 import EvidenceEditor from "./EvidenceEditor";
+import { DEFAULT_RECOMMENDATION, LOCATION, defaultActionTaken } from "../faultReportPdf";
 
 interface ModalProps<T> {
   item: T;
@@ -87,7 +88,18 @@ export function EditLogModal({ item, onClose, onSave }: ModalProps<InspectionLog
 }
 
 export function EditFaultModal({ item, onClose, onSave }: ModalProps<FaultReport>) {
-  const [r, setR] = useState<FaultReport>(() => structuredClone(item));
+  // Template fields an older report doesn't have start from what its PDF prints
+  const [r, setR] = useState<FaultReport>(() => {
+    const c = structuredClone(item);
+    return {
+      ...c,
+      location: c.location ?? LOCATION,
+      actionTaken: c.actionTaken ?? defaultActionTaken(c.priority),
+      recommendation: c.recommendation ?? DEFAULT_RECOMMENDATION,
+    };
+  });
+  const set = (patch: Partial<FaultReport>) => setR((cur) => ({ ...cur, ...patch }));
+  const actions = (r.updates ?? []).filter((u) => u.kind === "action");
   const { busy, error, save } = useSave(onSave);
 
   return (
@@ -103,12 +115,32 @@ export function EditFaultModal({ item, onClose, onSave }: ModalProps<FaultReport
             <label>Date (DD/MM/YYYY)<input value={r.date} pattern="\d{2}/\d{2}/\d{4}" onChange={(e) => setR({ ...r, date: e.target.value })} required /></label>
             <label>Time<input value={r.time} pattern="\d{2}:\d{2}" onChange={(e) => setR({ ...r, time: e.target.value })} required /></label>
           </div>
-          <label>Vehicle / equipment<input value={r.vehicleEquipmentLine} onChange={(e) => setR({ ...r, vehicleEquipmentLine: e.target.value })} /></label>
-          <label>Reported by<input value={r.operatorName} onChange={(e) => setR({ ...r, operatorName: e.target.value })} required /></label>
-          <label>Details of defects<textarea rows={4} value={r.detailsOfDefects} onChange={(e) => setR({ ...r, detailsOfDefects: e.target.value })} /></label>
+          <label>Fault<input value={r.vehicleEquipmentLine} onChange={(e) => set({ vehicleEquipmentLine: e.target.value })} /></label>
+          <label>Location<input value={r.location ?? ""} onChange={(e) => set({ location: e.target.value })} /></label>
+          <div className="edit-row">
+            <label>Reported by<input value={r.operatorName} onChange={(e) => set({ operatorName: e.target.value })} required /></label>
+            <label>Designation<input value={r.reporterDesignation ?? ""} placeholder="From Setup → People" onChange={(e) => set({ reporterDesignation: e.target.value || undefined })} /></label>
+          </div>
+          <div className="edit-row">
+            <label>Equipment name<input value={r.vehicle} onChange={(e) => set({ vehicle: e.target.value })} /></label>
+            <label>Asset No.<input value={r.fleetNumber} onChange={(e) => set({ fleetNumber: e.target.value })} /></label>
+          </div>
+          <label>Brief description of fault<textarea rows={4} value={r.detailsOfDefects} onChange={(e) => set({ detailsOfDefects: e.target.value })} /></label>
+          <label>Action taken<textarea rows={2} value={r.actionTaken ?? ""} onChange={(e) => set({ actionTaken: e.target.value })} /></label>
+          <label>Recommendation<textarea rows={2} value={r.recommendation ?? ""} onChange={(e) => set({ recommendation: e.target.value })} /></label>
+          <label>Summary (internal)<textarea rows={2} value={r.faultSummary} onChange={(e) => set({ faultSummary: e.target.value })} /></label>
+          {actions.map((u, i) => (
+            <div key={u.id} className="edit-items">
+              <h4>Update {i + 1} · {u.by} · {new Date(u.at).toLocaleDateString("en-GB")}</h4>
+              <label>Action taken<textarea rows={2} value={u.text ?? ""} onChange={(e) => setR((cur) => ({ ...cur, updates: cur.updates?.map((x) => (x.id === u.id ? { ...x, text: e.target.value } : x)) }))} /></label>
+              <label>Recommendation<textarea rows={2} value={u.recommendation ?? ""} onChange={(e) => setR((cur) => ({ ...cur, updates: cur.updates?.map((x) => (x.id === u.id ? { ...x, recommendation: e.target.value } : x)) }))} /></label>
+            </div>
+          ))}
           {r.faults.map((f, i) => (
             <div key={f.itemId} className="edit-items">
               <h4>{f.label} · {f.status}</h4>
+              <label>Operator note<textarea rows={2} value={f.remarks} onChange={(e) => setR((cur) => ({ ...cur, faults: cur.faults.map((x, j) => (j === i ? { ...x, remarks: e.target.value } : x)) }))} /></label>
+              <label>Suggested action<input value={f.recommendedAction} onChange={(e) => setR((cur) => ({ ...cur, faults: cur.faults.map((x, j) => (j === i ? { ...x, recommendedAction: e.target.value } : x)) }))} /></label>
               <EvidenceEditor
                 evidence={f.evidence ?? []}
                 onChange={(evidence) => setR((cur) => ({ ...cur, faults: cur.faults.map((x, j) => (j === i ? { ...x, evidence } : x)) }))}

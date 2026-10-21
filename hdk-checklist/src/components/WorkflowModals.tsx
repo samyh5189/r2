@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { FaultAcceptance, FaultRepair, FaultReport, InspectionLog, Operator } from "../types";
-import { getOperators, signOffLog, updateRepair, verifyOperator } from "../storage";
+import { describeEmail, emailFaultUpdate, getOperators, signOffLog, updateRepair, verifyOperator } from "../storage";
+import { exportFaultReportPDF } from "../pdfExport";
+import { toast } from "../dialogs";
 import SignatureChoice from "./SignatureChoice";
 import OperatorField from "./OperatorField";
 import { isMaintenance, needsPin } from "../operators";
@@ -107,6 +109,8 @@ function SignSlot({ existing, saved, value, onChange }: { existing?: string; sav
 export function RepairModal({ report, onClose, onDone }: { report: FaultReport; onClose: () => void; onDone: () => void }) {
   const [repair, setRepair] = useState<FaultRepair>(() => ({ ...report.repair }));
   const [acceptance, setAcceptance] = useState<FaultAcceptance>(() => ({ ...report.acceptance }));
+  // A new update: printed as its own report under the same number
+  const [note, setNote] = useState({ text: "", recommendation: "", signature: "" });
   const [operators, setOperators] = useState<Operator[]>([]);
   const [recordedBy, setRecordedBy] = useState("");
   const [pin, setPin] = useState("");
@@ -144,8 +148,19 @@ export function RepairModal({ report, onClose, onDone }: { report: FaultReport; 
     e.preventDefault();
     setBusy(true);
     setError(null);
-    try { await updateRepair(report.id, recordedBy, pin, repair, acceptance); onDone(); }
-    catch (err) { setError(err instanceof Error ? err.message : "Save failed."); setBusy(false); }
+    try {
+      const posting = canRepair && note.text.trim();
+      const saved = await updateRepair(report.id, recordedBy, pin, repair, acceptance,
+        posting ? { text: note.text.trim(), recommendation: note.recommendation.trim(), signature: note.signature || undefined } : undefined);
+      onDone();
+      // The update goes out by email as its own report, like the original did
+      const posted = posting ? saved.updates?.filter((u) => u.kind === "action").at(-1) : undefined;
+      if (posted) {
+        exportFaultReportPDF(saved, posted.id).then((pdf) => emailFaultUpdate(saved, posted.id, pdf))
+          .then((res) => toast(describeEmail(res), "error" in res ? "error" : "info"))
+          .catch(() => toast("The update was saved but could not be emailed.", "error"));
+      }
+    } catch (err) { setError(err instanceof Error ? err.message : "Save failed."); setBusy(false); }
   }
 
   const dateTime = (label: string, date: string | undefined, time: string | undefined, set: (d: string, t: string) => void, disabled = false) => (
@@ -182,19 +197,24 @@ export function RepairModal({ report, onClose, onDone }: { report: FaultReport; 
             <p className="editor-hint" style={{ margin: 0 }}>Recording as <strong>{recordedBy}</strong>{split && (isMaintenance(me) ? " · Maintenance" : " · ARFF")}</p>
 
             <h4 className="repair-step">1 · Action taken</h4>
+            {(report.updates ?? []).filter((u) => u.kind === "action").map((u, i) => (
+              <div key={u.id} className="ro-update">
+                <span>Update {i + 1} · {u.by} · {new Date(u.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                <p>{u.text}</p>
+                {u.recommendation && <p className="ro-update-rec">Recommendation: {u.recommendation}</p>}
+              </div>
+            ))}
             {canRepair ? (
               <>
-                <label>Action taken<textarea rows={3} value={repair.details ?? ""} onChange={(e) => r({ details: e.target.value })} placeholder="What was done to fix it" /></label>
-                <label>Recommendation<textarea rows={2} value={repair.remarks ?? ""} onChange={(e) => r({ remarks: e.target.value })} placeholder="Further work or follow-up, if any" /></label>
-                <NameField label="Repaired by" value={repair.repairedBy ?? ""} onChange={(v) => r({ repairedBy: v })} />
-                <SignSlot existing={signed.repairedBySignature} saved={verified.saved} value={repair.repairedBySignature} onChange={(v) => r({ repairedBySignature: v })} />
-                <p className="editor-hint" style={{ margin: 0 }}>Shown on the fault report under ACTION TAKEN / RECOMMENDATION.</p>
+                <label>Action taken{(report.updates ?? []).some((u) => u.kind === "action") ? " (new update)" : ""}<textarea rows={3} value={note.text} onChange={(e) => setNote({ ...note, text: e.target.value })} placeholder="What was done, e.g. parts ordered, tyre replaced" /></label>
+                <label>Recommendation<textarea rows={2} value={note.recommendation} onChange={(e) => setNote({ ...note, recommendation: e.target.value })} placeholder="Further work or follow-up, if any" /></label>
+                {note.text.trim() && <SignSlot saved={verified.saved} value={note.signature} onChange={(v) => setNote({ ...note, signature: v })} />}
+                <p className="editor-hint" style={{ margin: 0 }}>Each update is printed and emailed as its own fault report under {report.reportNumber}.</p>
               </>
-            ) : (
+            ) : !(report.updates ?? []).some((u) => u.kind === "action") && (
               <>
-                {readOnly("Action taken", repair.details)}
+                {repair.details ? readOnly("Action taken", repair.details) : <p className="editor-hint" style={{ margin: 0 }}>No action recorded by maintenance yet.</p>}
                 {repair.remarks && readOnly("Recommendation", repair.remarks)}
-                {readOnly("Repaired by", repair.repairedBy)}
               </>
             )}
 

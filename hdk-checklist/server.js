@@ -241,12 +241,37 @@ app.post("/api/admin/login", (req, res) => {
   res.json({ token: `${payload}.${sign(payload)}`, email });
 });
 
+// How edited fault report fields read in the activity
+const FIELD_NAMES = {
+  reportNumber: "report number", date: "date", time: "time", vehicleEquipmentLine: "fault", vehicle: "equipment name",
+  fleetNumber: "asset no.", operatorName: "reported by", reporterDesignation: "designation", location: "location",
+  detailsOfDefects: "description", faultSummary: "summary", actionTaken: "action taken", recommendation: "recommendation",
+  priority: "priority", status: "status", faults: "fault items", repair: "repair", acceptance: "acceptance test", updates: "updates",
+};
+
 // Shared admin update/delete handlers for a JSONB table
 function adminRoutes(path, table) {
   app.put(`${path}/:id`, requireAdmin, async (req, res) => {
     if (!pool) return res.status(503).json({ error: "No database configured." });
     try {
       const item = await extractFiles(pool, { ...req.body, id: req.params.id });
+      if (table === "fault_reports") {
+        // Activity stays the server's: existing entries keep author, time and signature (an admin may
+        // correct an update's wording), and the edit itself is logged
+        const old = (await pool.query("SELECT data FROM fault_reports WHERE id = $1", [req.params.id])).rows[0]?.data;
+        if (old) {
+          const sent = new Map((Array.isArray(item.updates) ? item.updates : []).map((u) => [u?.id, u]));
+          const updates = (old.updates ?? []).map((u) => {
+            const e = sent.get(u.id);
+            return e && u.kind === "action" ? { ...u, text: String(e.text ?? u.text).slice(0, 2000), recommendation: String(e.recommendation ?? u.recommendation ?? "").slice(0, 2000) } : u;
+          });
+          const changed = Object.keys({ ...old, ...item }).filter((k) => !["updates", "emailedAt", "emailedTo"].includes(k) && JSON.stringify(old[k]) !== JSON.stringify(item[k]));
+          if (updates.some((u, i) => JSON.stringify(u) !== JSON.stringify(old.updates?.[i]))) changed.push("updates");
+          if (changed.length) updates.push({ id: randomBytes(8).toString("hex"), at: new Date().toISOString(), by: "Admin", role: "admin", kind: "edit", text: `Edited: ${changed.map((k) => FIELD_NAMES[k] ?? k).join(", ")}` });
+          item.updates = updates;
+          for (const k of ["emailedAt", "emailedTo"]) if (old[k] !== undefined) item[k] = old[k];
+        }
+      }
       // An edited date can move a periodic inspection into another period
       if (table === "inspection_logs" && KINDS.includes(item.kind) && DATE_RE.test(item.date)) {
         item.periodKey = periodKey(item.kind, item.date, scheduleOf(await loadRules().catch(() => ({}))));
@@ -810,6 +835,25 @@ app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
     };
     const repairUpd = pickFields(req.body?.repair, repairKeys);
     const acceptUpd = pickFields(req.body?.acceptance, acceptKeys);
+    // Activity: a maintenance update (action taken + recommendation) prints as its own report under the same number
+    const updates = Array.isArray(report.updates) ? [...report.updates] : [];
+    const now = new Date().toISOString();
+    const entry = (fields) => ({ id: randomBytes(8).toString("hex"), at: now, by: check.name, role, ...fields });
+    const u = req.body?.update;
+    if (u && typeof u.text === "string" && u.text.trim()) {
+      if (!repairKeys.length) { await client.query("ROLLBACK"); return res.status(403).json({ error: "Maintenance officers record the action taken." }); }
+      const signature = typeof u.signature === "string" && isImageRef(u.signature) ? await extractFiles(client, u.signature) : undefined;
+      updates.push(entry({
+        kind: "action", text: u.text.trim().slice(0, 2000),
+        recommendation: typeof u.recommendation === "string" ? u.recommendation.trim().slice(0, 2000) : "",
+        designation: String(check.op?.rank || (role === "maintenance" ? "Maintenance" : "ARFF")).slice(0, 80),
+        ...(signature ? { signature } : {}),
+      }));
+      // The latest update also fills the form's repair fields (CSV, older screens)
+      Object.assign(repairUpd, { details: u.text.trim().slice(0, 2000), remarks: updates.at(-1).recommendation });
+      if (!report.repair?.repairedBy) repairUpd.repairedBy = check.name;
+      if (signature && !report.repair?.repairedBySignature) repairUpd.repairedBySignature = signature;
+    }
     // Whoever signs is the name on that signature
     if (check.op && acceptUpd.maintenanceSignature && !report.acceptance?.maintenanceSignature && role === "maintenance") acceptUpd.maintenanceName = check.name;
     if (check.op && acceptUpd.arffSignature && !report.acceptance?.arffSignature && role === "arff") acceptUpd.arffName = check.name;
@@ -818,10 +862,15 @@ app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
     const accepted = acceptance.maintenanceName && acceptance.maintenanceSignature && acceptance.arffName && acceptance.arffSignature;
     const started = Object.values(repair).some(Boolean) || Object.values(acceptance).some(Boolean);
     const status = accepted ? "Resolved" : started ? "In Progress" : report.status;
-    // Timeline: when repair work was first recorded and last updated, and by whom
-    const now = new Date().toISOString();
+    // Each acceptance signature, and the close, go on the activity too
+    for (const [key, side] of [["maintenanceSignature", "Maintenance"], ["arffSignature", "ARFF"]]) {
+      if (acceptance[key] && !report.acceptance?.[key]) {
+        updates.push(entry({ kind: "acceptance", text: `Acceptance test signed for ${side}${acceptance.comments ? `: ${acceptance.comments}` : ""}`, signature: acceptance[key] }));
+      }
+    }
+    if (status === "Resolved" && report.status !== "Resolved") updates.push(entry({ kind: "closed", text: "Accepted and closed" }));
     const saved = {
-      ...report, repair, acceptance, status,
+      ...report, repair, acceptance, status, updates,
       repairUpdatedBy: check.name, repairUpdatedAt: now,
       // The repair counts as started once repair work (not just a comment) is recorded
       ...(Object.values(repair).some(Boolean) && !report.repairStartedAt ? { repairStartedAt: now, repairStartedBy: check.name } : {}),
@@ -992,6 +1041,49 @@ app.post("/api/fault-reports/:id/email", writeLimit, async (req, res) => {
   } catch (e) {
     console.error("Fault report email failed:", e);
     await pool.query("UPDATE fault_reports SET data = data - 'emailedAt' WHERE id = $1", [req.params.id]).catch(() => {});
+    res.status(502).json({ error: "Email could not be sent." });
+  }
+});
+
+// A maintenance update's own report, emailed once like the original
+app.post("/api/fault-reports/:id/updates/:uid/email", writeLimit, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  if (typeof req.body?.pdf !== "string") return res.status(400).json({ error: "PDF missing." });
+  const claim = async (fn) => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const row = await client.query("SELECT data FROM fault_reports WHERE id = $1 FOR UPDATE", [req.params.id]);
+      const r = row.rows[0]?.data;
+      const u = r?.updates?.find((x) => x.id === req.params.uid && x.kind === "action");
+      const out = u ? fn(r, u) : null;
+      if (out) await client.query("UPDATE fault_reports SET data = $2 WHERE id = $1", [req.params.id, r]);
+      await client.query("COMMIT");
+      return out && { r, u };
+    } catch (e) { await client.query("ROLLBACK").catch(() => {}); throw e; } finally { client.release(); }
+  };
+  try {
+    const settings = await loadEmailSettings();
+    const problem = emailProblem(settings);
+    if (problem) return res.status(503).json({ error: problem });
+    if (!settings.faultEmails) return res.json({ ok: true, sent: 0, skipped: "Fault report emails are turned off in Setup." });
+    // Claimed under a row lock so it can't be sent twice; only fresh updates (a day)
+    const got = await claim((r, u) => (!u.emailedAt && Date.now() - Date.parse(u.at) < 86_400_000 ? (u.emailedAt = new Date().toISOString()) : null));
+    if (!got) return res.status(409).json({ error: "Already emailed, or not a new update." });
+    const { r, u } = got;
+    const n = r.updates.filter((x) => x.kind === "action").findIndex((x) => x.id === u.id) + 1;
+    const result = await sendToRecipients({
+      subject: `Fault report ${r.reportNumber} — Update ${n} — RESCUE 2`,
+      text: `Update ${n} on fault report ${r.reportNumber} (RESCUE 2, HDK-ARFF).\n\nBy: ${u.by}\nAction taken: ${u.text}\n${u.recommendation ? `Recommendation: ${u.recommendation}\n` : ""}Status: ${r.status}\n\nThe update report is attached.`,
+      pdf: req.body.pdf,
+      filename: req.body?.filename,
+    }, settings);
+    await claim((_r, x) => { if (result.status !== 200) delete x.emailedAt; else x.emailedTo = result.sent; return true; });
+    if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+    res.json({ ok: true, sent: result.sent });
+  } catch (e) {
+    console.error("Update email failed:", e);
+    await claim((_r, x) => { delete x.emailedAt; return true; }).catch(() => {});
     res.status(502).json({ error: "Email could not be sent." });
   }
 });

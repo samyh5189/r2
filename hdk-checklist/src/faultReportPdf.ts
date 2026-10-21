@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import type { FaultReport } from "./types";
+import type { FaultReport, FaultUpdate } from "./types";
 
 /**
  * The fault report in the RACL template (HDK/FR/…): logo and rule, report number, FAULT REPORT,
@@ -22,11 +22,23 @@ export interface FaultReportArt {
 export interface FaultReportExtras {
   /** The reporter's rank, for "Reported by" and DESIGNATION */
   designation: string;
-  signatures: { operator?: Img; shift?: Img; repair?: Img; maintenance?: Img; arff?: Img };
+  signatures: { operator?: Img; shift?: Img; repair?: Img; maintenance?: Img; arff?: Img; update?: Img };
   photos: Img[];
 }
 
+/** A maintenance update printed as its own report under the same number */
+export interface UpdateView {
+  entry: FaultUpdate;
+  /** 1-based among the report's action updates */
+  n: number;
+  /** The last update of a closed report also carries the acceptance test */
+  withAcceptance: boolean;
+}
+
 export const LOCATION = "Kulhudhuffushi Airport (HDK)";
+export const DEFAULT_RECOMMENDATION = "Kindly inspect and repair the reported issue(s) at the earliest for the proper functioning of the vehicle.";
+export const defaultActionTaken = (priority: FaultReport["priority"]) =>
+  priority === "Routine" ? "Reported to maintenance." : "Reported to maintenance for urgent attention.";
 export const FOOTER_LEFT = "HDK / RACL";
 export const FOOTER_RIGHT = "maintenance.hdk@airports.mv";
 
@@ -64,7 +76,7 @@ function formatOf(data: Img, fallback: string): string {
   return data[0] === 0x89 && data[1] === 0x50 ? "PNG" : data[0] === 0xff && data[1] === 0xd8 ? "JPEG" : fallback;
 }
 
-export function buildFaultReportPdf(report: FaultReport, x: FaultReportExtras, art: FaultReportArt): jsPDF {
+export function buildFaultReportPdf(report: FaultReport, x: FaultReportExtras, art: FaultReportArt, update?: UpdateView): jsPDF {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   let F = "helvetica";
   if (art.fonts) {
@@ -109,6 +121,7 @@ export function buildFaultReportPdf(report: FaultReport, x: FaultReportExtras, a
 
   font("bold", 10);
   doc.text(`Report No.: ${report.reportNumber}`, 14.56, 39.45);
+  if (update) doc.text(`Update ${update.n}`, 190.42, 39.45, { align: "right" });
 
   font("bold", 18);
   const title = "FAULT REPORT";
@@ -189,9 +202,10 @@ export function buildFaultReportPdf(report: FaultReport, x: FaultReportExtras, a
   }
 
   // ── Fault ───────────────────────────────────────────────────────────
-  const reportedBy = x.designation ? `${report.operatorName} (${x.designation})` : report.operatorName;
+  const designation = report.reporterDesignation?.trim() || x.designation;
+  const reportedBy = designation ? `${report.operatorName} (${designation})` : report.operatorName;
   row("Fault:", faultTitle(report));
-  row("Location:", LOCATION);
+  row("Location:", report.location?.trim() || LOCATION);
   row("Reported by:", reportedBy);
   row("Date:", (x0, b) => dateText(report.date, x0, b));
   y += GAP;
@@ -206,10 +220,9 @@ export function buildFaultReportPdf(report: FaultReport, x: FaultReportExtras, a
   y += GAP;
 
   header("ACTION TAKEN / RECOMMENDATION:");
-  const actionTaken = report.repair?.details
-    || (report.priority === "Immediate Grounding" ? "Vehicle taken out of service; reported to maintenance." : "Reported to maintenance.");
-  // Maintenance's own recommendation once the repair is recorded, the report's suggested actions before
-  const recommendation = report.repair?.remarks?.trim() || [...new Set(report.faults.map((f) => f.recommendedAction).filter(Boolean))].join(" ");
+  // The original report's own action and recommendation; an update prints maintenance's
+  const actionTaken = update ? update.entry.text || "-" : report.actionTaken?.trim() || defaultActionTaken(report.priority);
+  const recommendation = update ? update.entry.recommendation?.trim() || "-" : report.recommendation?.trim() || DEFAULT_RECOMMENDATION;
   leadRow("Action Taken:", actionTaken, 5.34);
   leadRow("Recommendation:", recommendation, 7.11);
 
@@ -218,14 +231,18 @@ export function buildFaultReportPdf(report: FaultReport, x: FaultReportExtras, a
   const sigTop = y + 25.48;
   font("bold");
   doc.text("SIGNATURE:", 95.33, sigTop - 4.62);
-  if (x.signatures.operator) fitImage(x.signatures.operator, "PNG", 115, sigTop - 12.6, 24, 14.2, "bottom");
+  // The original is signed by the reporter, an update by the maintenance officer who wrote it
+  const signer = update
+    ? { sig: x.signatures.update, name: update.entry.by, designation: update.entry.designation || "Maintenance", date: new Date(update.entry.at).toLocaleDateString("en-GB") }
+    : { sig: x.signatures.operator, name: report.operatorName, designation: designation || "-", date: report.date };
+  if (signer.sig) fitImage(signer.sig, "PNG", 115, sigTop - 12.6, 24, 14.2, "bottom");
   y = sigTop;
   const SL = 93.64, SW = 194.23 - 93.64, SLW = 25.49;
-  row("NAME:", report.operatorName, 6.01, SLW, SL, SW);
-  row("DESIGNATION:", x.designation || "-", 6.1, SLW, SL, SW);
-  row("DATE:", (x0, b) => dateText(report.date, x0, b), 5.84, SLW, SL, SW);
+  row("NAME:", signer.name, 6.01, SLW, SL, SW);
+  row("DESIGNATION:", signer.designation, 6.1, SLW, SL, SW);
+  row("DATE:", (x0, b) => dateText(signer.date, x0, b), 5.84, SLW, SL, SW);
 
-  const photos = x.photos;
+  const photos = update ? [] : x.photos;
   if (photos.length) {
     y += 7.2;
     // ➢ drawn, since the template's Wingdings arrow isn't in the font
@@ -242,15 +259,19 @@ export function buildFaultReportPdf(report: FaultReport, x: FaultReportExtras, a
   }
 
   // ── Sign-offs, when recorded (same table style): the action taken and recommendation are on page 1 ──
+  // The original carries the shift in-charge sign-off (and, on reports from before updates, the repair);
+  // the last update of a closed report carries the acceptance test
   const rp = report.repair ?? {};
   const ac = report.acceptance ?? {};
-  const sh = report.shiftSignoff;
-  const hasRepair = !!(rp.repairedBy || rp.repairedBySignature || rp.desiredStartDate || rp.requiredEndDate);
-  const hasAccept = Object.values(ac).some(Boolean);
+  const legacy = !update && !report.updates?.some((u) => u.kind === "action");
+  const sh = update ? undefined : report.shiftSignoff;
+  const hasRepair = legacy && !!(rp.details || rp.repairedBy || rp.repairedBySignature || rp.desiredStartDate || rp.requiredEndDate);
+  const hasAccept = (update ? update.withAcceptance : legacy) && Object.values(ac).some(Boolean);
   if (sh || hasRepair || hasAccept) {
     newPage();
     font("bold", 10);
     doc.text(`Report No.: ${report.reportNumber}`, 14.56, 39.45);
+    if (update) doc.text(`Update ${update.n}`, 190.42, 39.45, { align: "right" });
     doc.setLineWidth(0.176);
     doc.setDrawColor(...BLACK);
     y = 44;
@@ -268,6 +289,8 @@ export function buildFaultReportPdf(report: FaultReport, x: FaultReportExtras, a
     }
     if (hasRepair) {
       header("REPAIR:");
+      if (rp.details) row("Action taken:", rp.details);
+      if (rp.remarks) row("Recommendation:", rp.remarks);
       sigRow("Repaired by:", rp.repairedBy, x.signatures.repair);
       if (report.repairStartedAt) row("Recorded:", stamp(report.repairStartedAt));
       // Reports from before the template change may carry a schedule

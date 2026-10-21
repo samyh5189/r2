@@ -12,6 +12,7 @@ import { availableMonths, monthTitle } from "../monthlySummary";
 import { showPdf } from "../pdfViewer";
 import { RACL_LOGO } from "../raclLogo";
 import { exportInspectionPDF, exportFaultReportPDF, exportWeeklyPDF } from "../pdfExport";
+import { faultTitle } from "../faultReportPdf";
 import { confirmDialog, toast } from "../dialogs";
 
 async function migrateLocalStorage(): Promise<{ logs: number; faults: number }> {
@@ -46,8 +47,6 @@ interface Props {
   onAuthLost: () => void;
 }
 
-interface TimelineStep { at: number | null; title: string; detail?: string; pending?: boolean; late?: boolean }
-
 const fmtWhen = (t: number) => new Date(t).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const parseGB = (date?: string, time?: string) => {
   if (!date || !/^\d{2}\/\d{2}\/\d{4}$/.test(date)) return null;
@@ -56,47 +55,99 @@ const parseGB = (date?: string, time?: string) => {
   return new Date(y, m - 1, d, hh || 0, mm || 0).getTime();
 };
 
-/** Reported → signed off → repair started → accepted → resolved, with what's still to come */
-function faultTimeline(r: FaultReport): TimelineStep[] {
-  const steps: TimelineStep[] = [];
-  const opened = Date.parse(r.createdAt) || parseGB(r.date, r.time);
-  steps.push({ at: opened, title: "Reported", detail: `${r.operatorName}${r.inspectionLogId ? " · from an inspection" : ""}` });
-  if (r.emailedAt) steps.push({ at: Date.parse(r.emailedAt), title: "Emailed", detail: r.emailedTo ? `${r.emailedTo} recipient${r.emailedTo === 1 ? "" : "s"}` : undefined });
-  if (r.shiftSignoff) steps.push({ at: Date.parse(r.shiftSignoff.signedAt), title: "Signed off by shift in-charge", detail: r.shiftSignoff.name });
-  if (r.repairStartedAt) steps.push({ at: Date.parse(r.repairStartedAt), title: "Repair started", detail: [r.repairStartedBy && `recorded by ${r.repairStartedBy}`, r.repair?.repairedBy && `repaired by ${r.repair.repairedBy}`].filter(Boolean).join(" · ") || undefined });
-  else if (r.repair?.desiredStartDate) steps.push({ at: parseGB(r.repair.desiredStartDate, r.repair.desiredStartTime), title: "Repair planned to start", detail: r.repair.repairedBy });
-  if (r.repairUpdatedAt && r.repairUpdatedAt !== r.repairStartedAt && r.status !== "Resolved") steps.push({ at: Date.parse(r.repairUpdatedAt), title: "Repair updated", detail: r.repairUpdatedBy });
-  if (r.acceptance?.date) steps.push({ at: parseGB(r.acceptance.date, r.acceptance.time), title: "Acceptance test", detail: [r.acceptance.maintenanceName, r.acceptance.arffName].filter(Boolean).join(" & ") || undefined });
-  if (r.status === "Resolved") {
-    const age = faultAge(r);
-    steps.push({ at: r.resolvedAt ? Date.parse(r.resolvedAt) : null, title: "Resolved", detail: age.label });
-  } else {
-    const age = faultAge(r);
-    const due = opened ? opened + TARGET_DAYS[r.priority] * 86_400_000 : null;
-    if (!r.shiftSignoff && r.inspectionLogId) steps.push({ at: null, title: "Awaiting shift in-charge sign-off", pending: true });
-    steps.push({
-      at: due,
-      title: r.repairStartedAt || r.repair?.details ? "Awaiting acceptance test" : "Awaiting repair",
-      detail: due ? `${age.overdue ? "Overdue — target was" : "Target:"} ${TARGET_DAYS[r.priority]} day${TARGET_DAYS[r.priority] === 1 ? "" : "s"} (${r.priority.toLowerCase()})` : undefined,
-      pending: true,
-      late: age.overdue,
-    });
-  }
-  return steps;
+/** One message in a fault report's activity thread */
+interface ThreadEntry {
+  key: string;
+  at: number | null;
+  who: string;
+  role?: "arff" | "maintenance" | "admin";
+  title: string;
+  body?: string;
+  rec?: string;
+  sig?: string;
+  /** "original" or an update id: opens that report's PDF */
+  pdf?: string;
+  note?: string;
+  pending?: boolean;
+  late?: boolean;
 }
 
-function FaultTimeline({ report }: { report: FaultReport }) {
+const ROLE_LABEL = { arff: "ARFF", maintenance: "Maintenance", admin: "Admin" } as const;
+
+/**
+ * The report and everything after it, oldest first, like a mail thread: the report as raised, the shift
+ * in-charge sign-off, each maintenance update (its own report under the same number), the acceptance
+ * signatures, admin edits and the close, then what's still to come.
+ */
+function faultThread(r: FaultReport): ThreadEntry[] {
+  const out: ThreadEntry[] = [];
+  const opened = Date.parse(r.createdAt) || parseGB(r.date, r.time);
+  const emailed = (at?: string, to?: number) => (at ? `Emailed${to ? ` to ${to} recipient${to === 1 ? "" : "s"}` : ""} · ${fmtWhen(Date.parse(at))}` : undefined);
+  out.push({
+    key: "original", at: opened, who: r.operatorName, role: "arff", title: "Fault report raised",
+    body: `${faultTitle(r)} · ${r.priority}${r.inspectionLogId ? " · from an inspection" : ""}`,
+    pdf: "original", note: emailed(r.emailedAt, r.emailedTo),
+  });
+  if (r.shiftSignoff) out.push({ key: "shift", at: Date.parse(r.shiftSignoff.signedAt), who: r.shiftSignoff.name, role: "arff", title: "Signed off as shift in-charge", sig: r.shiftSignoff.signature });
+  let n = 0;
+  for (const u of r.updates ?? []) {
+    const at = Date.parse(u.at);
+    if (u.kind === "action") {
+      n++;
+      out.push({ key: u.id, at, who: u.by, role: u.role, title: `Update ${n} · Action taken`, body: u.text, rec: u.recommendation, sig: u.signature, pdf: u.id, note: emailed(u.emailedAt, u.emailedTo) });
+    } else {
+      out.push({ key: u.id, at, who: u.by, role: u.role, title: u.kind === "acceptance" ? "Acceptance test" : u.kind === "closed" ? "Closed" : "Edited the report", body: u.text, sig: u.kind === "acceptance" ? u.signature : undefined });
+    }
+  }
+  // Reports from before updates existed: their single repair record
+  if (n === 0 && r.repair?.details) {
+    out.push({ key: "repair", at: r.repairStartedAt ? Date.parse(r.repairStartedAt) : null, who: r.repair.repairedBy || r.repairStartedBy || "Maintenance", role: "maintenance", title: "Action taken", body: r.repair.details, rec: r.repair.remarks });
+  }
+  if (r.status === "Resolved" && !(r.updates ?? []).some((u) => u.kind === "closed")) {
+    out.push({ key: "resolved", at: r.resolvedAt ? Date.parse(r.resolvedAt) : null, who: "", title: "Closed", body: faultAge(r).label });
+  }
+  out.sort((x, y) => (x.key === "original" ? -1 : y.key === "original" ? 1 : (x.at ?? Infinity) - (y.at ?? Infinity)));
+  if (r.status !== "Resolved") {
+    const age = faultAge(r);
+    const due = opened ? opened + TARGET_DAYS[r.priority] * 86_400_000 : null;
+    if (!r.shiftSignoff && r.inspectionLogId) out.push({ key: "p-shift", at: null, who: "", title: "Awaiting shift in-charge sign-off", pending: true });
+    out.push({
+      key: "p-next", at: due, who: "", pending: true, late: age.overdue,
+      title: n > 0 || r.repair?.details ? "Awaiting acceptance test" : "Awaiting maintenance update",
+      body: due ? `${age.overdue ? "Overdue · target was" : "Target:"} ${TARGET_DAYS[r.priority]} day${TARGET_DAYS[r.priority] === 1 ? "" : "s"} (${r.priority.toLowerCase()}), ${fmtWhen(due)}` : undefined,
+    });
+  }
+  return out;
+}
+
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "·";
+
+function FaultThread({ report }: { report: FaultReport }) {
   return (
-    <ol className="timeline">
-      {faultTimeline(report).map((st, i) => (
-        <li key={i} className={`timeline-step${st.pending ? " pending" : ""}${st.late ? " late" : ""}`}>
-          <span className="timeline-dot" />
-          <div>
-            <div className="timeline-title">{st.title}</div>
-            <div className="timeline-meta">
-              {st.at != null && !Number.isNaN(st.at) && <span>{st.pending ? `due ${fmtWhen(st.at)}` : fmtWhen(st.at)}</span>}
-              {st.detail && <span>{st.detail}</span>}
+    <ol className="thread">
+      {faultThread(report).map((e) => (
+        <li key={e.key} className={`thread-msg${e.pending ? " pending" : ""}${e.late ? " late" : ""}`}>
+          <span className={`thread-avatar role-${e.role ?? "none"}`}>{e.pending ? "" : e.who ? initials(e.who) : "✓"}</span>
+          <div className="thread-card">
+            <div className="thread-head">
+              {e.who && <strong>{e.who}</strong>}
+              {e.role && <span className="thread-role">{ROLE_LABEL[e.role]}</span>}
+              {e.at != null && !Number.isNaN(e.at) && !e.pending && <time>{fmtWhen(e.at)}</time>}
             </div>
+            <div className="thread-title">{e.title}</div>
+            {e.body && <p className="thread-body">{e.body}</p>}
+            {e.rec && <p className="thread-rec"><span>Recommendation</span> {e.rec}</p>}
+            {e.sig && <img className="thread-sig" src={e.sig} alt="signature" />}
+            {(e.pdf || e.note) && (
+              <div className="thread-foot">
+                {e.pdf && (
+                  <button type="button" className="thread-pdf" onClick={() => showPdf(exportFaultReportPDF(report, e.pdf === "original" ? undefined : e.pdf))}>
+                    <FileText size={14} /> {report.reportNumber}{e.pdf === "original" ? "" : ` · ${e.title.split(" · ")[0]}`}.pdf
+                  </button>
+                )}
+                {e.note && <span className="thread-note">{e.note}</span>}
+              </div>
+            )}
           </div>
         </li>
       ))}
@@ -141,8 +192,8 @@ function FaultModal({ report, onClose, actions }: { report: FaultReport; onClose
           </div>
 
           <div className="modal-section">
-            <h4>Timeline</h4>
-            <FaultTimeline report={report} />
+            <h4>Activity</h4>
+            <FaultThread report={report} />
           </div>
 
           <div className="modal-section">
@@ -185,32 +236,6 @@ function FaultModal({ report, onClose, actions }: { report: FaultReport; onClose
             <h4>Fault Summary</h4>
             <div className="assessment-box">{report.faultSummary}</div>
           </div>
-
-          {(report.repair || report.acceptance) && (
-            <div className="modal-section">
-              <h4>Repair Progress</h4>
-              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
-                <tbody>
-                  {([
-                    ["Desired start", [report.repair?.desiredStartDate, report.repair?.desiredStartTime].filter(Boolean).join(" ")],
-                    ["Required end", [report.repair?.requiredEndDate, report.repair?.requiredEndTime].filter(Boolean).join(" ")],
-                    ["Action taken", report.repair?.details],
-                    ["Recommendation", report.repair?.remarks],
-                    ["Repaired by", report.repair?.repairedBy],
-                    ["Acceptance test", [report.acceptance?.date, report.acceptance?.time].filter(Boolean).join(" ")],
-                    ["Comments", report.acceptance?.comments],
-                    ["Maintenance (HDK)", report.acceptance?.maintenanceName],
-                    ["ARFF", report.acceptance?.arffName],
-                  ] as [string, string | undefined][]).filter(([, v]) => v).map(([k, v]) => (
-                    <tr key={k}>
-                      <td style={{ padding: "4px 8px 4px 0", color: "var(--muted)", width: 120, verticalAlign: "top" }}>{k}</td>
-                      <td style={{ padding: "4px 0" }}>{v}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
 
           <div className="modal-section">
             <h4>Operational Assessment</h4>
