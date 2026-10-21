@@ -186,12 +186,6 @@ function configRoutes(path, key, { validate = isArray, adminRead = false } = {})
 
 configRoutes("/api/checklist-config", "checklist");
 for (const kind of KINDS.slice(1)) configRoutes(`/api/checklist-config/${kind}`, `checklist_${kind}`);
-// Who gets fault reports and summaries by email (admin-only: addresses aren't public)
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-configRoutes("/api/notify-emails", "notify_emails", {
-  adminRead: true,
-  validate: (c) => Array.isArray(c) && c.length <= 20 && c.every((e) => typeof e === "string" && e.length <= 254 && EMAIL_RE.test(e)),
-});
 // Engine service interval and the last service done
 const optNum = (v) => v === undefined || (typeof v === "number" && Number.isFinite(v) && v >= 0);
 configRoutes("/api/service-settings", "service", {
@@ -413,44 +407,130 @@ app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
 });
 
 // ── Email (fault reports, monthly summaries) ─────────────────────────
-// SMTP_USER / SMTP_PASS: for Gmail, the address and an app password. Recipients are set in Setup.
-const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const mailer = process.env.SMTP_USER && process.env.SMTP_PASS
-  ? nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: SMTP_PORT,
-      secure: SMTP_PORT === 465,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    })
-  : null;
+// Everything is set by the admin in Setup → Email and kept in app_config ("email").
+// SMTP_* environment variables still work as a fallback for the mail server.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PRIORITY_RANK = { Routine: 1, Urgent: 2, "Immediate Grounding": 3 };
 const MAX_PDF_BYTES = 3_000_000; // stays under Vercel's 4.5 MB request limit once base64-encoded
+const oneLine = (v, max) => String(v ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, max);
 
-async function sendToRecipients({ subject, text, pdf, filename }) {
-  if (!mailer) return { status: 503, error: "Email isn't set up on the server yet." };
-  const result = await pool.query("SELECT data FROM app_config WHERE key = 'notify_emails'");
-  const to = result.rows[0]?.data ?? [];
-  if (to.length === 0) return { status: 503, error: "No email recipients set. An admin can add them under Setup." };
+async function loadEmailSettings() {
+  const rows = await pool.query("SELECT key, data FROM app_config WHERE key IN ('email', 'notify_emails')");
+  const byKey = Object.fromEntries(rows.rows.map((r) => [r.key, r.data]));
+  const s = byKey.email ?? {};
+  return {
+    host: s.host || process.env.SMTP_HOST || (s.user || process.env.SMTP_USER ? "smtp.gmail.com" : ""),
+    port: s.port || Number(process.env.SMTP_PORT) || 465,
+    security: s.security || "ssl",
+    user: s.user || process.env.SMTP_USER || "",
+    pass: s.pass || process.env.SMTP_PASS || "",
+    fromName: s.fromName || "HDK ARFF — RESCUE 2",
+    fromAddress: s.fromAddress || s.user || process.env.MAIL_FROM || process.env.SMTP_USER || "",
+    replyTo: s.replyTo || "",
+    to: s.to ?? byKey.notify_emails ?? [],   // notify_emails: recipients saved by the first version
+    cc: s.cc ?? [],
+    subjectPrefix: s.subjectPrefix ?? "",
+    footer: s.footer ?? "",
+    faultEmails: s.faultEmails ?? true,
+    minPriority: s.minPriority || "Routine",
+  };
+}
+
+/** Problems that stop email from working, or null when it's ready */
+function emailProblem(s) {
+  if (!s.host || !s.user || !s.pass) return "The mail server isn't set up. An admin can do it under Setup → Email.";
+  if (s.to.length === 0) return "No email recipients set. An admin can add them under Setup → Email.";
+  return null;
+}
+
+async function sendToRecipients({ subject, text, pdf, filename }, settings) {
+  const s = settings ?? await loadEmailSettings();
+  const problem = emailProblem(s);
+  if (problem) return { status: 503, error: problem };
   // The PDF is optional (a test email has none), but if given it must be a real, modest PDF
   const content = pdf === undefined ? null : typeof pdf === "string" ? Buffer.from(pdf, "base64") : Buffer.alloc(0);
   if (content && (content.length > MAX_PDF_BYTES || content.subarray(0, 5).toString() !== "%PDF-")) {
     return { status: 400, error: "Invalid or too large PDF." };
   }
-  await mailer.sendMail({
-    from: { name: "HDK ARFF — RESCUE 2", address: process.env.MAIL_FROM || process.env.SMTP_USER },
-    to,
-    subject: String(subject).replace(/[\r\n]+/g, " ").slice(0, 200),
-    text,
+  const transport = nodemailer.createTransport({
+    host: s.host,
+    port: s.port,
+    secure: s.security === "ssl",
+    requireTLS: s.security === "starttls",
+    auth: { user: s.user, pass: s.pass },
+    connectionTimeout: 15_000,
+  });
+  await transport.sendMail({
+    from: { name: oneLine(s.fromName, 100), address: s.fromAddress },
+    to: s.to,
+    cc: s.cc.length ? s.cc : undefined,
+    replyTo: s.replyTo || undefined,
+    subject: oneLine(`${s.subjectPrefix ? `${s.subjectPrefix} ` : ""}${subject}`, 200),
+    text: s.footer ? `${text}\n\n--\n${s.footer}` : text,
     attachments: content ? [{ filename: String(filename).replace(/[^\w.\- ]/g, "_").slice(0, 120) || "report.pdf", content, contentType: "application/pdf" }] : [],
   });
-  return { status: 200, sent: to.length };
+  return { status: 200, sent: s.to.length + s.cc.length };
 }
+
+const emailList = (v) => Array.isArray(v) && v.length <= 20 && v.every((e) => typeof e === "string" && e.length <= 254 && EMAIL_RE.test(e));
+const optEmail = (v) => v === undefined || v === "" || (typeof v === "string" && v.length <= 254 && EMAIL_RE.test(v));
+const optText = (v, max) => v === undefined || (typeof v === "string" && v.length <= max);
+
+// The password is write-only: it's never sent back, only whether one is saved
+app.get("/api/email-settings", requireAdmin, async (_req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  try {
+    const { pass, ...rest } = await loadEmailSettings();
+    const stored = (await pool.query("SELECT data FROM app_config WHERE key = 'email'")).rows[0]?.data ?? {};
+    // Show the from address as saved: blank means "use the username" at send time
+    res.json({ settings: { ...rest, fromAddress: stored.fromAddress ?? "", hasPassword: !!pass, passwordFromEnv: !stored.pass && !!pass }, problem: emailProblem({ ...rest, pass }) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB query failed." });
+  }
+});
+
+app.put("/api/email-settings", requireAdmin, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  const b = req.body?.settings ?? {};
+  const port = Number(b.port);
+  const valid = optText(b.host, 253) && Number.isInteger(port) && port > 0 && port < 65536
+    && ["ssl", "starttls", "none"].includes(b.security) && optText(b.user, 254) && optText(b.pass, 200)
+    && optText(b.fromName, 100) && optEmail(b.fromAddress) && optEmail(b.replyTo)
+    && emailList(b.to ?? []) && emailList(b.cc ?? []) && optText(b.subjectPrefix, 60) && optText(b.footer, 1000)
+    && typeof b.faultEmails === "boolean" && PRIORITY_RANK[b.minPriority];
+  if (!valid) return res.status(400).json({ error: "Some email settings are invalid." });
+  try {
+    const old = (await pool.query("SELECT data FROM app_config WHERE key = 'email'")).rows[0]?.data ?? {};
+    const settings = {
+      host: oneLine(b.host, 253), port, security: b.security, user: oneLine(b.user, 254),
+      // Blank keeps the saved password; clearPassword removes it
+      pass: b.clearPassword ? "" : b.pass ? b.pass : old.pass ?? "",
+      fromName: oneLine(b.fromName, 100), fromAddress: b.fromAddress || "", replyTo: b.replyTo || "",
+      to: b.to ?? [], cc: b.cc ?? [], subjectPrefix: oneLine(b.subjectPrefix, 60), footer: String(b.footer ?? ""),
+      faultEmails: b.faultEmails, minPriority: b.minPriority,
+    };
+    await pool.query(
+      `INSERT INTO app_config (key, data, updated_at) VALUES ('email', $1, NOW())
+       ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()`,
+      [JSON.stringify(settings)]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB update failed." });
+  }
+});
 
 // A new fault report is emailed once, by the device that created it, within a day
 app.post("/api/fault-reports/:id/email", writeLimit, async (req, res) => {
   if (!pool) return res.status(503).json({ error: "No database configured." });
-  if (!mailer) return res.status(503).json({ error: "Email isn't set up on the server yet." });
   if (typeof req.body?.pdf !== "string") return res.status(400).json({ error: "PDF missing." });
   try {
+    const settings = await loadEmailSettings();
+    const problem = emailProblem(settings);
+    if (problem) return res.status(503).json({ error: problem });
+    if (!settings.faultEmails) return res.json({ ok: true, sent: 0, skipped: "Fault report emails are turned off in Setup." });
     // Claim the report atomically so it can't be sent twice
     const claimed = await pool.query(
       `UPDATE fault_reports SET data = data || jsonb_build_object('emailedAt', $2::text)
@@ -460,13 +540,16 @@ app.post("/api/fault-reports/:id/email", writeLimit, async (req, res) => {
     );
     if (claimed.rowCount === 0) return res.status(409).json({ error: "Already emailed, or not a new report." });
     const r = claimed.rows[0].data;
+    if ((PRIORITY_RANK[r.priority] ?? 1) < PRIORITY_RANK[settings.minPriority]) {
+      return res.json({ ok: true, sent: 0, skipped: `Only ${settings.minPriority} faults and above are emailed (Setup → Email).` });
+    }
     const faults = (r.faults ?? []).map((f) => `  • [${f.status}] ${f.label}${f.remarks ? ` — ${f.remarks}` : ""}`).join("\n");
     const result = await sendToRecipients({
       subject: `Fault report ${r.reportNumber} — ${r.priority} — RESCUE 2`,
       text: `A new fault report was raised for RESCUE 2 (HDK-ARFF).\n\nReport: ${r.reportNumber}\nDate: ${r.date} ${r.time}\nReported by: ${r.operatorName}\nPriority: ${r.priority}\n\nFaults:\n${faults}\n\n${r.detailsOfDefects ?? ""}\n\nThe full report is attached.`,
       pdf: req.body?.pdf,
       filename: req.body?.filename,
-    });
+    }, settings);
     if (result.status !== 200) {
       await pool.query("UPDATE fault_reports SET data = data - 'emailedAt' WHERE id = $1", [req.params.id]);
       return res.status(result.status).json({ error: result.error });
@@ -490,7 +573,8 @@ app.post("/api/email", requireAdmin, async (req, res) => {
     res.json({ ok: true, sent: result.sent });
   } catch (e) {
     console.error("Email failed:", e);
-    res.status(502).json({ error: "Email could not be sent. Check the SMTP settings." });
+    // Admin-only, so the mail server's reason (e.g. wrong password) helps fix the settings
+    res.status(502).json({ error: `Email could not be sent: ${oneLine(e?.message, 200) || "check the mail server settings"}.` });
   }
 });
 
@@ -532,7 +616,7 @@ app.post("/api/fault-report", aiLimit, async (req, res) => {
 
 // ── Health check ──────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, ai: !!process.env.ANTHROPIC_API_KEY, db: !!pool, mail: !!mailer, ts: new Date().toISOString() });
+  res.json({ ok: true, ai: !!process.env.ANTHROPIC_API_KEY, db: !!pool,  ts: new Date().toISOString() });
 });
 
 // ── Serve built frontend in production ────────────────────────────────

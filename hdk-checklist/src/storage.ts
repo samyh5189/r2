@@ -263,14 +263,35 @@ export async function updateRepair(reportId: string, repair: FaultRepair, accept
 export const getServiceSettings = () => getConfig<ServiceSettings>("/api/service-settings", "hdk_service_settings", () => ({}));
 export const saveServiceSettings = (settings: ServiceSettings) => putConfig("/api/service-settings", "hdk_service_settings", settings);
 
-/** Email recipients are admin-only on the server, so this needs the admin token */
-export async function getNotifyEmails(): Promise<string[]> {
-  const res = await fetch("/api/notify-emails", { headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` } });
-  if (res.status === 401) signOutAdmin();
-  if (!res.ok) throw new Error("Could not load email recipients.");
-  return (await res.json()).config ?? [];
+/** Setup → Email. The password is write-only: the server only says whether one is saved. */
+export interface EmailSettings {
+  host: string;
+  port: number;
+  security: "ssl" | "starttls" | "none";
+  user: string;
+  pass?: string;            // only sent when changing it
+  clearPassword?: boolean;
+  hasPassword?: boolean;
+  passwordFromEnv?: boolean;
+  fromName: string;
+  fromAddress: string;
+  replyTo: string;
+  to: string[];
+  cc: string[];
+  subjectPrefix: string;
+  footer: string;
+  faultEmails: boolean;
+  minPriority: FaultReport["priority"];
 }
-export const saveNotifyEmails = (emails: string[]) => adminRequest("PUT", "/api/notify-emails", { config: emails });
+
+export async function getEmailSettings(): Promise<{ settings: EmailSettings; problem: string | null }> {
+  const res = await fetch("/api/email-settings", { headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` } });
+  if (res.status === 401) signOutAdmin();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? "Could not load email settings.");
+  return data;
+}
+export const saveEmailSettings = (settings: EmailSettings) => adminRequest("PUT", "/api/email-settings", { settings });
 
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -281,7 +302,7 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-type EmailResult = { sent: number } | { error: string };
+type EmailResult = { sent: number; skipped?: string } | { error: string };
 
 async function postEmail(path: string, body: object, admin: boolean): Promise<EmailResult> {
   try {
@@ -291,7 +312,7 @@ async function postEmail(path: string, body: object, admin: boolean): Promise<Em
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
-    return res.ok ? { sent: data.sent ?? 0 } : { error: data.error ?? `Email failed (${res.status})` };
+    return res.ok ? { sent: data.sent ?? 0, skipped: data.skipped } : { error: data.error ?? `Email failed (${res.status})` };
   } catch {
     return { error: "No connection — email not sent." };
   }
@@ -308,4 +329,6 @@ export async function emailPdf(subject: string, text: string, pdf?: { blob: Blob
 }
 
 export const describeEmail = (r: EmailResult) =>
-  "sent" in r ? `📧 Emailed to ${r.sent} recipient${r.sent === 1 ? "" : "s"}.` : `Email not sent: ${r.error}`;
+  "error" in r ? `Email not sent: ${r.error}`
+    : r.skipped ? `Not emailed: ${r.skipped}`
+    : `📧 Emailed to ${r.sent} recipient${r.sent === 1 ? "" : "s"}.`;

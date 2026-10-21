@@ -5,7 +5,8 @@ import { EditLogModal, EditFaultModal } from "./EditModals";
 import { SignOffModal, RepairModal } from "./WorkflowModals";
 import NewFaultModal from "./NewFaultModal";
 import { faultAge, summarizeAges, TARGET_DAYS } from "../faultAge";
-import { CHECK_KINDS, KIND_LABEL, logKind } from "../checkKinds";
+import { CHECK_KINDS, GROUP_NOUN, KIND_LABEL, logGroup, logKind } from "../checkKinds";
+import { logTime } from "../trends";
 import { showPdf } from "../pdfViewer";
 import { RACL_LOGO } from "../raclLogo";
 import { exportInspectionPDF, exportFaultReportPDF, exportWeeklyPDF } from "../pdfExport";
@@ -291,7 +292,9 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState("");
   const [filterOperator, setFilterOperator] = useState("");
-  const [filterKind, setFilterKind] = useState<CheckKind | "">("");
+  const [kindTab, setKindTab] = useState<CheckKind>("daily");
+  // Groups the user opened or closed; others follow the default (newest open)
+  const [toggled, setToggled] = useState<Record<string, boolean>>({});
   const [faultView, setFaultView] = useState<"active" | "overdue" | "resolved" | "all">("active");
   const [migrating, setMigrating] = useState(false);
   const [migrateResult, setMigrateResult] = useState<string | null>(null);
@@ -344,14 +347,32 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
     adminAction(action).catch((e) => window.alert(e instanceof Error ? e.message : "Delete failed."));
   }
 
+  const kindCounts = useMemo(() => {
+    const counts = { daily: 0, weekly: 0, monthly: 0, yearly: 0 } as Record<CheckKind, number>;
+    for (const l of logs) counts[logKind(l)]++;
+    return counts;
+  }, [logs]);
+
   const filteredLogs = useMemo(() => {
     return logs.filter((l) => {
-      if (filterKind && logKind(l) !== filterKind) return false;
+      if (logKind(l) !== kindTab) return false;
       if (filterDate && !l.date.includes(filterDate)) return false;
       if (filterOperator && !l.operatorName.toLowerCase().includes(filterOperator.toLowerCase())) return false;
       return true;
-    });
-  }, [logs, filterDate, filterOperator, filterKind]);
+    }).sort((a, b) => logTime(b) - logTime(a));
+  }, [logs, filterDate, filterOperator, kindTab]);
+
+  // Newest group first; yearly checks form a single ungrouped list
+  const logGroups = useMemo(() => {
+    const groups = new Map<string, { key: string; label: string; logs: InspectionLog[] }>();
+    for (const l of filteredLogs) {
+      const g = logGroup(kindTab, l.date) ?? { key: "all", label: "" };
+      if (!groups.has(g.key)) groups.set(g.key, { ...g, logs: [] });
+      groups.get(g.key)!.logs.push(l);
+    }
+    return [...groups.values()].sort((a, b) => b.key.localeCompare(a.key));
+  }, [filteredLogs, kindTab]);
+  const filtering = !!(filterDate || filterOperator);
 
   const filteredFaults = useMemo(() => {
     return faults.filter((f) => {
@@ -408,68 +429,95 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
           value={filterOperator}
           onChange={(e) => setFilterOperator(e.target.value)}
         />
-        {!showFaults && (
-          <select className="filter-input" value={filterKind} onChange={(e) => setFilterKind(e.target.value as CheckKind | "")}>
-            <option value="">All checks</option>
-            {CHECK_KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
-          </select>
-        )}
       </div>
 
       {!showFaults ? (
         <>
-          <div className="log-table-wrap">
-            <table className="log-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Time</th>
-                  <th>Operator</th>
-                  <th>Condition</th>
-                  <th>Faults</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLogs.length === 0 ? (
-                  <tr><td colSpan={6} className="empty-state">No inspection logs yet.</td></tr>
-                ) : filteredLogs.map((log) => (
-                  <tr key={log.id}>
-                    <td className="ga-a" data-label="Date">
-                      {log.date}
-                      {logKind(log) !== "daily" && <span className="kind-tag">{KIND_LABEL[logKind(log)]}</span>}
-                    </td>
-                    <td className="ga-b" data-label="Time">{log.time}</td>
-                    <td className="ga-line" data-label="Operator">{log.operatorName}</td>
-                    <td className="ga-c" data-label="Condition">
-                      <span className={`badge badge-${log.overallCondition === "Excellent" || log.overallCondition === "Good" ? "ok" : "critical"}`}>
-                        {log.overallCondition}
-                      </span>
-                    </td>
-                    <td className="ga-d" data-label="Faults">
-                      {log.faultCount > 0 ? (
-                        <span className={`badge ${log.faultCount >= 3 ? "badge-critical" : "badge-fault"}`}>
-                          {log.faultCount} fault{log.faultCount > 1 ? "s" : ""}
-                        </span>
-                      ) : (
-                        <span className="badge badge-ok">None</span>
-                      )}
-                    </td>
-                    <td className="log-actions">
-                      <button className="action-btn" onClick={() => setViewLog(log)}>View</button>
-                      <button className="action-btn" onClick={() => showPdf(exportInspectionPDF(log))}>PDF</button>
-                      {logKind(log) === "daily" && <button className="action-btn" onClick={() => exportWeekFor(log, logs)}>Week</button>}
-                      {!log.shiftSignoff && <button className="action-btn accent" onClick={() => setSignOff(log)}>Sign off</button>}
-                      {isAdmin && <>
-                        <button className="action-btn" onClick={() => setEditLog(log)}>Edit</button>
-                        <button className="action-btn danger" onClick={() => confirmDelete(`the log from ${log.date}`, () => deleteLog(log.id))}>Delete</button>
-                      </>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="kind-tabs" style={{ padding: 0, margin: "0 0 12px" }}>
+            {CHECK_KINDS.map((k) => (
+              <button key={k} className={`kind-tab${k === kindTab ? " active" : ""}`} onClick={() => setKindTab(k)}>
+                {KIND_LABEL[k]}<span className="kind-count">{kindCounts[k]}</span>
+              </button>
+            ))}
           </div>
+          {logGroups.length === 0 && (
+            <p className="empty-state log-empty">
+              {filtering ? "No inspections match." : `No ${KIND_LABEL[kindTab].toLowerCase()} inspections yet.`}
+            </p>
+          )}
+          {logGroups.map((g, gi) => {
+            const open = g.key === "all" || filtering || (toggled[g.key] ?? gi === 0);
+            const withFaults = g.logs.filter((l) => l.faultCount > 0).length;
+            return (
+              <div key={g.key} className="log-group">
+                {g.key !== "all" && (
+                  <div className="log-group-head">
+                    <button className="log-group-toggle" onClick={() => setToggled((t) => ({ ...t, [g.key]: !open }))} aria-expanded={open}>
+                      <span className="log-group-caret">{open ? "▾" : "▸"}</span>
+                      <span className="log-group-title">
+                        <span className="log-group-noun">{GROUP_NOUN[kindTab]}</span> {g.label}
+                      </span>
+                      <span className="log-group-meta">
+                        {g.logs.length} inspection{g.logs.length !== 1 ? "s" : ""}
+                        {withFaults > 0 && <span className="log-group-faults"> · {withFaults} with faults</span>}
+                      </span>
+                    </button>
+                    {kindTab === "daily" && (
+                      <button className="action-btn" onClick={() => exportWeekFor(g.logs[0], logs)}>Week PDF</button>
+                    )}
+                  </div>
+                )}
+                {open && (
+                  <div className="log-table-wrap">
+                    <table className="log-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Time</th>
+                          <th>Operator</th>
+                          <th>Condition</th>
+                          <th>Faults</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.logs.map((log) => (
+                          <tr key={log.id}>
+                            <td className="ga-a" data-label="Date">{log.date}</td>
+                            <td className="ga-b" data-label="Time">{log.time}</td>
+                            <td className="ga-line" data-label="Operator">{log.operatorName}</td>
+                            <td className="ga-c" data-label="Condition">
+                              <span className={`badge badge-${log.overallCondition === "Excellent" || log.overallCondition === "Good" ? "ok" : "critical"}`}>
+                                {log.overallCondition}
+                              </span>
+                            </td>
+                            <td className="ga-d" data-label="Faults">
+                              {log.faultCount > 0 ? (
+                                <span className={`badge ${log.faultCount >= 3 ? "badge-critical" : "badge-fault"}`}>
+                                  {log.faultCount} fault{log.faultCount > 1 ? "s" : ""}
+                                </span>
+                              ) : (
+                                <span className="badge badge-ok">None</span>
+                              )}
+                            </td>
+                            <td className="log-actions">
+                              <button className="action-btn" onClick={() => setViewLog(log)}>View</button>
+                              <button className="action-btn" onClick={() => showPdf(exportInspectionPDF(log))}>PDF</button>
+                              {!log.shiftSignoff && <button className="action-btn accent" onClick={() => setSignOff(log)}>Sign off</button>}
+                              {isAdmin && <>
+                                <button className="action-btn" onClick={() => setEditLog(log)}>Edit</button>
+                                <button className="action-btn danger" onClick={() => confirmDelete(`the log from ${log.date}`, () => deleteLog(log.id))}>Delete</button>
+                              </>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
           <p style={{ textAlign: "right", fontSize: 11, color: "var(--muted)", marginTop: 8 }}>
             {filteredLogs.length} record{filteredLogs.length !== 1 ? "s" : ""}
           </p>

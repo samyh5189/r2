@@ -604,3 +604,18 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
 @media (max-width: 480px) { .service-banner { margin: 10px 12px 0; } }
 .summary-bar { display: flex; gap: 8px; align-items: center; }
 .summary-bar select { flex: 1; min-width: 0; }
+
+/* Logs grouped by period */
+.kind-count { font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 99px; background: rgba(0, 0, 0, 0.07); }
+.kind-tab.active .kind-count { background: rgba(255, 255, 255, 0.2); }
+.log-group { margin-bottom: 10px; }
+.log-group-head { display: flex; align-items: center; gap: 8px; background: white; border: 1px solid var(--border); border-radius: 10px; padding: 4px 8px 4px 4px; }
+.log-group-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: none; border: none; padding: 8px 6px; font-family: inherit; text-align: left; cursor: pointer; color: var(--text); }
+.log-group-caret { width: 12px; color: var(--muted); }
+.log-group-title { font-weight: 700; font-size: 14px; color: var(--navy); }
+.log-group-noun { font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.log-group-meta { font-size: 12px; color: var(--muted); margin-left: auto; }
+.log-group-faults { color: #b45309; font-weight: 600; }
+.log-group .log-table-wrap { margin-top: 6px; }
+.log-empty { background: white; border: 1px solid var(--border); border-radius: 10px; padding: 24px; text-align: center; }
+@media (max-width: 480px) { .log-group-meta { margin-left: 20px; width: 100%; } }

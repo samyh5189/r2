@@ -3,7 +3,7 @@ import type { CheckKind, ChecklistItemConfig, ChecklistSectionConfig, ItemInputT
 import { getChecklistConfig, saveChecklistConfig } from "../storage";
 import { defaultChecklistConfig, itemType } from "../checklistData";
 import OperatorsEditor from "./OperatorsEditor";
-import NotifyEditor from "./NotifyEditor";
+import EmailSettingsEditor from "./EmailSettingsEditor";
 import ServiceEditor from "./ServiceEditor";
 import { CHECK_KINDS, KIND_LABEL } from "../checkKinds";
 
@@ -62,7 +62,7 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
   if (!config) return (
     <div className="container">
       <OperatorsEditor onAuthLost={onAuthLost} />
-      <NotifyEditor onAuthLost={onAuthLost} />
+      <EmailSettingsEditor onAuthLost={onAuthLost} />
       <ServiceEditor onAuthLost={onAuthLost} />
       {kindPicker}
       <p style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Loading checklist…</p>
@@ -116,7 +116,7 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
   return (
     <div className="container">
       <OperatorsEditor onAuthLost={onAuthLost} />
-      <NotifyEditor onAuthLost={onAuthLost} />
+      <EmailSettingsEditor onAuthLost={onAuthLost} />
       <ServiceEditor onAuthLost={onAuthLost} />
       {kindPicker}
       <div className="editor-bar" style={{ marginTop: 12 }}>
