@@ -208,7 +208,8 @@ export function buildFaultReportPdf(report: FaultReport, x: FaultReportExtras, a
   header("ACTION TAKEN / RECOMMENDATION:");
   const actionTaken = report.repair?.details
     || (report.priority === "Immediate Grounding" ? "Vehicle taken out of service; reported to maintenance." : "Reported to maintenance.");
-  const recommendation = [...new Set(report.faults.map((f) => f.recommendedAction).filter(Boolean))].join(" ");
+  // Maintenance's own recommendation once the repair is recorded, the report's suggested actions before
+  const recommendation = report.repair?.remarks?.trim() || [...new Set(report.faults.map((f) => f.recommendedAction).filter(Boolean))].join(" ");
   leadRow("Action Taken:", actionTaken, 5.34);
   leadRow("Recommendation:", recommendation, 7.11);
 
@@ -234,11 +235,17 @@ export function buildFaultReportPdf(report: FaultReport, x: FaultReportExtras, a
     doc.text(`Photos are attached on the following page${photos.length > 1 ? "s" : ""} for the reference.`, 27.09, y);
   }
 
-  // ── Repair and acceptance, when recorded (same table style) ─────────
+  // ── Photos: one per page, full width, straight after page 1 as in the template; sign-offs last ────────────
+  for (const p of photos) {
+    newPage();
+    fitImage(p, "JPEG", 14.31, 32.3, 180.0, 135.2, "top");
+  }
+
+  // ── Sign-offs, when recorded (same table style): the action taken and recommendation are on page 1 ──
   const rp = report.repair ?? {};
   const ac = report.acceptance ?? {};
   const sh = report.shiftSignoff;
-  const hasRepair = Object.values(rp).some(Boolean);
+  const hasRepair = !!(rp.repairedBy || rp.repairedBySignature || rp.desiredStartDate || rp.requiredEndDate);
   const hasAccept = Object.values(ac).some(Boolean);
   if (sh || hasRepair || hasAccept) {
     newPage();
@@ -252,35 +259,30 @@ export function buildFaultReportPdf(report: FaultReport, x: FaultReportExtras, a
       if (sig) fitImage(sig, "PNG", R - 46, y - 15, 44, 14, "center");
     };
     const when = (d?: string, t?: string) => [d, t].filter(Boolean).join(" ") || "-";
+    const stamp = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
     if (sh) {
       header("SHIFT IN-CHARGE:");
       sigRow("Name:", sh.name, x.signatures.shift);
-      row("Signed:", new Date(sh.signedAt).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }));
+      row("Signed:", stamp(sh.signedAt));
       y += GAP;
     }
     if (hasRepair) {
-      header("DETAILS OF REPAIR:");
-      row("Desired start:", when(rp.desiredStartDate, rp.desiredStartTime));
-      row("Required end:", when(rp.requiredEndDate, rp.requiredEndTime));
+      header("REPAIR:");
       sigRow("Repaired by:", rp.repairedBy, x.signatures.repair);
-      row("Repair works:", rp.details || "-");
-      row("Remarks:", rp.remarks || "-");
+      if (report.repairStartedAt) row("Recorded:", stamp(report.repairStartedAt));
+      // Reports from before the template change may carry a schedule
+      if (rp.desiredStartDate) row("Desired start:", when(rp.desiredStartDate, rp.desiredStartTime));
+      if (rp.requiredEndDate) row("Required end:", when(rp.requiredEndDate, rp.requiredEndTime));
       y += GAP;
     }
     if (hasAccept) {
       header("ACCEPTANCE TEST:");
       row("Date / time:", when(ac.date, ac.time));
-      row("Required end:", when(ac.requiredEndDate, ac.requiredEndTime));
+      if (ac.requiredEndDate) row("Required end:", when(ac.requiredEndDate, ac.requiredEndTime));
       row("Comments:", ac.comments || "-");
       sigRow("Maintenance:", ac.maintenanceName, x.signatures.maintenance);
       sigRow("ARFF:", ac.arffName, x.signatures.arff);
     }
-  }
-
-  // ── Photos: one per page, full width, as in the template ────────────
-  for (const p of photos) {
-    newPage();
-    fitImage(p, "JPEG", 14.31, 32.3, 180.0, 135.2, "top");
   }
 
   return doc;

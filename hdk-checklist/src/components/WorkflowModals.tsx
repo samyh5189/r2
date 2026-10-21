@@ -98,9 +98,11 @@ function SignSlot({ existing, saved, value, onChange }: { existing?: string; sav
 }
 
 /**
- * Repair progress. The person recording it identifies first (name + PIN). Maintenance officers fill in
- * the schedule, the repair and the maintenance half of the acceptance test; ARFF operators sign the
- * ARFF half. Until any maintenance officer is listed, an ARFF operator can fill in everything.
+ * Repair progress, following the fault report template: the action taken and recommendation (printed
+ * in the report's ACTION TAKEN / RECOMMENDATION table), then the acceptance test that closes it.
+ * The person recording it identifies first (name + PIN). Maintenance officers record the action and
+ * the maintenance half of the acceptance test; ARFF operators sign the ARFF half. Until any
+ * maintenance officer is listed, an ARFF operator can fill in everything.
  */
 export function RepairModal({ report, onClose, onDone }: { report: FaultReport; onClose: () => void; onDone: () => void }) {
   const [repair, setRepair] = useState<FaultRepair>(() => ({ ...report.repair }));
@@ -167,8 +169,8 @@ export function RepairModal({ report, onClose, onDone }: { report: FaultReport; 
           <div className="modal-body edit-form">
             <p className="editor-hint">
               {split
-                ? "Maintenance officers record the repair and sign for maintenance. ARFF operators sign the acceptance test for ARFF."
-                : "Record repair progress as the work goes. The report closes when maintenance and ARFF both sign the acceptance test."}
+                ? "Maintenance officers record the action taken and sign for maintenance. ARFF operators sign the acceptance test for ARFF."
+                : "Record the action taken as the work goes. The report closes when maintenance and ARFF both sign the acceptance test."}
             </p>
             <OperatorField label="Who is recording this?" operators={operators} withMaintenance rememberAs="repair"
               name={recordedBy} pin={pin} onName={(n) => { setRecordedBy(n); setError(null); }} onPin={setPin} />
@@ -179,27 +181,24 @@ export function RepairModal({ report, onClose, onDone }: { report: FaultReport; 
           <div className="modal-body edit-form">
             <p className="editor-hint" style={{ margin: 0 }}>Recording as <strong>{recordedBy}</strong>{split && (isMaintenance(me) ? " · Maintenance" : " · ARFF")}</p>
 
-            <h4 className="repair-step">1 · Schedule</h4>
-            {dateTime("Desired start", repair.desiredStartDate, repair.desiredStartTime, (d, t) => r({ desiredStartDate: d, desiredStartTime: t }), !canRepair)}
-            {dateTime("Required end", repair.requiredEndDate, repair.requiredEndTime, (d, t) => r({ requiredEndDate: d, requiredEndTime: t }), !canRepair)}
-
-            <h4 className="repair-step">2 · Repair</h4>
+            <h4 className="repair-step">1 · Action taken</h4>
             {canRepair ? (
               <>
+                <label>Action taken<textarea rows={3} value={repair.details ?? ""} onChange={(e) => r({ details: e.target.value })} placeholder="What was done to fix it" /></label>
+                <label>Recommendation<textarea rows={2} value={repair.remarks ?? ""} onChange={(e) => r({ remarks: e.target.value })} placeholder="Further work or follow-up, if any" /></label>
                 <NameField label="Repaired by" value={repair.repairedBy ?? ""} onChange={(v) => r({ repairedBy: v })} />
                 <SignSlot existing={signed.repairedBySignature} saved={verified.saved} value={repair.repairedBySignature} onChange={(v) => r({ repairedBySignature: v })} />
-                <label>Details of repair works<textarea rows={3} value={repair.details ?? ""} onChange={(e) => r({ details: e.target.value })} /></label>
-                <label>Remarks<textarea rows={2} value={repair.remarks ?? ""} onChange={(e) => r({ remarks: e.target.value })} /></label>
+                <p className="editor-hint" style={{ margin: 0 }}>Shown on the fault report under ACTION TAKEN / RECOMMENDATION.</p>
               </>
             ) : (
               <>
+                {readOnly("Action taken", repair.details)}
+                {repair.remarks && readOnly("Recommendation", repair.remarks)}
                 {readOnly("Repaired by", repair.repairedBy)}
-                {readOnly("Details of repair works", repair.details)}
-                {repair.remarks && readOnly("Remarks", repair.remarks)}
               </>
             )}
 
-            <h4 className="repair-step">3 · Acceptance test</h4>
+            <h4 className="repair-step">2 · Acceptance test</h4>
             {dateTime("Test", acceptance.date, acceptance.time, (d, t) => a({ date: d, time: t }))}
             <label>Comments<textarea rows={2} value={acceptance.comments ?? ""} onChange={(e) => a({ comments: e.target.value })} /></label>
             <div className="sign-pair">

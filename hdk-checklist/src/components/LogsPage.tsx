@@ -194,9 +194,9 @@ function FaultModal({ report, onClose, actions }: { report: FaultReport; onClose
                   {([
                     ["Desired start", [report.repair?.desiredStartDate, report.repair?.desiredStartTime].filter(Boolean).join(" ")],
                     ["Required end", [report.repair?.requiredEndDate, report.repair?.requiredEndTime].filter(Boolean).join(" ")],
+                    ["Action taken", report.repair?.details],
+                    ["Recommendation", report.repair?.remarks],
                     ["Repaired by", report.repair?.repairedBy],
-                    ["Repair works", report.repair?.details],
-                    ["Remarks", report.repair?.remarks],
                     ["Acceptance test", [report.acceptance?.date, report.acceptance?.time].filter(Boolean).join(" ")],
                     ["Comments", report.acceptance?.comments],
                     ["Maintenance (HDK)", report.acceptance?.maintenanceName],
