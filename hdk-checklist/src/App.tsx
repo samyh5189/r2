@@ -1,6 +1,6 @@
 import { useState } from "react";
 import "./index.css";
-import ChecklistPage from "./components/ChecklistPage";
+import ChecklistHub from "./components/ChecklistHub";
 import LogsPage from "./components/LogsPage";
 import AdminLogin from "./components/AdminLogin";
 import ChecklistEditor from "./components/ChecklistEditor";
@@ -33,7 +33,7 @@ export default function App() {
             </button>
           </div>
         </div>
-        <p>RESCUE 2 — Daily Inspection</p>
+        <p>RESCUE 2 — Vehicle Inspections</p>
       </header>
 
       <nav className="tabs">
@@ -56,7 +56,7 @@ export default function App() {
         )}
       </nav>
 
-      {tab === "checklist" && <ChecklistPage />}
+      {tab === "checklist" && <ChecklistHub />}
       {tab === "logs" && <LogsPage showFaults={false} isAdmin={isAdmin} onAuthLost={signOut} />}
       {tab === "faults" && <LogsPage showFaults={true} isAdmin={isAdmin} onAuthLost={signOut} />}
       {tab === "trends" && <TrendsPage />}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { InspectionLog, FaultReport, ItemStatus } from "../types";
 import { itemType } from "../checklistData";
+import EvidenceEditor from "./EvidenceEditor";
 
 interface ModalProps<T> {
   item: T;
@@ -105,6 +106,15 @@ export function EditFaultModal({ item, onClose, onSave }: ModalProps<FaultReport
           <label>Vehicle / equipment<input value={r.vehicleEquipmentLine} onChange={(e) => setR({ ...r, vehicleEquipmentLine: e.target.value })} /></label>
           <label>Reported by<input value={r.operatorName} onChange={(e) => setR({ ...r, operatorName: e.target.value })} required /></label>
           <label>Details of defects<textarea rows={4} value={r.detailsOfDefects} onChange={(e) => setR({ ...r, detailsOfDefects: e.target.value })} /></label>
+          {r.faults.map((f, i) => (
+            <div key={f.itemId} className="edit-items">
+              <h4>{f.label} · {f.status}</h4>
+              <EvidenceEditor
+                evidence={f.evidence ?? []}
+                onChange={(evidence) => setR((cur) => ({ ...cur, faults: cur.faults.map((x, j) => (j === i ? { ...x, evidence } : x)) }))}
+              />
+            </div>
+          ))}
           <div className="edit-row">
             <label>Priority
               <select value={r.priority} onChange={(e) => setR({ ...r, priority: e.target.value as FaultReport["priority"] })}>

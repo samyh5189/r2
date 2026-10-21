@@ -1,6 +1,7 @@
-import type { ChecklistItem, ChecklistSection, ChecklistSectionConfig, ItemInputType } from "./types";
+import type { CheckKind, ChecklistItem, ChecklistSection, ChecklistSectionConfig, ChecklistItemConfig, ItemInputType } from "./types";
 
-export function defaultChecklistConfig(): ChecklistSectionConfig[] {
+export function defaultChecklistConfig(kind: CheckKind = "daily"): ChecklistSectionConfig[] {
+  if (kind !== "daily") return periodicDefaults(kind);
   const raw: { id: string; title: string; items: string[] }[] = [
     {
       id: "p1",
@@ -133,6 +134,64 @@ export function defaultChecklistConfig(): ChecklistSectionConfig[] {
       return id === ENGINE_HOURS_ID
         ? { id, label, type: "number" as const, unit: "hrs" }
         : { id, label, type: "status" as const };
+    }),
+  }));
+}
+
+// Starting points for the periodic checks; admins tailor them under Setup.
+// An item is a label, or [label, unit] for a number reading.
+type RawItem = string | [string, string];
+const PERIODIC: Record<Exclude<CheckKind, "daily">, { id: string; title: string; items: RawItem[] }[]> = {
+  weekly: [
+    { id: "w1", title: "WEEKLY — 1. Engine & Chassis", items: [
+      "Engine start and run-up (5 min)", "Air tank / dryer drain (moisture)", "Wheel nuts and rims",
+      "Tyre tread and sidewalls", "Leaks under vehicle (oil, fuel, coolant)", "Steering play and operation", "Parking brake test",
+    ] },
+    { id: "w2", title: "WEEKLY — 2. Firefighting System", items: [
+      ["Fire pump run test — discharge pressure", "bar"], "Foam proportioning system operation", "Roof turret / monitor operation",
+      "Bumper turret operation", "Hose reels — deploy and rewind", "Undertruck nozzles", "Valves and drains", "Water / foam tank level gauges",
+    ] },
+    { id: "w3", title: "WEEKLY — 3. Equipment & Cab", items: [
+      "Breathing apparatus sets", "Portable extinguishers (gauge in green)", "Rescue tools and equipment inventory",
+      "Radio communication check", "Siren, PA and warning lights", "Wipers and washers", "First aid kit",
+    ] },
+  ],
+  monthly: [
+    { id: "m1", title: "MONTHLY — 1. Vehicle", items: [
+      "Battery terminals cleaned and protected", "Lubrication points greased", "Brake lining wear and slack adjusters",
+      "Air system leak-down test", "Drive belt tension", "Air filter restriction indicator", "Suspension and springs", "Exhaust system",
+    ] },
+    { id: "m2", title: "MONTHLY — 2. Firefighting System", items: [
+      ["Pump pressure test at rated output", "bar"], "Foam system flushed with water", "Primer operation (draft test)",
+      "Turret flow pattern", "Complementary agent system pressure", "Hoses and couplings (cracks, wear)", "Nozzles and strainers cleaned",
+    ] },
+    { id: "m3", title: "MONTHLY — 3. Equipment", items: [
+      "Breathing apparatus — full functional check", "Portable extinguishers — weight / pressure", "Thermal imaging camera",
+      "Ladders", "Lighting equipment / generator run",
+    ] },
+  ],
+  yearly: [
+    { id: "y1", title: "YEARLY — 1. Vehicle", items: [
+      "Annual service by workshop / manufacturer", "Engine oil and filters changed", "Transmission and axle oils changed",
+      "Coolant tested / replaced", "Brake system overhaul inspection", "Chassis and body corrosion inspection", "Roadworthiness / registration",
+    ] },
+    { id: "y2", title: "YEARLY — 2. Firefighting System", items: [
+      "Pump performance test and certification", "Fire hose pressure test", "Foam concentrate quality test",
+      "Water / foam tank internal inspection", "Turret / monitor service", "Pressure gauges calibrated",
+    ] },
+    { id: "y3", title: "YEARLY — 3. Equipment", items: [
+      "Extinguishers annual service", "BA cylinders — hydrostatic test in date", "Rescue tools service", "Ladder load test",
+    ] },
+  ],
+};
+
+function periodicDefaults(kind: Exclude<CheckKind, "daily">): ChecklistSectionConfig[] {
+  return PERIODIC[kind].map((sec) => ({
+    id: sec.id,
+    title: sec.title,
+    items: sec.items.map((raw, idx): ChecklistItemConfig => {
+      const id = `${sec.id}-${idx}`;
+      return typeof raw === "string" ? { id, label: raw, type: "status" } : { id, label: raw[0], type: "number", unit: raw[1] };
     }),
   }));
 }

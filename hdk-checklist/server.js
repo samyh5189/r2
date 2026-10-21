@@ -29,6 +29,19 @@ const writeLimit = rateLimit(60, HOUR);
 const aiLimit = rateLimit(30, HOUR);
 
 const DATE_RE = /^\d{2}\/\d{2}\/\d{4}$/;
+
+// Inspection kinds and the period each covers (mirrors src/checkKinds.ts)
+const KINDS = ["daily", "weekly", "monthly", "yearly"];
+const PERIOD_NAME = { daily: "Today's", weekly: "This week's", monthly: "This month's", yearly: "This year's" };
+function periodKey(kind, dateGB) {
+  const [d, m, y] = dateGB.split("/");
+  if (kind === "daily") return dateGB;
+  if (kind === "monthly") return `${m}/${y}`;
+  if (kind === "yearly") return y;
+  const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 1) % 7)); // back to Saturday
+  return [date.getUTCDate(), date.getUTCMonth() + 1].map((n) => String(n).padStart(2, "0")).join("/") + "/" + date.getUTCFullYear();
+}
 const isId = (v) => typeof v === "string" && v.length > 0 && v.length <= 64;
 
 // ── PostgreSQL ────────────────────────────────────────────────────────
@@ -107,6 +120,8 @@ function adminRoutes(path, table) {
     if (!pool) return res.status(503).json({ error: "No database configured." });
     try {
       const item = { ...req.body, id: req.params.id };
+      // An edited date can move a periodic inspection into another period
+      if (table === "inspection_logs" && KINDS.includes(item.kind) && DATE_RE.test(item.date)) item.periodKey = periodKey(item.kind, item.date);
       const result = await pool.query(`UPDATE ${table} SET data = $2 WHERE id = $1`, [req.params.id, item]);
       if (result.rowCount === 0) return res.status(404).json({ error: "Not found." });
       res.json({ ok: true });
@@ -163,6 +178,7 @@ function configRoutes(path, key) {
 }
 
 configRoutes("/api/checklist-config", "checklist");
+for (const kind of KINDS.slice(1)) configRoutes(`/api/checklist-config/${kind}`, `checklist_${kind}`);
 configRoutes("/api/operators", "operators");
 
 adminRoutes("/api/logs", "inspection_logs");
@@ -184,32 +200,50 @@ app.get("/api/logs", async (_req, res) => {
 
 app.post("/api/logs", writeLimit, async (req, res) => {
   if (!pool) return res.status(503).json({ error: "No database configured." });
-  const log = req.body;
-  if (!isId(log?.id) || !DATE_RE.test(log.date) || !String(log.operatorName || "").trim() || !Array.isArray(log.sections)) {
+  const body = req.body;
+  if (!isId(body?.id) || !DATE_RE.test(body.date) || !String(body.operatorName || "").trim() || !Array.isArray(body.sections)) {
     return res.status(400).json({ error: "Invalid inspection log." });
   }
+  const kind = body.kind ?? "daily";
+  if (!KINDS.includes(kind)) return res.status(400).json({ error: "Invalid inspection kind." });
+  const log = { ...body, kind, periodKey: periodKey(kind, body.date) };
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    // Serialise submissions so the same device or operator can't submit twice in a day
+    // Serialise submissions so the limits below can't be raced
     await client.query("SELECT pg_advisory_xact_lock(hashtext('inspection_logs'))");
     const existing = await client.query("SELECT data FROM inspection_logs WHERE id = $1", [log.id]);
     if (existing.rowCount > 0) { await client.query("COMMIT"); return res.json({ ok: true }); }
-    const device = typeof log.deviceId === "string" ? log.deviceId.slice(0, 64) : "";
-    const sameDay = await client.query(
-      `SELECT data->>'operatorName' AS name, data->>'time' AS time, ($2 <> '' AND data->>'deviceId' = $2) AS by_device
-       FROM inspection_logs
-       WHERE data->>'date' = $1 AND (($2 <> '' AND data->>'deviceId' = $2) OR lower(trim(data->>'operatorName')) = lower(trim($3)))
-       LIMIT 1`,
-      [log.date, device, String(log.operatorName)]
-    );
-    if (sameDay.rowCount > 0) {
-      await client.query("ROLLBACK");
-      const { name, time, by_device } = sameDay.rows[0];
-      const error = by_device
-        ? `Today's inspection on this device was already submitted by ${name} at ${time}.`
-        : `${name} already submitted an inspection today at ${time}.`;
-      return res.status(409).json({ error, operatorName: name, time });
+    if (kind !== "daily") {
+      // Weekly / monthly / yearly checks: one per period for the vehicle
+      const done = await client.query(
+        `SELECT data->>'operatorName' AS name, data->>'date' AS date FROM inspection_logs
+         WHERE data->>'kind' = $1 AND data->>'periodKey' = $2 LIMIT 1`,
+        [kind, log.periodKey]
+      );
+      if (done.rowCount > 0) {
+        await client.query("ROLLBACK");
+        const { name, date } = done.rows[0];
+        return res.status(409).json({ error: `${PERIOD_NAME[kind]} ${kind} inspection was already submitted by ${name} on ${date}.`, operatorName: name });
+      }
+    } else {
+      // Daily: one per device and one per operator each day
+      const device = typeof log.deviceId === "string" ? log.deviceId.slice(0, 64) : "";
+      const sameDay = await client.query(
+        `SELECT data->>'operatorName' AS name, data->>'time' AS time, ($2 <> '' AND data->>'deviceId' = $2) AS by_device
+         FROM inspection_logs
+         WHERE data->>'date' = $1 AND COALESCE(data->>'kind', 'daily') = 'daily' AND (($2 <> '' AND data->>'deviceId' = $2) OR lower(trim(data->>'operatorName')) = lower(trim($3)))
+         LIMIT 1`,
+        [log.date, device, String(log.operatorName)]
+      );
+      if (sameDay.rowCount > 0) {
+        await client.query("ROLLBACK");
+        const { name, time, by_device } = sameDay.rows[0];
+        const error = by_device
+          ? `Today's inspection on this device was already submitted by ${name} at ${time}.`
+          : `${name} already submitted an inspection today at ${time}.`;
+        return res.status(409).json({ error, operatorName: name, time });
+      }
     }
     await client.query(
       `INSERT INTO inspection_logs (id, data, created_at)

@@ -562,3 +562,13 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
 .nf-status-btn { flex: 1; padding: 10px 8px; border: 1.5px solid var(--border); border-radius: 8px; background: white; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; color: var(--muted); }
 .nf-status-btn.nok.on { border-color: var(--nok); background: #fff7ed; color: #9a3412; }
 .nf-status-btn.us.on { border-color: var(--us); background: #fef2f2; color: #991b1b; }
+
+/* Check picker: daily / weekly / monthly / yearly */
+.kind-tabs { display: flex; gap: 6px; max-width: 620px; margin: 14px auto 0; padding: 0 16px; }
+.kind-tab { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 4px; border: 1.5px solid var(--border); border-radius: 10px; background: white; font-size: 13px; font-weight: 600; font-family: inherit; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.kind-tab.active { border-color: var(--navy); background: var(--navy); color: white; }
+.kind-chip { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 99px; }
+.kind-chip.due { background: #fef3c7; color: #92400e; }
+.kind-chip.done { background: #dcfce7; color: #15803d; }
+@media (max-width: 480px) { .kind-tabs { padding: 0 12px; gap: 4px; } .kind-tab { font-size: 12px; flex-direction: column; gap: 2px; padding: 7px 2px; } }
+.kind-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 99px; background: #e0e7ff; color: #3730a3; font-size: 10px; font-weight: 700; vertical-align: middle; }

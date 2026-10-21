@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import type { InspectionLog, FaultReport } from "./types";
 import { RACL_LOGO } from "./raclLogo";
+import { KIND_LABEL, logKind } from "./checkKinds";
 import { ENGINE_HOURS_ID, itemType } from "./checklistData";
 
 type RGB = [number, number, number];
@@ -55,7 +56,7 @@ function logoTile(doc: jsPDF, x: number, y: number, w: number, h: number) {
   doc.addImage(RACL_LOGO, "PNG", x + (w - lw) / 2, y + (h - lw * LOGO_RATIO) / 2, lw, lw * LOGO_RATIO);
 }
 
-function header(doc: jsPDF, page: number, pages: number) {
+function header(doc: jsPDF, checklistName: string) {
   doc.setFillColor(...NAVY);
   doc.rect(10, 8, 190, 18, "F");
   logoTile(doc, 174, 9.5, 24, 15);
@@ -73,7 +74,7 @@ function header(doc: jsPDF, page: number, pages: number) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.text(
-    "RESCUE 2  |  SECTION ONE — VEHICLE OPERATORS  |  Daily Inspection Checklist",
+    `RESCUE 2  |  SECTION ONE — VEHICLE OPERATORS  |  ${checklistName}`,
     92,
     23,
     { align: "center" }
@@ -87,15 +88,27 @@ function header(doc: jsPDF, page: number, pages: number) {
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...GREY);
   doc.text("SOP: RACL-SQ-ARF-COP-24-2 (version 01)", 70, 31);
-  doc.text(`Page ${page} of ${pages}`, 198, 31, { align: "right" });
+}
+
+// Page numbers go in once the page count is known (periodic checklists vary in length)
+function numberPages(doc: jsPDF, headerPages: number[]) {
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...GREY);
+  for (const p of headerPages) {
+    doc.setPage(p);
+    doc.text(`Page ${p} of ${doc.getNumberOfPages()}`, 198, 31, { align: "right" });
+  }
 }
 
 export async function exportInspectionPDF(log: InspectionLog) {
   const sig = log.operatorSignature ? await stripWhiteBg(log.operatorSignature) : "";
   const shiftSig = log.shiftSignoff ? await stripWhiteBg(log.shiftSignoff.signature) : "";
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const pages = 2;
-  header(doc, 1, pages);
+  const kind = logKind(log);
+  const checklistName = `${KIND_LABEL[kind]} Inspection Checklist`;
+  const headerPages = [1];
+  header(doc, checklistName);
 
   let y = 40;
   doc.setFontSize(7);
@@ -116,7 +129,8 @@ export async function exportInspectionPDF(log: InspectionLog) {
   for (const sec of log.sections) {
     if (y > 265) {
       doc.addPage();
-      header(doc, 2, pages);
+      header(doc, checklistName);
+      headerPages.push(doc.getNumberOfPages());
       y = 40;
     }
     doc.setFillColor(31, 51, 77);
@@ -130,7 +144,8 @@ export async function exportInspectionPDF(log: InspectionLog) {
     for (let i = 0; i < sec.items.length; i++) {
       if (y > 270) {
         doc.addPage();
-        header(doc, doc.getNumberOfPages(), pages);
+        header(doc, checklistName);
+        headerPages.push(doc.getNumberOfPages());
         y = 40;
       }
       const item = sec.items[i];
@@ -202,7 +217,8 @@ export async function exportInspectionPDF(log: InspectionLog) {
     );
   }
 
-  return toFile(doc, `HDK-Checklist-${log.date.replace(/\//g, "-")}-${log.operatorName}.pdf`);
+  numberPages(doc, headerPages);
+  return toFile(doc, `HDK-${kind === "daily" ? "Checklist" : `${KIND_LABEL[kind]}-Checklist`}-${log.date.replace(/\//g, "-")}-${log.operatorName}.pdf`);
 }
 
 export async function exportFaultReportPDF(report: FaultReport) {

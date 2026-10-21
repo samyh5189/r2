@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import SignaturePad from "signature_pad";
-import { buildBlankChecklist, buildChecklist, itemType } from "../checklistData";
-import type { ChecklistSection, ChecklistSectionConfig, ItemStatus, InspectionLog, FaultReport, EvidenceItem, Operator } from "../types";
+import { buildChecklist, defaultChecklistConfig, itemType } from "../checklistData";
+import { KIND_LABEL, PERIOD_NAME } from "../checkKinds";
+import type { CheckKind, ChecklistSection, ChecklistSectionConfig, ItemStatus, InspectionLog, FaultReport, EvidenceItem, Operator } from "../types";
 import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek, getChecklistConfig, findLogForDate, getOperators, deviceId } from "../storage";
 import { generateFaultReport } from "../faultReportAI";
 import { showPdf } from "../pdfViewer";
@@ -61,8 +62,16 @@ function useElapsedTimer(running: boolean) {
 
 const MAX_EVIDENCE = 5;
 
-export default function ChecklistPage() {
-  const [sections, setSections] = useState<ChecklistSection[]>(buildBlankChecklist);
+interface Props {
+  kind?: CheckKind;
+  /** Called after an inspection is saved, so the caller can refresh what's due */
+  onSubmitted?: () => void;
+  /** True while an inspection is under way (the check picker hides so progress isn't lost) */
+  onActiveChange?: (active: boolean) => void;
+}
+
+export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveChange }: Props) {
+  const [sections, setSections] = useState<ChecklistSection[]>(() => buildChecklist(defaultChecklistConfig(kind)));
   const [config, setConfig] = useState<ChecklistSectionConfig[] | null>(null);
   const [phase, setPhase] = useState<Phase>("intro");
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -104,20 +113,22 @@ export default function ChecklistPage() {
   const faultsSoFar = sections.reduce((a, s) => a + s.items.filter((it) => it.status === "NOK" || it.status === "U/S").length, 0);
 
   const timerRunning = phase === "item";
+  const active = phase === "item" || phase === "review" || phase === "outro" || phase === "submitting";
+  useEffect(() => { onActiveChange?.(active); }, [active, onActiveChange]);
   const { elapsed, display: timerDisplay } = useElapsedTimer(timerRunning);
 
   useEffect(() => {
     getOperators().then(setOperators);
-    findLogForDate(new Date().toLocaleDateString("en-GB")).then(setTodayLog);
-  }, []);
+    findLogForDate(new Date().toLocaleDateString("en-GB"), "", kind).then(setTodayLog);
+  }, [kind]);
 
   // Load the admin-configured checklist; only swap it in before any item is answered
   useEffect(() => {
-    getChecklistConfig().then((cfg) => {
+    getChecklistConfig(kind).then((cfg) => {
       setConfig(cfg);
       setSections((cur) => (cur.every((sec) => sec.items.every((it) => !it.status)) ? buildChecklist(cfg) : cur));
     });
-  }, []);
+  }, [kind]);
 
   // Set up sig pad when we enter outro phase
   useEffect(() => {
@@ -227,6 +238,7 @@ export default function ChecklistPage() {
       duration: elapsed,
       operatorName: operatorName.trim(),
       deviceId: deviceId(),
+      kind,
       fleetNumber: "",
       operatorSignature: sig,
       sections,
@@ -247,7 +259,7 @@ export default function ChecklistPage() {
         const prior = reportedIn.get(it.id);
         if (prior && (it.status === "NOK" || it.status === "U/S")) repeats.push({ label: it.label, reportNumber: prior.reportNumber, reportId: prior.id });
       }
-      faultReport = await generateFaultReport(sections, operatorName.trim(), "", sig, new Set(reportedIn.keys()));
+      faultReport = await generateFaultReport(sections, operatorName.trim(), "", sig, new Set(reportedIn.keys()), kind);
       if (faultReport) faultReport.inspectionLogId = log.id;
       log.faultReportId = faultReport?.id ?? repeats[0]?.reportId;
     }
@@ -264,12 +276,15 @@ export default function ChecklistPage() {
     setSavedFault(faultReport);
     setRepeatFaults(repeats);
     setPhase("done");
+    onSubmitted?.();
   }
 
   async function checkAlreadyDone() {
-    const existing = await findLogForDate(new Date().toLocaleDateString("en-GB"), operatorName);
+    const existing = await findLogForDate(new Date().toLocaleDateString("en-GB"), operatorName, kind);
     if (!existing) return false;
-    setBlockedMsg(`${existing.operatorName} already submitted today's inspection at ${existing.time}.`);
+    setBlockedMsg(kind === "daily"
+      ? `${existing.operatorName} already submitted today's inspection at ${existing.time}.`
+      : `${existing.operatorName} already submitted ${PERIOD_NAME[kind]}'s ${kind} inspection on ${existing.date}.`);
     setPhase("blocked");
     return true;
   }
@@ -282,7 +297,7 @@ export default function ChecklistPage() {
   }
 
   function handleNew() {
-    setSections(config ? buildChecklist(config) : buildBlankChecklist());
+    setSections(buildChecklist(config ?? defaultChecklistConfig(kind)));
     setPhase("intro"); setCurrentIdx(0);
     setPendingStatus(""); setPendingRemarks(""); setPendingEvidence([]); setFlash("");
     setOverallCondition(""); setComments("");
@@ -296,9 +311,11 @@ export default function ChecklistPage() {
       <div className="cl-screen">
         <div className="cl-intro-card">
           <img className="cl-intro-photo" src={rescue2Photo} alt="RESCUE 2 fire vehicle" />
-          <h2 className="cl-intro-title">Today's inspection is done</h2>
+          <h2 className="cl-intro-title">{kind === "daily" ? "Today's inspection is done" : `${KIND_LABEL[kind]} inspection done`}</h2>
           <p className="cl-intro-sub">
-            {blockedMsg || `Submitted by ${todayLog!.operatorName} at ${todayLog!.time}.`}
+            {blockedMsg || (kind === "daily"
+              ? `Submitted by ${todayLog!.operatorName} at ${todayLog!.time}.`
+              : `Submitted by ${todayLog!.operatorName} on ${todayLog!.date}. The next one is due after ${PERIOD_NAME[kind]}.`)}
           </p>
         </div>
       </div>
@@ -310,7 +327,7 @@ export default function ChecklistPage() {
       <div className="cl-screen">
         <div className="cl-intro-card">
           <img className="cl-intro-photo" src={rescue2Photo} alt="RESCUE 2 fire vehicle" />
-          <h2 className="cl-intro-title">Daily Inspection</h2>
+          <h2 className="cl-intro-title">{KIND_LABEL[kind]} Inspection</h2>
           <p className="cl-intro-sub">RESCUE 2 · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
           <p className="cl-intro-count">{total} items across {sections.length} sections</p>
 

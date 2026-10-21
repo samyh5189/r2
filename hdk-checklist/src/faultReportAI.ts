@@ -1,4 +1,4 @@
-import type { ChecklistSection, EvidenceItem, FaultItem, FaultReport } from "./types";
+import type { CheckKind, ChecklistSection, EvidenceItem, FaultItem, FaultReport } from "./types";
 import { nextFaultReportNumber } from "./storage";
 
 function collectFaults(sections: ChecklistSection[]): FaultItem[] {
@@ -42,7 +42,7 @@ async function askAI(prompt: string) {
   return parseJson(data.content[0].text);
 }
 
-async function generateWithAI(faults: FaultItem[], operatorName: string) {
+async function generateWithAI(faults: FaultItem[], operatorName: string, kind: CheckKind) {
   const faultList = faults
     .map((f, i) => {
       const evidenceNote = f.evidence.length > 0
@@ -52,7 +52,7 @@ async function generateWithAI(faults: FaultItem[], operatorName: string) {
     })
     .join("\n");
 
-  const prompt = `You are an ARFF (Airport Rescue and Firefighting) vehicle maintenance officer at Kulhudhuffushi Airport (HDK), Maldives. Operator "${operatorName}" completed a daily inspection for RESCUE 2 and found the following faults:
+  const prompt = `You are an ARFF (Airport Rescue and Firefighting) vehicle maintenance officer at Kulhudhuffushi Airport (HDK), Maldives. Operator "${operatorName}" completed a ${kind} inspection for RESCUE 2 and found the following faults:
 
 ${faultList}
 
@@ -62,7 +62,7 @@ ${faults.some(f => f.evidence.length > 0) ? "Note: Photographic/video evidence h
 Generate a formal ARFF fault report as valid JSON:
 {
   "faultTitle": "<ALL-CAPS SHORT TITLE, e.g. GEAR OIL LEAK or BRAKE SYSTEM FAULT>",
-  "detailsOfDefects": "<Formal 2-4 sentence narrative beginning with 'During daily inspection,' describing findings, suspected cause, evidence collected, and urgency. Match the tone of an official ARFF maintenance report.>",
+  "detailsOfDefects": "<Formal 2-4 sentence narrative beginning with 'During ${kind} inspection,' describing findings, suspected cause, evidence collected, and urgency. Match the tone of an official ARFF maintenance report.>",
   "faultSummary": "<1-2 sentence plain summary for internal records>",
   "assessment": "<1 sentence on vehicle operational status>",
   "priority": "Routine|Urgent|Immediate Grounding",
@@ -98,7 +98,7 @@ Respond with only the JSON object.`;
   };
 }
 
-function generateLocal(faults: FaultItem[], operatorName: string) {
+function generateLocal(faults: FaultItem[], operatorName: string, kind: CheckKind) {
   const hasUS = faults.some((f) => f.status === "U/S");
   const criticalSystems = ["brake", "steering", "fuel", "water tank", "foam tank", "pump", "turret"];
   const isCritical = faults.some((f) => criticalSystems.some((s) => f.label.toLowerCase().includes(s)));
@@ -119,7 +119,7 @@ function generateLocal(faults: FaultItem[], operatorName: string) {
   const faultTitle = faults.length === 1 ? faults[0].label.toUpperCase()
     : hasUS ? `${usList[0].toUpperCase()} AND OTHER FAULTS` : "MULTIPLE FAULTS";
 
-  let detailsOfDefects = `During daily inspection of RESCUE 2 (HDK-ARFF) conducted by ${operatorName}, `;
+  let detailsOfDefects = `During ${kind} inspection of RESCUE 2 (HDK-ARFF) conducted by ${operatorName}, `;
   detailsOfDefects += faults.length === 1
     ? `a fault was identified with the ${faults[0].label.toLowerCase()}. `
     : `${faults.length} fault(s) were identified. `;
@@ -132,7 +132,7 @@ function generateLocal(faults: FaultItem[], operatorName: string) {
     ? "Urgent inspection and repair are required to prevent further deterioration and ensure the vehicle remains safe and fully operational."
     : "The fault(s) are minor in nature; however, maintenance is recommended at the earliest opportunity to prevent escalation.";
 
-  const faultSummary = `${faults.length} fault(s) found during daily inspection of RESCUE 2 by ${operatorName}. Priority: ${priority}.`;
+  const faultSummary = `${faults.length} fault(s) found during ${kind} inspection of RESCUE 2 by ${operatorName}. Priority: ${priority}.`;
   const assessment = priority === "Immediate Grounding"
     ? "Vehicle must be grounded immediately. Do not deploy until cleared by the ARFFS Section Head."
     : priority === "Urgent"
@@ -148,6 +148,7 @@ export async function generateFaultReport(
   fleetNumber: string,
   operatorSignature: string,
   skipItemIds: Set<string> = new Set(),
+  kind: CheckKind = "daily",
 ): Promise<FaultReport | null> {
   // Faults already on an open report this week are not reported again
   const faults = collectFaults(sections).filter((f) => !skipItemIds.has(f.itemId));
@@ -158,8 +159,8 @@ export async function generateFaultReport(
   const time = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
   let result;
-  try { result = await generateWithAI(faults, operatorName); }
-  catch { result = generateLocal(faults, operatorName); }
+  try { result = await generateWithAI(faults, operatorName, kind); }
+  catch { result = generateLocal(faults, operatorName, kind); }
 
   return {
     id: crypto.randomUUID(),

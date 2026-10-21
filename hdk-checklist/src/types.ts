@@ -1,5 +1,7 @@
 export type ItemStatus = "OK" | "NOK" | "U/S" | "NA" | "";
 
+export type CheckKind = "daily" | "weekly" | "monthly" | "yearly";
+
 export interface EvidenceItem {
   id: string;
   type: "photo" | "video";
@@ -98,6 +100,8 @@ export interface InspectionLog {
   faultReportId?: string;
   shiftSignoff?: ShiftSignoff;
   deviceId?: string;
+  kind?: CheckKind;        // absent on older logs → daily
+  periodKey?: string;      // set by the server: date, week start, MM/YYYY or YYYY
   createdAt: string;
 }
 

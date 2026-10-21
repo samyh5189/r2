@@ -1,5 +1,6 @@
-import type { InspectionLog, FaultReport, ChecklistSectionConfig, Operator, ShiftSignoff, FaultRepair, FaultAcceptance } from "./types";
+import type { CheckKind, InspectionLog, FaultReport, ChecklistSectionConfig, Operator, ShiftSignoff, FaultRepair, FaultAcceptance } from "./types";
 import { defaultChecklistConfig } from "./checklistData";
+import { logKind, periodKey } from "./checkKinds";
 
 const LS_LOGS = "hdk_inspection_logs";
 const LS_FAULTS = "hdk_fault_reports";
@@ -53,13 +54,22 @@ export function deviceId(): string {
   } catch { return ""; }
 }
 
-/** An inspection already submitted on this date from this device, or by this operator (one each per day). */
-export async function findLogForDate(dateGB: string, operatorName = ""): Promise<InspectionLog | null> {
+/**
+ * The inspection of this kind already covering the date's period. A daily inspection counts
+ * when it came from this device or this operator (one each per day); the weekly, monthly and
+ * yearly checks are one per period for the vehicle.
+ */
+export async function findLogForDate(dateGB: string, operatorName = "", kind: CheckKind = "daily"): Promise<InspectionLog | null> {
+  const logs = (await getLogs()).filter((l) => logKind(l) === kind);
+  if (kind !== "daily") {
+    const period = periodKey(kind, dateGB);
+    return logs.find((l) => periodKey(kind, l.date) === period) ?? null;
+  }
   const device = deviceId();
   // Logs saved before device ids existed are recognised by this device's local copy
   const savedHere = new Set(lsGet<InspectionLog>(LS_LOGS).map((l) => l.id));
   const name = operatorName.trim().toLowerCase();
-  return (await getLogs()).find((l) => l.date === dateGB && (
+  return logs.find((l) => l.date === dateGB && (
     (device && l.deviceId === device) || savedHere.has(l.id) || (name && l.operatorName.trim().toLowerCase() === name)
   )) ?? null;
 }
@@ -208,9 +218,15 @@ async function putConfig(path: string, cacheKey: string, config: unknown) {
   try { localStorage.setItem(cacheKey, JSON.stringify(config)); } catch { /* ignore */ }
 }
 
-export const getChecklistConfig = () => getConfig<ChecklistSectionConfig[]>("/api/checklist-config", "hdk_checklist_config", defaultChecklistConfig);
+// Daily keeps its original path and cache key; the periodic checklists get their own
+const configPath = (kind: CheckKind) => (kind === "daily" ? "/api/checklist-config" : `/api/checklist-config/${kind}`);
+const configCache = (kind: CheckKind) => (kind === "daily" ? "hdk_checklist_config" : `hdk_checklist_config_${kind}`);
+
+export const getChecklistConfig = (kind: CheckKind = "daily") =>
+  getConfig<ChecklistSectionConfig[]>(configPath(kind), configCache(kind), () => defaultChecklistConfig(kind));
 /** Pass null to reset to the built-in checklist. */
-export const saveChecklistConfig = (config: ChecklistSectionConfig[] | null) => putConfig("/api/checklist-config", "hdk_checklist_config", config);
+export const saveChecklistConfig = (config: ChecklistSectionConfig[] | null, kind: CheckKind = "daily") =>
+  putConfig(configPath(kind), configCache(kind), config);
 
 export const getOperators = () => getConfig<Operator[]>("/api/operators", "hdk_operators", () => []);
 export const saveOperators = (ops: Operator[]) => putConfig("/api/operators", "hdk_operators", ops);

@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import type { InspectionLog, FaultReport } from "../types";
+import type { CheckKind, InspectionLog, FaultReport } from "../types";
 import { getLogs, getFaultReports, sameInspectionWeek, updateLog, deleteLog, updateFaultReport, deleteFaultReport } from "../storage";
 import { EditLogModal, EditFaultModal } from "./EditModals";
 import { SignOffModal, RepairModal } from "./WorkflowModals";
 import NewFaultModal from "./NewFaultModal";
+import { CHECK_KINDS, KIND_LABEL, logKind } from "../checkKinds";
 import { showPdf } from "../pdfViewer";
 import { RACL_LOGO } from "../raclLogo";
 import { exportInspectionPDF, exportFaultReportPDF, exportWeeklyPDF } from "../pdfExport";
@@ -180,7 +181,7 @@ function LogModal({ log, onClose }: { log: InspectionLog; onClose: () => void })
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <img src={RACL_LOGO} alt="RACL" className="modal-logo" />
-          <span className="modal-title">Inspection — {log.date} · {log.operatorName}</span>
+          <span className="modal-title">{KIND_LABEL[logKind(log)]} inspection — {log.date} · {log.operatorName}</span>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
@@ -274,8 +275,9 @@ function LogModal({ log, onClose }: { log: InspectionLog; onClose: () => void })
   );
 }
 
+// The week sheet covers the daily inspections only
 function exportWeekFor(log: InspectionLog, allLogs: InspectionLog[]) {
-  showPdf(exportWeeklyPDF(allLogs.filter((l) => sameInspectionWeek(l.date, log.date))));
+  showPdf(exportWeeklyPDF(allLogs.filter((l) => logKind(l) === "daily" && sameInspectionWeek(l.date, log.date))));
 }
 
 function localIds(key: string): string[] {
@@ -288,6 +290,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState("");
   const [filterOperator, setFilterOperator] = useState("");
+  const [filterKind, setFilterKind] = useState<CheckKind | "">("");
   const [migrating, setMigrating] = useState(false);
   const [migrateResult, setMigrateResult] = useState<string | null>(null);
 
@@ -340,11 +343,12 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
 
   const filteredLogs = useMemo(() => {
     return logs.filter((l) => {
+      if (filterKind && logKind(l) !== filterKind) return false;
       if (filterDate && !l.date.includes(filterDate)) return false;
       if (filterOperator && !l.operatorName.toLowerCase().includes(filterOperator.toLowerCase())) return false;
       return true;
     });
-  }, [logs, filterDate, filterOperator]);
+  }, [logs, filterDate, filterOperator, filterKind]);
 
   const filteredFaults = useMemo(() => {
     return faults.filter((f) => {
@@ -391,6 +395,12 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
           value={filterOperator}
           onChange={(e) => setFilterOperator(e.target.value)}
         />
+        {!showFaults && (
+          <select className="filter-input" value={filterKind} onChange={(e) => setFilterKind(e.target.value as CheckKind | "")}>
+            <option value="">All checks</option>
+            {CHECK_KINDS.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
+          </select>
+        )}
       </div>
 
       {!showFaults ? (
@@ -412,7 +422,10 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
                   <tr><td colSpan={6} className="empty-state">No inspection logs yet.</td></tr>
                 ) : filteredLogs.map((log) => (
                   <tr key={log.id}>
-                    <td className="ga-a" data-label="Date">{log.date}</td>
+                    <td className="ga-a" data-label="Date">
+                      {log.date}
+                      {logKind(log) !== "daily" && <span className="kind-tag">{KIND_LABEL[logKind(log)]}</span>}
+                    </td>
                     <td className="ga-b" data-label="Time">{log.time}</td>
                     <td className="ga-line" data-label="Operator">{log.operatorName}</td>
                     <td className="ga-c" data-label="Condition">
@@ -432,7 +445,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
                     <td className="log-actions">
                       <button className="action-btn" onClick={() => setViewLog(log)}>View</button>
                       <button className="action-btn" onClick={() => showPdf(exportInspectionPDF(log))}>PDF</button>
-                      <button className="action-btn" onClick={() => exportWeekFor(log, logs)}>Week</button>
+                      {logKind(log) === "daily" && <button className="action-btn" onClick={() => exportWeekFor(log, logs)}>Week</button>}
                       {!log.shiftSignoff && <button className="action-btn accent" onClick={() => setSignOff(log)}>Sign off</button>}
                       {isAdmin && <>
                         <button className="action-btn" onClick={() => setEditLog(log)}>Edit</button>

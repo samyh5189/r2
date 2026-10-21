@@ -1,11 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { EvidenceItem, FaultReport, Operator } from "../types";
 import { getOperators, saveFaultReport } from "../storage";
 import { generateManualFaultReport } from "../faultReportAI";
-import { processFile } from "../evidenceUtils";
 import SignatureField from "./SignatureField";
-
-const MAX_EVIDENCE = 5;
+import EvidenceEditor from "./EvidenceEditor";
 
 /** Report a fault outside the daily inspection: the operator's words, polished by AI, on the same report form. */
 export default function NewFaultModal({ onClose, onDone }: { onClose: () => void; onDone: (report: FaultReport) => void }) {
@@ -15,27 +13,11 @@ export default function NewFaultModal({ onClose, onDone }: { onClose: () => void
   const [description, setDescription] = useState("");
   const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
   const [signature, setSignature] = useState("");
-  const [processing, setProcessing] = useState(false);
   const [busy, setBusy] = useState<"" | "generating" | "saving">("");
   const [draft, setDraft] = useState<FaultReport | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const cameraRef = useRef<HTMLInputElement>(null);
-  const uploadRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { getOperators().then(setOperators); }, []);
-
-  async function addFiles(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []).slice(0, MAX_EVIDENCE - evidence.length);
-    e.target.value = "";
-    if (files.length === 0) return;
-    setProcessing(true);
-    const items: EvidenceItem[] = [];
-    for (const f of files) {
-      try { items.push(await processFile(f)); } catch { /* unreadable file — skip it */ }
-    }
-    setEvidence((prev) => [...prev, ...items]);
-    setProcessing(false);
-  }
 
   async function generate(e: React.FormEvent) {
     e.preventDefault();
@@ -105,36 +87,12 @@ export default function NewFaultModal({ onClose, onDone }: { onClose: () => void
               <textarea rows={4} maxLength={2000} placeholder="Describe the fault in your own words — what, where, when you noticed it." value={description} onChange={(e) => setDescription(e.target.value)} />
             </label>
 
-            <div className="cl-evidence-section">
-              <div className="cl-evidence-header">
-                <span className="cl-evidence-title">Photos / video ({evidence.length}/{MAX_EVIDENCE})</span>
-                {evidence.length < MAX_EVIDENCE && (
-                  <div className="cl-ev-btn-group">
-                    <button type="button" className="cl-add-evidence-btn" onClick={() => cameraRef.current?.click()} disabled={processing}>📷 Camera</button>
-                    <button type="button" className="cl-add-evidence-btn secondary" onClick={() => uploadRef.current?.click()} disabled={processing}>📁 Upload</button>
-                  </div>
-                )}
-                {processing && <span style={{ fontSize: 11, color: "var(--muted)" }}>Processing…</span>}
-              </div>
-              <input ref={cameraRef} type="file" accept="image/*,video/*" capture="environment" multiple style={{ display: "none" }} onChange={addFiles} />
-              <input ref={uploadRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={addFiles} />
-              {evidence.length > 0 && (
-                <div className="cl-ev-thumbs">
-                  {evidence.map((ev) => (
-                    <div key={ev.id} className="cl-ev-thumb-wrap">
-                      <img src={ev.dataUrl} alt={ev.name} className="cl-ev-thumb" />
-                      {ev.type === "video" && <span className="cl-ev-video-badge">▶</span>}
-                      <button type="button" className="cl-ev-remove" onClick={() => setEvidence((prev) => prev.filter((x) => x.id !== ev.id))}>×</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <EvidenceEditor evidence={evidence} onChange={setEvidence} />
 
             <label style={{ marginBottom: -4 }}>Signature</label>
             <SignatureField onChange={setSignature} height={100} />
             {error && <p className="form-error">{error}</p>}
-            <button className="btn-submit" disabled={processing}>Generate report →</button>
+            <button className="btn-submit">Generate report →</button>
           </form>
         )}
       </div>

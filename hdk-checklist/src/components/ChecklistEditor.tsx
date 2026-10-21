@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import type { ChecklistItemConfig, ChecklistSectionConfig, ItemInputType } from "../types";
+import type { CheckKind, ChecklistItemConfig, ChecklistSectionConfig, ItemInputType } from "../types";
 import { getChecklistConfig, saveChecklistConfig } from "../storage";
 import { defaultChecklistConfig, itemType } from "../checklistData";
 import OperatorsEditor from "./OperatorsEditor";
+import { CHECK_KINDS, KIND_LABEL } from "../checkKinds";
 
 interface Props {
   onAuthLost: () => void;
@@ -26,6 +27,7 @@ function move<T>(list: T[], i: number, dir: -1 | 1): T[] {
 }
 
 export default function ChecklistEditor({ onAuthLost }: Props) {
+  const [kind, setKind] = useState<CheckKind>("daily");
   const [config, setConfig] = useState<ChecklistSectionConfig[] | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -33,10 +35,35 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
   const [open, setOpen] = useState<string | null>(null);
 
   useEffect(() => {
-    getChecklistConfig().then((cfg) => setConfig(cfg.map((s) => ({ ...s, items: s.items.map((it) => ({ ...it, type: itemType(it) })) }))));
-  }, []);
+    let current = true; // ignore a slow load for a checklist we've since switched away from
+    getChecklistConfig(kind).then((cfg) => current && setConfig(cfg.map((s) => ({ ...s, items: s.items.map((it) => ({ ...it, type: itemType(it) })) }))));
+    return () => { current = false; };
+  }, [kind]);
 
-  if (!config) return <div className="container" style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Loading checklist…</div>;
+  function switchKind(next: CheckKind) {
+    if (next === kind || (dirty && !window.confirm("Discard your unsaved checklist changes?"))) return;
+    setConfig(null);
+    setDirty(false);
+    setMessage(null);
+    setOpen(null);
+    setKind(next);
+  }
+
+  const kindPicker = (
+    <div className="kind-tabs" style={{ padding: 0, margin: "16px 0 0" }}>
+      {CHECK_KINDS.map((k) => (
+        <button key={k} className={`kind-tab${k === kind ? " active" : ""}`} onClick={() => switchKind(k)}>{KIND_LABEL[k]}</button>
+      ))}
+    </div>
+  );
+
+  if (!config) return (
+    <div className="container">
+      <OperatorsEditor onAuthLost={onAuthLost} />
+      {kindPicker}
+      <p style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Loading checklist…</p>
+    </div>
+  );
 
   function update(next: ChecklistSectionConfig[]) {
     setConfig(next);
@@ -55,7 +82,7 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
   async function persist(next: ChecklistSectionConfig[] | null, okText: string) {
     setSaving(true);
     try {
-      await saveChecklistConfig(next);
+      await saveChecklistConfig(next, kind);
       setDirty(false);
       setMessage({ ok: true, text: okText });
     } catch (e) {
@@ -71,12 +98,12 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
       .map((s) => ({ ...s, title: s.title.trim(), items: s.items.filter((it) => it.label.trim()).map((it) => ({ ...it, label: it.label.trim() })) }))
       .filter((s) => s.title && s.items.length > 0);
     setConfig(cleaned);
-    persist(cleaned, "Checklist saved. New inspections use it now.");
+    persist(cleaned, `${KIND_LABEL[kind]} checklist saved. New inspections use it now.`);
   }
 
   function reset() {
-    if (!window.confirm("Reset the checklist to the built-in default? Your changes will be lost.")) return;
-    setConfig(defaultChecklistConfig());
+    if (!window.confirm(`Reset the ${kind} checklist to the built-in default? Your changes will be lost.`)) return;
+    setConfig(defaultChecklistConfig(kind));
     persist(null, "Checklist reset to default.");
   }
 
@@ -85,9 +112,10 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
   return (
     <div className="container">
       <OperatorsEditor onAuthLost={onAuthLost} />
-      <div className="editor-bar" style={{ marginTop: 16 }}>
+      {kindPicker}
+      <div className="editor-bar" style={{ marginTop: 12 }}>
         <div>
-          <strong>Checklist setup</strong>
+          <strong>{KIND_LABEL[kind]} checklist</strong>
           <span className="editor-sub">{config.length} sections · {total} items</span>
         </div>
         <div className="editor-actions">

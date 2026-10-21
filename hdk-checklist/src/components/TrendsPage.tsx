@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { InspectionLog, ItemStatus } from "../types";
 import { getLogs } from "../storage";
+import { logKind } from "../checkKinds";
 import { analyzeTrends, type Finding, type TrendReport } from "../trends";
 
 const WINDOWS = [30, 60, 90];
@@ -59,7 +60,8 @@ export default function TrendsPage() {
   const [advice, setAdvice] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
 
-  useEffect(() => { getLogs().then(setLogs); }, []);
+  // Trends follow the daily inspections, which run on a steady cadence
+  useEffect(() => { getLogs().then((all) => setLogs(all.filter((l) => logKind(l) === "daily"))); }, []);
   const report = useMemo(() => (logs ? analyzeTrends(logs, windowDays) : null), [logs, windowDays]);
 
   if (!report) return <div className="container" style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Analysing inspections…</div>;
