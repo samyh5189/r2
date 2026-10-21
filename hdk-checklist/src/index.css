@@ -760,6 +760,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .seg-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
 .seg-dot.done { background: var(--ok); }
 .seg-dot.due { background: #f59e0b; }
+.seg-dot.overdue { background: #dc2626; }
 @media (max-width: 380px) { .seg-btn { font-size: 13px; gap: 4px; } }
 
 .cl-screen-auto { min-height: 0; }
@@ -991,6 +992,7 @@ button, a, input, select, textarea, label { touch-action: manipulation; }
 .target-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
 .target-field div { display: flex; align-items: center; gap: 6px; }
 .target-field input { width: 100%; min-height: 44px; border: 1px solid var(--border); border-radius: 12px; padding: 0 12px; font-size: 16px; font-family: inherit; }
+.target-field select { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border); border-radius: 12px; padding: 0 10px; font-size: 16px; font-family: inherit; background: white; color: var(--text); }
 .target-field em { font-style: normal; color: var(--muted); font-weight: 500; }
 .data-actions { display: flex; flex-direction: column; gap: 8px; }
 .data-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px; border-radius: 14px; border: 1px solid var(--border); background: white; text-align: left; font-family: inherit; cursor: pointer; color: var(--text); }

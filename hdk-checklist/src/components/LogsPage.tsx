@@ -6,7 +6,7 @@ import { EditLogModal, EditFaultModal } from "./EditModals";
 import { SignOffModal, RepairModal } from "./WorkflowModals";
 import NewFaultModal from "./NewFaultModal";
 import { faultAge, summarizeAges, TARGET_DAYS } from "../faultAge";
-import { CHECK_KINDS, GROUP_NOUN, KIND_LABEL, logGroup, logKind, periodKey } from "../checkKinds";
+import { CHECK_KINDS, GROUP_NOUN, KIND_LABEL, inspectionWeek, logGroup, logKind } from "../checkKinds";
 import { logTime } from "../trends";
 import { availableMonths, monthTitle } from "../monthlySummary";
 import { showPdf } from "../pdfViewer";
@@ -339,7 +339,7 @@ function LogModal({ log, onClose, actions }: { log: InspectionLog; onClose: () =
 
 // The week sheet covers the daily inspections only, fetched for that week (Sat–Fri)
 function exportWeekFor(dateGB: string) {
-  const start = periodKey("weekly", dateGB);
+  const start = inspectionWeek(dateGB);
   const [d, m, y] = start.split("/").map(Number);
   const end = new Date(y, m - 1, d + 6).toLocaleDateString("en-GB");
   showPdf(listAllLogs({ kind: "daily", from: start, to: end }).then(exportWeeklyPDF));

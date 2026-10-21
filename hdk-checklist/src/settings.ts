@@ -2,14 +2,17 @@ import { useEffect, useState } from "react";
 import type { GeneralSettings } from "./types";
 import { getGeneralSettings } from "./storage";
 import { TARGET_DAYS } from "./faultAge";
+import { DEFAULT_SCHEDULE, SCHEDULE } from "./checkKinds";
 
 const DEFAULT_TARGETS = { ...TARGET_DAYS };
 
-/** Puts Setup → Rules into effect app-wide (repair targets used by fault age tracking) */
+/** Puts Setup → Rules into effect app-wide (repair targets for fault age tracking, the check schedule) */
 export function applyGeneral(s: GeneralSettings) {
   TARGET_DAYS["Immediate Grounding"] = s.targetDays?.grounding ?? DEFAULT_TARGETS["Immediate Grounding"];
   TARGET_DAYS.Urgent = s.targetDays?.urgent ?? DEFAULT_TARGETS.Urgent;
   TARGET_DAYS.Routine = s.targetDays?.routine ?? DEFAULT_TARGETS.Routine;
+  Object.assign(SCHEDULE, DEFAULT_SCHEDULE);
+  for (const [k, v] of Object.entries(s.schedule ?? {})) if (typeof v === "number") SCHEDULE[k as keyof typeof SCHEDULE] = v;
 }
 
 function cached(): GeneralSettings {

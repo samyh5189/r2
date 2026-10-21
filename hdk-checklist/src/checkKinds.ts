@@ -1,4 +1,4 @@
-import type { CheckKind, InspectionLog } from "./types";
+import type { CheckKind, CheckSchedule, InspectionLog } from "./types";
 
 export const CHECK_KINDS: CheckKind[] = ["daily", "weekly", "monthly", "yearly"];
 
@@ -10,19 +10,80 @@ export const PERIOD_NAME: Record<CheckKind, string> = { daily: "today", weekly: 
 /** Logs saved before check kinds existed are daily inspections */
 export const logKind = (log: Pick<InspectionLog, "kind">): CheckKind => log.kind ?? "daily";
 
+/** Setup → Rules: the day each periodic check falls due. Set by applyGeneral (src/settings.ts). */
+export const SCHEDULE: Required<CheckSchedule> = { weeklyDay: 6, monthlyDay: 1, yearlyMonth: 1, yearlyDay: 1 };
+export const DEFAULT_SCHEDULE = { ...SCHEDULE };
+
+export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+const parseGB = (dateGB: string) => { const [d, m, y] = dateGB.split("/").map(Number); return new Date(y, m - 1, d); };
+const daysIn = (y: number, m0: number) => new Date(y, m0 + 1, 0).getDate();
+// A day past the month's end (e.g. 31 in April) falls on its last day
+const onDay = (y: number, m0: number, day: number) => new Date(y, m0, Math.min(day, daysIn(y, m0)));
+
+/** The day the current cycle of a check began: the latest scheduled day on or before `date` */
+export function cycleStart(kind: CheckKind, date: Date): Date {
+  const y = date.getFullYear(), m = date.getMonth(), d = date.getDate();
+  if (kind === "daily") return new Date(y, m, d);
+  if (kind === "weekly") return new Date(y, m, d - ((date.getDay() - SCHEDULE.weeklyDay + 7) % 7));
+  if (kind === "monthly") {
+    const here = onDay(y, m, SCHEDULE.monthlyDay);
+    return d >= here.getDate() ? here : onDay(y, m - 1, SCHEDULE.monthlyDay);
+  }
+  const here = onDay(y, SCHEDULE.yearlyMonth - 1, SCHEDULE.yearlyDay);
+  return date >= here ? here : onDay(y - 1, SCHEDULE.yearlyMonth - 1, SCHEDULE.yearlyDay);
+}
+
+/** The day the next cycle begins after the one starting on `start` */
+export function nextCycle(kind: CheckKind, start: Date): Date {
+  const y = start.getFullYear(), m = start.getMonth();
+  if (kind === "daily") return new Date(y, m, start.getDate() + 1);
+  if (kind === "weekly") return new Date(y, m, start.getDate() + 7);
+  if (kind === "monthly") return onDay(y, m + 1, SCHEDULE.monthlyDay);
+  return onDay(y + 1, SCHEDULE.yearlyMonth - 1, SCHEDULE.yearlyDay);
+}
+
 /**
- * The period a DD/MM/YYYY date falls in: the date itself, the Saturday that starts its
- * inspection week, MM/YYYY or YYYY. Mirrored in server.js, which enforces the limits.
+ * The period a DD/MM/YYYY date falls in: the date itself, the day its weekly cycle began,
+ * or the MM/YYYY / YYYY its monthly or yearly cycle began in. Mirrored in server.js.
  */
 export function periodKey(kind: CheckKind, dateGB: string): string {
-  const [d, m, y] = dateGB.split("/");
   if (kind === "daily") return dateGB;
-  if (kind === "monthly") return `${m}/${y}`;
-  if (kind === "yearly") return y;
-  const date = new Date(Number(y), Number(m) - 1, Number(d));
-  date.setDate(date.getDate() - ((date.getDay() + 1) % 7)); // back to Saturday
+  const start = cycleStart(kind, parseGB(dateGB));
+  if (kind === "weekly") return start.toLocaleDateString("en-GB");
+  if (kind === "monthly") return `${String(start.getMonth() + 1).padStart(2, "0")}/${start.getFullYear()}`;
+  return String(start.getFullYear());
+}
+
+/** The Saturday that starts a date's inspection week (Sat–Fri), for the week sheet and Logs grouping */
+export function inspectionWeek(dateGB: string): string {
+  const date = parseGB(dateGB);
+  date.setDate(date.getDate() - ((date.getDay() + 1) % 7));
   return date.toLocaleDateString("en-GB");
 }
+
+export interface CheckStatus {
+  /** Done in the current cycle: hidden on the Checklist until `next` */
+  done: boolean;
+  /** Not done, and the cycle before went without it too */
+  overdue: boolean;
+  since: Date;
+  next: Date;
+}
+
+/** Whether a periodic check is due: it appears on its scheduled day and stays until someone does it */
+export function checkStatus(kind: CheckKind, last: Pick<InspectionLog, "date"> | null, now = new Date()): CheckStatus {
+  const since = cycleStart(kind, now);
+  const next = nextCycle(kind, since);
+  const lastDate = last ? parseGB(last.date) : null;
+  const done = !!lastDate && lastDate >= since;
+  const prevStart = cycleStart(kind, new Date(since.getFullYear(), since.getMonth(), since.getDate() - 1));
+  return { done, overdue: !done && !!lastDate && lastDate < prevStart, since, next };
+}
+
+/** "Sat 25 Oct", with the year when it isn't this year */
+export const dayLabel = (d: Date) =>
+  d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", ...(d.getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}) });
 
 const SHORT = (d: Date, withYear: boolean) =>
   d.toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) });
@@ -38,7 +99,7 @@ export function logGroup(kind: CheckKind, dateGB: string): { key: string; label:
   if (kind === "weekly") {
     return { key: `${y}-${m}`, label: new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" }) };
   }
-  const [sd, sm, sy] = periodKey("weekly", dateGB).split("/").map(Number);
+  const [sd, sm, sy] = inspectionWeek(dateGB).split("/").map(Number);
   const start = new Date(sy, sm - 1, sd);
   const end = new Date(sy, sm - 1, sd + 6);
   return {

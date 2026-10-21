@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import type { GeneralSettings } from "../types";
+import type { CheckSchedule, GeneralSettings } from "../types";
 import { getGeneralSettings, saveGeneralSettings } from "../storage";
 import { applyGeneral } from "../settings";
+import { DEFAULT_SCHEDULE, WEEKDAYS } from "../checkKinds";
 import { toast } from "../dialogs";
 
 const TARGETS = [
@@ -9,6 +10,10 @@ const TARGETS = [
   { key: "urgent", label: "Urgent", def: 3 },
   { key: "routine", label: "Routine", def: 14 },
 ] as const;
+
+const MONTHS = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString("en-GB", { month: "long" }));
+const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
 
 /** Setup → Rules: how strict the checklist is and when a fault counts as overdue */
 export default function RulesEditor({ onAuthLost }: { onAuthLost: () => void }) {
@@ -21,6 +26,9 @@ export default function RulesEditor({ onAuthLost }: { onAuthLost: () => void }) 
   const update = (patch: Partial<GeneralSettings>) => { setS({ ...s, ...patch }); setDirty(true); };
   const setTarget = (key: "grounding" | "urgent" | "routine", v: string) =>
     update({ targetDays: { ...s.targetDays, [key]: v === "" ? undefined : Math.max(1, Math.min(365, Math.round(Number(v)))) } });
+
+  const sched = { ...DEFAULT_SCHEDULE, ...s.schedule };
+  const setSched = (patch: CheckSchedule) => update({ schedule: { ...sched, ...patch } });
 
   async function save() {
     setSaving(true);
@@ -56,6 +64,34 @@ export default function RulesEditor({ onAuthLost }: { onAuthLost: () => void }) 
         <span><strong>Allow "Mark remaining OK"</strong><small>Lets the operator mark all unanswered items OK in one go (recorded on the log).</small></span>
         <input type="checkbox" className="switch" checked={s.allowMarkAllOk !== false} onChange={(e) => update({ allowMarkAllOk: e.target.checked })} />
       </label>
+
+      <h4 className="setup-sub">Check schedule</h4>
+      <p className="editor-hint" style={{ margin: "0 0 8px" }}>Each check appears on the Checklist on its day and stays there until someone does it. Once done, it's hidden until the next one is due.</p>
+      <div className="target-grid">
+        <label className="target-field">
+          <span>Weekly, every</span>
+          <select value={sched.weeklyDay} onChange={(e) => setSched({ weeklyDay: Number(e.target.value) })}>
+            {WEEKDAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}
+          </select>
+        </label>
+        <label className="target-field">
+          <span>Monthly, on the</span>
+          <select value={sched.monthlyDay} onChange={(e) => setSched({ monthlyDay: Number(e.target.value) })}>
+            {DAYS.map((d) => <option key={d} value={d}>{d === 31 ? "Last day" : ordinal(d)}{d > 28 && d < 31 ? " (or last day)" : ""}</option>)}
+          </select>
+        </label>
+        <label className="target-field">
+          <span>Yearly, on</span>
+          <div>
+            <select value={Math.min(sched.yearlyDay, new Date(2001, sched.yearlyMonth, 0).getDate())} onChange={(e) => setSched({ yearlyDay: Number(e.target.value) })} aria-label="Day">
+              {DAYS.slice(0, new Date(2001, sched.yearlyMonth, 0).getDate()).map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <select value={sched.yearlyMonth} onChange={(e) => setSched({ yearlyMonth: Number(e.target.value) })} aria-label="Month">
+              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+          </div>
+        </label>
+      </div>
 
       <h4 className="setup-sub">Repair targets</h4>
       <p className="editor-hint" style={{ margin: "0 0 8px" }}>A fault open longer than this is shown as overdue on the home screen, the Faults tab and the monthly summary.</p>

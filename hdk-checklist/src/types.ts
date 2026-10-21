@@ -174,6 +174,18 @@ export interface GeneralSettings {
   requirePhotoUS?: boolean;
   /** Offer "Mark remaining OK" on the checklist (default on) */
   allowMarkAllOk?: boolean;
+  /** When the weekly, monthly and yearly checks fall due */
+  schedule?: CheckSchedule;
+}
+
+/** Setup → Rules → Check schedule (absent = Saturday, the 1st, 1 January) */
+export interface CheckSchedule {
+  /** 0 = Sunday … 6 = Saturday */
+  weeklyDay?: number;
+  /** 1–31; past the month's end means its last day */
+  monthlyDay?: number;
+  yearlyMonth?: number;
+  yearlyDay?: number;
 }
 
 /** Engine service schedule (Setup) */

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { buildChecklist, defaultChecklistConfig, itemType } from "../checklistData";
-import { KIND_LABEL, PERIOD_NAME, periodKey } from "../checkKinds";
+import { KIND_LABEL, PERIOD_NAME, checkStatus, dayLabel, periodKey } from "../checkKinds";
 import type { CheckKind, ChecklistSection, ChecklistSectionConfig, ItemStatus, InspectionLog, FaultReport, EvidenceItem, Operator } from "../types";
 import { saveLog, saveFaultReport, listAllFaults, sameInspectionWeek, getChecklistConfig, findLogForDate, getOperators, deviceId, emailFaultReport, describeEmail, verifyOperator, saveOperatorSignature } from "../storage";
 import OperatorField from "./OperatorField";
@@ -446,7 +446,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
           <p className="cl-intro-sub">
             {blockedMsg || (kind === "daily"
               ? `Submitted by ${todayLog!.operatorName} at ${todayLog!.time}.`
-              : `Submitted by ${todayLog!.operatorName} on ${todayLog!.date}. The next one is due after ${PERIOD_NAME[kind]}.`)}
+              : `Submitted by ${todayLog!.operatorName} on ${todayLog!.date}. The next one is due on ${dayLabel(checkStatus(kind, todayLog!).next)}.`)}
           </p>
         </div>
       </div>
@@ -460,7 +460,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
           <img className="cl-intro-photo" src={rescue2Photo} alt="RESCUE 2 fire vehicle" />
           <div className="cl-intro-head">
             <h2 className="cl-intro-title">{KIND_LABEL[kind]} inspection</h2>
-            <p className="cl-intro-sub">{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })} · {total} items</p>
+            <p className="cl-intro-sub">{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })} · {total} items{kind !== "daily" && ` · due since ${dayLabel(checkStatus(kind, null).since)}`}</p>
           </div>
 
           {draft && (() => {

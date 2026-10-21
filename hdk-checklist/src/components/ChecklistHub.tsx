@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CheckKind } from "../types";
 import { getOverview, type Overview } from "../storage";
-import { CHECK_KINDS, KIND_LABEL, periodKey } from "../checkKinds";
+import { CHECK_KINDS, KIND_LABEL, checkStatus, dayLabel } from "../checkKinds";
 import { faultAge, vehicleState } from "../faultAge";
 import { logTime } from "../trends";
 import ChecklistPage from "./ChecklistPage";
@@ -9,23 +9,34 @@ import { ServiceBanner } from "./ServiceCard";
 
 const STATE_TEXT = { serviceable: "Serviceable", restricted: "Restricted", grounded: "Grounded" } as const;
 
-/** Which check is open, with a dot for done (green) or due (amber) in its current period */
+/**
+ * Which check is open. Daily is always there; the weekly, monthly and yearly checks appear on
+ * their scheduled day and stay until someone does them (amber dot, red once a cycle was missed).
+ */
 function KindPicker({ overview, kind, onKind }: { overview: Overview | null; kind: CheckKind; onKind: (k: CheckKind) => void }) {
-  const [today] = useState(() => new Date().toLocaleDateString("en-GB"));
+  const shown = CHECK_KINDS.filter((k) => k === "daily" || k === kind || !overview || !checkStatus(k, overview.latest[k]).done);
+  if (shown.length === 1) return null;
   return (
     <div className="seg" role="tablist">
-      {CHECK_KINDS.map((k) => {
-        const l = overview?.latest[k];
-        const done = !!l && periodKey(k, l.date) === periodKey(k, today);
+      {shown.map((k) => {
+        const st = overview && checkStatus(k, overview.latest[k]);
+        const dot = !st ? null : st.done ? "done" : st.overdue ? "overdue" : "due";
         return (
           <button key={k} role="tab" aria-selected={k === kind} className={`seg-btn${k === kind ? " active" : ""}`} onClick={() => onKind(k)}>
             {KIND_LABEL[k]}
-            {overview && <span className={`seg-dot ${done ? "done" : "due"}`} title={done ? "Done" : "Due"} />}
+            {dot && <span className={`seg-dot ${dot}`} title={dot === "done" ? "Done" : dot === "overdue" ? "Overdue" : "Due"} />}
           </button>
         );
       })}
     </div>
   );
+}
+
+/** The periodic checks already done, and when each is next due */
+function ComingUp({ overview }: { overview: Overview }) {
+  const done = CHECK_KINDS.filter((k) => k !== "daily").map((k) => ({ k, st: checkStatus(k, overview.latest[k]) })).filter((x) => x.st.done);
+  if (done.length === 0) return null;
+  return <p className="status-last">Coming up · {done.map(({ k, st }) => `${KIND_LABEL[k]} ${dayLabel(st.next)}`).join(" · ")}</p>;
 }
 
 /** Below the checklist: vehicle status, open faults and the last inspection */
@@ -66,6 +77,8 @@ function StatusPanel({ overview, onOpenFaults }: { overview: Overview; onOpenFau
       {open.length > 0 && onOpenFaults && (
         <button className="status-link" onClick={onOpenFaults}>{open.length > 3 ? `All ${open.length} open faults` : "View faults"} →</button>
       )}
+
+      <ComingUp overview={overview} />
 
       {last && (
         <p className="status-last">

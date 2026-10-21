@@ -37,14 +37,35 @@ const DATE_RE = /^\d{2}\/\d{2}\/\d{4}$/;
 // Inspection kinds and the period each covers (mirrors src/checkKinds.ts)
 const KINDS = ["daily", "weekly", "monthly", "yearly"];
 const PERIOD_NAME = { daily: "Today's", weekly: "This week's", monthly: "This month's", yearly: "This year's" };
-function periodKey(kind, dateGB) {
-  const [d, m, y] = dateGB.split("/");
+// Setup → Rules → Check schedule: weekday 0–6, day of month 1–31 (past the end = last day), yearly month and day
+const DEFAULT_SCHEDULE = { weeklyDay: 6, monthlyDay: 1, yearlyMonth: 1, yearlyDay: 1 };
+const scheduleOf = (rules) => ({ ...DEFAULT_SCHEDULE, ...rules?.schedule });
+const utc = (y, m0, d) => new Date(Date.UTC(y, m0, d));
+const onDay = (y, m0, day) => utc(y, m0, Math.min(day, utc(y, m0 + 1, 0).getUTCDate()));
+const gbToDate = (dateGB) => { const [d, m, y] = dateGB.split("/").map(Number); return utc(y, m - 1, d); };
+const dateToGB = (date) => [date.getUTCDate(), date.getUTCMonth() + 1].map((n) => String(n).padStart(2, "0")).join("/") + "/" + date.getUTCFullYear();
+/** The day the cycle containing `date` began */
+function cycleStart(kind, date, s) {
+  const y = date.getUTCFullYear(), m = date.getUTCMonth(), d = date.getUTCDate();
+  if (kind === "daily") return date;
+  if (kind === "weekly") return utc(y, m, d - ((date.getUTCDay() - s.weeklyDay + 7) % 7));
+  if (kind === "monthly") { const here = onDay(y, m, s.monthlyDay); return d >= here.getUTCDate() ? here : onDay(y, m - 1, s.monthlyDay); }
+  const here = onDay(y, s.yearlyMonth - 1, s.yearlyDay);
+  return date >= here ? here : onDay(y - 1, s.yearlyMonth - 1, s.yearlyDay);
+}
+function nextCycle(kind, start, s) {
+  const y = start.getUTCFullYear(), m = start.getUTCMonth();
+  if (kind === "daily") return utc(y, m, start.getUTCDate() + 1);
+  if (kind === "weekly") return utc(y, m, start.getUTCDate() + 7);
+  if (kind === "monthly") return onDay(y, m + 1, s.monthlyDay);
+  return onDay(y + 1, s.yearlyMonth - 1, s.yearlyDay);
+}
+function periodKey(kind, dateGB, s = DEFAULT_SCHEDULE) {
   if (kind === "daily") return dateGB;
-  if (kind === "monthly") return `${m}/${y}`;
-  if (kind === "yearly") return y;
-  const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
-  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 1) % 7)); // back to Saturday
-  return [date.getUTCDate(), date.getUTCMonth() + 1].map((n) => String(n).padStart(2, "0")).join("/") + "/" + date.getUTCFullYear();
+  const start = cycleStart(kind, gbToDate(dateGB), s);
+  if (kind === "weekly") return dateToGB(start);
+  if (kind === "monthly") return dateToGB(start).slice(3);
+  return String(start.getUTCFullYear());
 }
 const isId = (v) => typeof v === "string" && v.length > 0 && v.length <= 64;
 
@@ -214,7 +235,9 @@ function adminRoutes(path, table) {
     try {
       const item = await extractFiles(pool, { ...req.body, id: req.params.id });
       // An edited date can move a periodic inspection into another period
-      if (table === "inspection_logs" && KINDS.includes(item.kind) && DATE_RE.test(item.date)) item.periodKey = periodKey(item.kind, item.date);
+      if (table === "inspection_logs" && KINDS.includes(item.kind) && DATE_RE.test(item.date)) {
+        item.periodKey = periodKey(item.kind, item.date, scheduleOf(await loadRules().catch(() => ({}))));
+      }
       // Fault age tracking: stamp when a report is closed, clear it if reopened
       if (table === "fault_reports") {
         if (item.status === "Resolved") item.resolvedAt ??= new Date().toISOString();
@@ -285,11 +308,14 @@ configRoutes("/api/service-settings", "service", {
     && ["intervalHours", "intervalMonths", "lastServiceHours", "warnHours"].every((k) => optNum(c[k]))
     && (c.lastServiceDate === undefined || DATE_RE.test(c.lastServiceDate)),
 });
-// Rules (Setup → Rules): repair targets, photo for U/S, "mark remaining OK"
+// Rules (Setup → Rules): repair targets, photo for U/S, "mark remaining OK", check schedule
 const optBool = (v) => v === undefined || typeof v === "boolean";
 const optDays = (v) => v === undefined || (typeof v === "number" && Number.isFinite(v) && v > 0 && v <= 365);
+const optInt = (v, min, max) => v === undefined || (Number.isInteger(v) && v >= min && v <= max);
+const isSchedule = (c) => c === undefined || (c && typeof c === "object" && !Array.isArray(c)
+  && optInt(c.weeklyDay, 0, 6) && optInt(c.monthlyDay, 1, 31) && optInt(c.yearlyMonth, 1, 12) && optInt(c.yearlyDay, 1, 31));
 const isRules = (c) => c && typeof c === "object" && !Array.isArray(c)
-  && optBool(c.requirePhotoUS) && optBool(c.allowMarkAllOk)
+  && optBool(c.requirePhotoUS) && optBool(c.allowMarkAllOk) && isSchedule(c.schedule)
   && (c.targetDays === undefined || (c.targetDays && typeof c.targetDays === "object" && ["grounding", "urgent", "routine"].every((k) => optDays(c.targetDays[k]))));
 configRoutes("/api/general-settings", "general", { validate: isRules });
 async function loadRules() {
@@ -583,12 +609,14 @@ app.post("/api/logs", writeLimit, async (req, res) => {
   const check = await checkOperator(pool, body.operatorName, body.pin, { arffOnly: true }).catch(() => ({ status: 500, error: "Check failed." }));
   if (check.error) return res.status(check.status).json({ error: check.error });
   // Setup → Rules: every U/S answer needs a photo
-  if ((await loadRules().catch(() => ({}))).requirePhotoUS
+  const rules = await loadRules().catch(() => ({}));
+  const schedule = scheduleOf(rules);
+  if (rules.requirePhotoUS
     && body.sections.some((s) => Array.isArray(s?.items) && s.items.some((it) => it?.status === "U/S" && !(Array.isArray(it.evidence) && it.evidence.length)))) {
     return res.status(400).json({ error: "Every U/S item needs at least one photo." });
   }
   const { pin: _pin, ...rest } = body;
-  const log = await extractFiles(pool, { ...rest, operatorName: check.name, kind, periodKey: periodKey(kind, body.date) });
+  const log = await extractFiles(pool, { ...rest, operatorName: check.name, kind, periodKey: periodKey(kind, body.date, schedule) });
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -597,11 +625,14 @@ app.post("/api/logs", writeLimit, async (req, res) => {
     const existing = await client.query("SELECT data FROM inspection_logs WHERE id = $1", [log.id]);
     if (existing.rowCount > 0) { await client.query("COMMIT"); return res.json({ ok: true }); }
     if (kind !== "daily") {
-      // Weekly / monthly / yearly checks: one per period for the vehicle
+      // Weekly / monthly / yearly checks: one per cycle for the vehicle. Matched on the date rather
+      // than the stored period, so a check saved before the schedule changed still counts.
+      const start = cycleStart(kind, gbToDate(log.date), schedule);
+      const end = nextCycle(kind, start, schedule);
       const done = await client.query(
         `SELECT data->>'operatorName' AS name, data->>'date' AS date FROM inspection_logs
-         WHERE data->>'kind' = $1 AND data->>'periodKey' = $2 LIMIT 1`,
-        [kind, log.periodKey]
+         WHERE data->>'kind' = $1 AND ${SQL_DATE} >= to_date($2, 'DD/MM/YYYY') AND ${SQL_DATE} < to_date($3, 'DD/MM/YYYY') LIMIT 1`,
+        [kind, dateToGB(start), dateToGB(end)]
       );
       if (done.rowCount > 0) {
         await client.query("ROLLBACK");

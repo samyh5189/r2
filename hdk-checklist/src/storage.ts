@@ -1,6 +1,6 @@
 import type { CheckKind, FaultBrief, GeneralSettings, ServiceSettings, InspectionLog, FaultReport, ChecklistSectionConfig, Operator, ShiftSignoff, FaultRepair, FaultAcceptance } from "./types";
 import { defaultChecklistConfig } from "./checklistData";
-import { logKind, periodKey } from "./checkKinds";
+import { cycleStart, logKind, nextCycle, periodKey } from "./checkKinds";
 import { engineEntries, type EngineEntry } from "./service";
 
 const LS_LOGS = "hdk_inspection_logs";
@@ -207,7 +207,14 @@ export function deviceId(): string {
  * yearly checks are one per period for the vehicle.
  */
 export async function findLogForDate(dateGB: string, operatorName = "", kind: CheckKind = "daily"): Promise<InspectionLog | null> {
-  if (kind !== "daily") return (await listLogs({ kind, period: periodKey(kind, dateGB), limit: 1 })).items[0] ?? null;
+  if (kind !== "daily") {
+    // Any check dated within the current cycle, whatever schedule it was saved under
+    const [d, m, y] = dateGB.split("/").map(Number);
+    const start = cycleStart(kind, new Date(y, m - 1, d));
+    const end = nextCycle(kind, start);
+    end.setDate(end.getDate() - 1);
+    return (await listAllLogs({ kind, from: start.toLocaleDateString("en-GB"), to: end.toLocaleDateString("en-GB") }))[0] ?? null;
+  }
   const logs = await listAllLogs({ kind, from: dateGB, to: dateGB });
   const device = deviceId();
   // Logs saved before device ids existed are recognised by this device's local copy
