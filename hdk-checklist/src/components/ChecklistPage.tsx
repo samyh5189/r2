@@ -433,7 +433,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
   // ── INTRO ────────────────────────────────────────────────────────────
   if (phase === "blocked" || (phase === "intro" && todayLog)) {
     return (
-      <div className="cl-screen">
+      <div className="cl-screen cl-screen-auto">
         <div className="cl-intro-card">
           <img className="cl-intro-photo" src={rescue2Photo} alt="RESCUE 2 fire vehicle" />
           <h2 className="cl-intro-title">{kind === "daily" ? "Today's inspection is done" : `${KIND_LABEL[kind]} inspection done`}</h2>
@@ -449,12 +449,13 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
 
   if (phase === "intro") {
     return (
-      <div className="cl-screen">
+      <div className="cl-screen cl-screen-auto">
         <div className="cl-intro-card">
           <img className="cl-intro-photo" src={rescue2Photo} alt="RESCUE 2 fire vehicle" />
-          <h2 className="cl-intro-title">{KIND_LABEL[kind]} Inspection</h2>
-          <p className="cl-intro-sub">RESCUE 2 · {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
-          <p className="cl-intro-count">{total} items across {sections.length} sections</p>
+          <div className="cl-intro-head">
+            <h2 className="cl-intro-title">{KIND_LABEL[kind]} inspection</h2>
+            <p className="cl-intro-sub">{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })} · {total} items</p>
+          </div>
 
           {draft && (() => {
             const answered = draft.sections.reduce((a, sec) => a + sec.items.filter((it) => it.status).length, 0);
@@ -480,12 +481,6 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
             <OperatorField label="Operator Name *" operators={operators} name={operatorName} pin={pin}
               onName={(n) => { setOperatorName(n); setStartError(null); }} onPin={(p) => { setPin(p); setStartError(null); }} />
             {startError && <p className="form-error" style={{ margin: 0 }}>{startError}</p>}
-          </div>
-          <div className="legend cl-legend-compact">
-            <span className="legend-item"><span className="legend-dot" style={{ background: "var(--ok)" }} /> OK — Good</span>
-            <span className="legend-item"><span className="legend-dot" style={{ background: "var(--nok)" }} /> NOK — Minor defect</span>
-            <span className="legend-item"><span className="legend-dot" style={{ background: "var(--us)" }} /> U/S — Unserviceable</span>
-            <span className="legend-item"><span className="legend-dot" style={{ background: "var(--na)" }} /> N/A — Not applicable</span>
           </div>
           {(() => {
             // Picking the draft's operator continues their inspection; anyone else starts a new one

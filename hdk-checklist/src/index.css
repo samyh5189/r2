@@ -8,12 +8,14 @@
   --nok: #d97706;
   --us: #dc2626;
   --na: #6b7280;
-  --bg: #f8fafc;
+  --bg: #f5f6f8;
   --card: #ffffff;
-  --border: #e2e8f0;
-  --text: #1e293b;
-  --muted: #64748b;
-  --section-bg: #f1f5f9;
+  --border: #e6e8ec;
+  --text: #0f172a;
+  --muted: #6b7280;
+  --section-bg: #f3f4f6;
+  --radius: 18px;
+  --ring: 0 0 0 4px rgba(11, 42, 74, 0.12);
 }
 
 body {
@@ -712,3 +714,99 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
 
 .load-more { display: block; margin: 12px auto 0; min-height: 44px; padding: 0 24px; border: 1.5px solid var(--navy); background: white; color: var(--navy); border-radius: 10px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
 .load-more:disabled { opacity: 0.6; }
+
+
+/* ══ Modern, minimal theme ═════════════════════════════════════════════
+   Light glass header, flat cards with hairline borders, one accent (navy). */
+body { letter-spacing: -0.005em; }
+button { -webkit-tap-highlight-color: transparent; }
+
+.app-header { background: rgba(255, 255, 255, 0.86); -webkit-backdrop-filter: saturate(180%) blur(14px); backdrop-filter: saturate(180%) blur(14px); color: var(--text); padding: 12px 16px 0; border-bottom: 1px solid var(--border); }
+.app-header h1 { font-size: 17px; font-weight: 800; letter-spacing: -0.01em; color: var(--navy); }
+.app-header p { font-size: 12px; opacity: 1; color: var(--muted); margin-top: 0; }
+.doc-badge { background: var(--section-bg); color: var(--muted); opacity: 1; font-size: 10px; padding: 3px 9px; margin-top: 0; font-weight: 600; }
+.admin-btn { background: white; border: 1px solid var(--border); color: var(--text); opacity: 1; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 999px; }
+.admin-btn:hover { background: var(--section-bg); }
+
+.tabs { background: transparent; padding: 6px 8px 0; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab-btn { color: var(--muted); padding: 10px 12px 12px; font-size: 14px; font-weight: 600; border-bottom: 2.5px solid transparent; }
+.tab-btn.active { color: var(--navy); border-bottom-color: var(--navy); font-weight: 700; }
+.tab-btn:hover:not(.active) { color: var(--text); }
+
+.card { border-radius: var(--radius); box-shadow: none; padding: 18px; }
+.card h3 { font-size: 12px; letter-spacing: 0.04em; }
+.btn-submit { border-radius: 14px; min-height: 54px; padding: 14px 16px; font-size: 16px; letter-spacing: -0.01em; box-shadow: 0 6px 16px -8px rgba(11, 42, 74, 0.6); }
+.btn-submit:hover { transform: none; background: var(--navy-mid); }
+.btn-submit:disabled { box-shadow: none; opacity: 0.35; }
+.btn-export { border-radius: 12px; }
+.btn-export.secondary { border: 1px solid var(--border); }
+.action-btn { background: white; border-radius: 8px; padding: 5px 11px; }
+.filter-input, .info-field input, .info-field select { border: 1px solid var(--border); border-radius: 12px; background: white; }
+.filter-input:focus, .info-field input:focus, .info-field select:focus { border-color: var(--navy); box-shadow: var(--ring); }
+.badge { border-radius: 999px; }
+.modal { border-radius: 24px 24px 0 0; }
+.modal-header { background: white; color: var(--text); border-bottom: 1px solid var(--border); border-radius: 24px 24px 0 0; }
+.modal-header .modal-close { color: var(--muted); background: var(--section-bg); }
+@media (min-width: 640px) { .modal { border-radius: 20px; } .modal-header { border-radius: 20px 20px 0 0; } }
+.log-table-wrap { border-radius: 16px; }
+.age-summary div, .trend-window, .kind-tab { border-radius: 12px; }
+
+/* Checklist tab: picker, start card, then status */
+.hub { padding-bottom: 32px; }
+.seg { display: flex; gap: 2px; padding: 4px; background: #eaecf0; border-radius: 14px; width: calc(100% - 32px); max-width: 540px; margin: 16px auto 0; }
+.seg-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; border: none; border-radius: 10px; background: transparent; color: var(--muted); font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.seg-btn.active { background: white; color: var(--text); box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12); }
+.seg-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.seg-dot.done { background: var(--ok); }
+.seg-dot.due { background: #f59e0b; }
+@media (max-width: 380px) { .seg-btn { font-size: 13px; gap: 4px; } }
+
+.cl-screen-auto { min-height: 0; }
+.cl-intro-card { width: calc(100% - 32px); max-width: 540px; margin: 12px auto 0; padding: 12px; border-radius: 24px; box-shadow: none; gap: 16px; }
+.cl-intro-photo, .cl-intro-card .cl-intro-photo { width: 100%; margin: 0; aspect-ratio: 16 / 9; border-radius: 16px; }
+.cl-intro-head { padding: 0 6px; display: flex; flex-direction: column; gap: 2px; }
+.cl-intro-title { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; text-align: left; }
+.cl-intro-sub { font-size: 14px; margin-top: 0; text-align: left; }
+.cl-intro-card > :not(img):not(.cl-intro-head) { margin-left: 6px; margin-right: 6px; }
+.cl-intro-card .btn-submit { width: auto; margin: 0 6px 6px; }
+.cl-intro-field label { font-size: 12px; letter-spacing: 0.02em; }
+.cl-intro-field input, .cl-intro-field select { border: 1px solid var(--border); background: white; font-size: 16px; border-radius: 14px; }
+.cl-intro-field input:focus, .cl-intro-field select:focus { box-shadow: var(--ring); }
+.cl-resume { border: 1px solid #fcd9a5; border-radius: 16px; }
+
+.status-panel { width: calc(100% - 32px); max-width: 540px; margin: 20px auto 0; padding: 18px; background: white; border: 1px solid var(--border); border-radius: 24px; display: flex; flex-direction: column; gap: 12px; }
+.status-heading { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.status-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.status-pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px 7px 12px; border-radius: 999px; font-size: 15px; font-weight: 700; }
+.status-pill.st-serviceable { background: #ecfdf3; color: #067647; }
+.status-pill.st-restricted { background: #fff7e6; color: #b54708; }
+.status-pill.st-grounded { background: #fef3f2; color: #b42318; }
+.status-led { width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 18%, transparent); }
+.st-grounded .status-led { animation: led 1.4s ease-in-out infinite; }
+@keyframes led { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, currentColor 6%, transparent); } }
+.status-sub { font-size: 14px; color: var(--muted); }
+.status-panel .service-banner { margin: 0; border-radius: 12px; font-weight: 600; }
+.status-faults { list-style: none; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.status-faults li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.status-dot.p-g { background: var(--us); }
+.status-dot.p-u { background: #f59e0b; }
+.status-dot.p-r { background: #9ca3af; }
+.status-fault-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-fault-age { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.status-fault-age.overdue { color: var(--us); font-weight: 700; }
+.status-link { align-self: flex-start; background: none; border: none; padding: 0; color: var(--navy); font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
+.status-last { font-size: 13px; color: var(--muted); }
+
+/* Item screens */
+.cl-item-card { border-radius: 22px; box-shadow: none; }
+.cl-section-name { background: white; border-radius: 999px; }
+.cl-status-big .cl-status-btn { border-width: 1.5px; box-shadow: none; }
+.cl-status-big .cl-status-btn:hover { transform: none; box-shadow: none; }
+.cl-status-big .cl-status-btn.cl-status-ok { background: #f3fbf6; border-color: #c9ecd6; }
+.cl-status-btn.cl-status-selected { box-shadow: 0 0 0 3px color-mix(in srgb, var(--btn-color) 22%, transparent); }
+.cl-confirm-btn, .cl-skip-btn, .cl-back-btn { border-radius: 14px; }
+.cl-fault-strip { border-radius: 12px; }
+.success-screen h2 { letter-spacing: -0.02em; }
+.success-photo { border-radius: 20px; }

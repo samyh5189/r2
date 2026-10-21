@@ -9,8 +9,27 @@ import { ServiceBanner } from "./ServiceCard";
 
 const STATE_TEXT = { serviceable: "Serviceable", restricted: "Restricted", grounded: "Grounded" } as const;
 
-/** Home card: vehicle status, which checks are due, open faults and the last inspection */
-function TodayPanel({ overview, kind, onKind, onOpenFaults }: { overview: Overview; kind: CheckKind; onKind: (k: CheckKind) => void; onOpenFaults?: () => void }) {
+/** Which check is open, with a dot for done (green) or due (amber) in its current period */
+function KindPicker({ overview, kind, onKind }: { overview: Overview | null; kind: CheckKind; onKind: (k: CheckKind) => void }) {
+  const [today] = useState(() => new Date().toLocaleDateString("en-GB"));
+  return (
+    <div className="seg" role="tablist">
+      {CHECK_KINDS.map((k) => {
+        const l = overview?.latest[k];
+        const done = !!l && periodKey(k, l.date) === periodKey(k, today);
+        return (
+          <button key={k} role="tab" aria-selected={k === kind} className={`seg-btn${k === kind ? " active" : ""}`} onClick={() => onKind(k)}>
+            {KIND_LABEL[k]}
+            {overview && <span className={`seg-dot ${done ? "done" : "due"}`} title={done ? "Done" : "Due"} />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Below the checklist: vehicle status, open faults and the last inspection */
+function StatusPanel({ overview, onOpenFaults }: { overview: Overview; onOpenFaults?: () => void }) {
   const [today] = useState(() => new Date().toLocaleDateString("en-GB"));
   const state = vehicleState(overview.openFaults);
   const open = overview.openFaults;
@@ -19,50 +38,43 @@ function TodayPanel({ overview, kind, onKind, onOpenFaults }: { overview: Overvi
     .sort((a, b) => logTime(b) - logTime(a))[0];
 
   return (
-    <div className="today-panel">
-      <div className={`today-status st-${state}`}>
-        <span className="today-status-word">{STATE_TEXT[state]}</span>
-        <span className="today-status-sub">
+    <section className="status-panel">
+      <h3 className="status-heading">Vehicle status</h3>
+      <div className="status-row">
+        <span className={`status-pill st-${state}`}><span className="status-led" />{STATE_TEXT[state]}</span>
+        <span className="status-sub">
           {open.length === 0 ? "No open faults" : `${open.length} open fault${open.length === 1 ? "" : "s"}${overdue ? ` · ${overdue} overdue` : ""}`}
         </span>
       </div>
 
-      <div className="today-checks" role="tablist">
-        {CHECK_KINDS.map((k) => {
-          const l = overview.latest[k];
-          const done = !!l && periodKey(k, l.date) === periodKey(k, today);
-          return (
-            <button key={k} role="tab" aria-selected={k === kind} className={`today-check${k === kind ? " active" : ""}${done ? " done" : ""}`} onClick={() => onKind(k)}>
-              <span className="today-check-name">{KIND_LABEL[k]}</span>
-              <span className="today-check-state">{done ? `✓ ${k === "daily" ? l!.time : l!.date.slice(0, 5)}` : "Due"}</span>
-            </button>
-          );
-        })}
-      </div>
+      <ServiceBanner />
 
       {open.length > 0 && (
-        <div className="today-faults">
+        <ul className="status-faults">
           {open.slice(0, 3).map((r) => {
             const age = faultAge(r);
             return (
-              <div key={r.id} className="today-fault">
-                <span className={`today-dot p-${r.priority === "Immediate Grounding" ? "g" : r.priority === "Urgent" ? "u" : "r"}`} />
-                <span className="today-fault-title">{r.vehicleEquipmentLine.replace(/^RESCUE 2 \(HDK-ARFF\)\s*/, "") || r.faults.map((f) => f.label).join(", ")}</span>
-                <span className={`today-fault-age${age.overdue ? " overdue" : ""}`}>{age.label.replace("Open ", "")}</span>
-              </div>
+              <li key={r.id}>
+                <span className={`status-dot p-${r.priority === "Immediate Grounding" ? "g" : r.priority === "Urgent" ? "u" : "r"}`} />
+                <span className="status-fault-title">{r.vehicleEquipmentLine.replace(/^RESCUE 2 \(HDK-ARFF\)\s*/, "") || r.faults.map((f) => f.label).join(", ")}</span>
+                <span className={`status-fault-age${age.overdue ? " overdue" : ""}`}>{age.label.replace("Open ", "")}</span>
+              </li>
             );
           })}
-          {onOpenFaults && <button className="today-link" onClick={onOpenFaults}>{open.length > 3 ? `All ${open.length} open faults →` : "Open faults →"}</button>}
-        </div>
+        </ul>
+      )}
+      {open.length > 0 && onOpenFaults && (
+        <button className="status-link" onClick={onOpenFaults}>{open.length > 3 ? `All ${open.length} open faults` : "View faults"} →</button>
       )}
 
       {last && (
-        <p className="today-last">
-          Last inspection: {KIND_LABEL[last.kind ?? "daily"]} · {last.date === today ? "today" : last.date} {last.time} · {last.operatorName} · {last.faultCount ? `${last.faultCount} fault${last.faultCount === 1 ? "" : "s"}` : "no faults"}
+        <p className="status-last">
+          Last inspection · {KIND_LABEL[last.kind ?? "daily"]} · {last.date === today ? "today" : last.date} {last.time} · {last.operatorName}
+          {last.faultCount ? ` · ${last.faultCount} fault${last.faultCount === 1 ? "" : "s"}` : ""}
         </p>
       )}
-      {overview.offline && <p className="today-last">Offline — showing what this device has saved.</p>}
-    </div>
+      {overview.offline && <p className="status-last">Offline — showing what this device has saved.</p>}
+    </section>
   );
 }
 
@@ -76,17 +88,10 @@ export default function ChecklistHub({ initialKind = "daily", onOpenFaults }: { 
   useEffect(() => { refresh(); }, [refresh]);
 
   return (
-    <>
-      {!active && overview && <TodayPanel overview={overview} kind={kind} onKind={setKind} onOpenFaults={onOpenFaults} />}
-      {!active && !overview && (
-        <div className="kind-tabs">
-          {CHECK_KINDS.map((k) => (
-            <button key={k} className={`kind-tab${k === kind ? " active" : ""}`} onClick={() => setKind(k)}>{KIND_LABEL[k]}</button>
-          ))}
-        </div>
-      )}
-      {!active && <ServiceBanner />}
+    <div className="hub">
+      {!active && <KindPicker overview={overview} kind={kind} onKind={setKind} />}
       <ChecklistPage key={kind} kind={kind} onSubmitted={() => refresh(true)} onActiveChange={setActive} />
-    </>
+      {!active && overview && <StatusPanel overview={overview} onOpenFaults={onOpenFaults} />}
+    </div>
   );
 }
