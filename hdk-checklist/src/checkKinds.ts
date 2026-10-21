@@ -11,7 +11,11 @@ export const PERIOD_NAME: Record<CheckKind, string> = { daily: "today", weekly: 
 export const logKind = (log: Pick<InspectionLog, "kind">): CheckKind => log.kind ?? "daily";
 
 /** Setup → Rules: the day each periodic check falls due. Set by applyGeneral (src/settings.ts). */
-export const SCHEDULE: Required<CheckSchedule> = { weeklyDay: 6, monthlyDay: 1, yearlyMonth: 1, yearlyDay: 1, startFrom: {} };
+// The app went live on 19/10/2026: nothing periodic is due before these start dates (Setup can change them)
+export const SCHEDULE: Required<CheckSchedule> = {
+  weeklyDay: 6, monthlyDay: 1, yearlyMonth: 11, yearlyDay: 1,
+  startFrom: { weekly: "24/10/2026", monthly: "01/11/2026", yearly: "01/11/2027" },
+};
 export const DEFAULT_SCHEDULE: Required<CheckSchedule> = { ...SCHEDULE };
 
 export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

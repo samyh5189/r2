@@ -178,7 +178,7 @@ export interface GeneralSettings {
   schedule?: CheckSchedule;
 }
 
-/** Setup → Rules → Check schedule (absent = Saturday, the 1st, 1 January) */
+/** Setup → Rules → Check schedule (defaults in src/checkKinds.ts) */
 export interface CheckSchedule {
   /** 0 = Sunday … 6 = Saturday */
   weeklyDay?: number;

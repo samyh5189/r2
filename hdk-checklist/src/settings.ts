@@ -12,7 +12,7 @@ export function applyGeneral(s: GeneralSettings) {
   TARGET_DAYS.Urgent = s.targetDays?.urgent ?? DEFAULT_TARGETS.Urgent;
   TARGET_DAYS.Routine = s.targetDays?.routine ?? DEFAULT_TARGETS.Routine;
   const { startFrom, ...days } = s.schedule ?? {};
-  Object.assign(SCHEDULE, DEFAULT_SCHEDULE, { startFrom: { ...startFrom } });
+  Object.assign(SCHEDULE, DEFAULT_SCHEDULE, { startFrom: { ...(startFrom ?? DEFAULT_SCHEDULE.startFrom) } });
   for (const [k, v] of Object.entries(days)) if (typeof v === "number") SCHEDULE[k as keyof typeof days] = v;
 }
 

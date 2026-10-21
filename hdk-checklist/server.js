@@ -39,7 +39,11 @@ const KINDS = ["daily", "weekly", "monthly", "yearly"];
 const PERIOD_NAME = { daily: "Today's", weekly: "This week's", monthly: "This month's", yearly: "This year's" };
 // Setup → Rules → Check schedule: weekday 0–6, day of month 1–31 (past the end = last day), yearly month and day,
 // and an optional start date per check (DD/MM/YYYY) before which it isn't due
-const DEFAULT_SCHEDULE = { weeklyDay: 6, monthlyDay: 1, yearlyMonth: 1, yearlyDay: 1 };
+// The app went live on 19/10/2026: nothing periodic is due before these start dates (mirrors src/checkKinds.ts)
+const DEFAULT_SCHEDULE = {
+  weeklyDay: 6, monthlyDay: 1, yearlyMonth: 11, yearlyDay: 1,
+  startFrom: { weekly: "24/10/2026", monthly: "01/11/2026", yearly: "01/11/2027" },
+};
 const scheduleOf = (rules) => ({ ...DEFAULT_SCHEDULE, ...rules?.schedule });
 const utc = (y, m0, d) => new Date(Date.UTC(y, m0, d));
 const onDay = (y, m0, day) => utc(y, m0, Math.min(day, utc(y, m0 + 1, 0).getUTCDate()));
