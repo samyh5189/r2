@@ -4,7 +4,13 @@ import { RACL_LOGO } from "./raclLogo";
 import { KIND_LABEL, logKind } from "./checkKinds";
 import { ENGINE_HOURS_ID, itemType } from "./checklistData";
 import type { MonthlySummary } from "./monthlySummary";
-import { imageData } from "./storage";
+import { getOperators, imageData } from "./storage";
+import { buildFaultReportPdf, type FaultReportArt } from "./faultReportPdf";
+import FR_LOGO from "./assets/fault-report/racl-logo.png";
+import FR_WATERMARK from "./assets/fault-report/watermark.png";
+import FR_FONT from "./assets/fault-report/carlito-regular.ttf?url";
+import FR_FONT_BOLD from "./assets/fault-report/carlito-bold.ttf?url";
+import FR_FONT_BOLDITALIC from "./assets/fault-report/carlito-bolditalic.ttf?url";
 import type { QrItem } from "./components/QrCodes";
 
 type RGB = [number, number, number];
@@ -227,321 +233,45 @@ export async function exportInspectionPDF(log: InspectionLog) {
   return toFile(doc, `HDK-${kind === "daily" ? "Checklist" : `${KIND_LABEL[kind]}-Checklist`}-${log.date.replace(/\//g, "-")}-${log.operatorName}.pdf`);
 }
 
+// Template art and fonts, fetched once on the first fault report
+let artPromise: Promise<FaultReportArt> | null = null;
+function loadArt(): Promise<FaultReportArt> {
+  const bytes = (url: string) => fetch(url).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject())).then((b) => new Uint8Array(b));
+  const b64 = async (url: string) => {
+    const u8 = await bytes(url);
+    let bin = "";
+    for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+    return btoa(bin);
+  };
+  artPromise ??= Promise.all([
+    bytes(FR_LOGO), bytes(FR_WATERMARK),
+    Promise.all([b64(FR_FONT), b64(FR_FONT_BOLD), b64(FR_FONT_BOLDITALIC)]).catch(() => null),
+  ]).then(([logo, watermark, f]) => ({ logo, watermark, fonts: f ? { regular: f[0], bold: f[1], boldItalic: f[2] } : undefined }))
+    .catch((e) => { artPromise = null; throw e; });
+  return artPromise;
+}
+
+/** The fault report in the RACL template (see faultReportPdf.ts) */
 export async function exportFaultReportPDF(report: FaultReport) {
   const clean = (d?: string) => (d ? stripWhiteBg(d) : Promise.resolve(undefined));
-  const [sig, shiftSig, repairSig, maintSig, arffSig] = await Promise.all([
+  const photoSrcs = report.faults.flatMap((f) => f.evidence ?? []).filter((ev) => ev.type === "photo").map((ev) => ev.dataUrl);
+  const [art, operators, operator, shift, repair, maintenance, arff, photos] = await Promise.all([
+    loadArt(),
+    getOperators().catch(() => []),
     clean(report.operatorSignature),
     clean(report.shiftSignoff?.signature),
     clean(report.repair?.repairedBySignature),
     clean(report.acceptance?.maintenanceSignature),
     clean(report.acceptance?.arffSignature),
+    Promise.all(photoSrcs.map((src) => imageData(src).catch(() => ""))),
   ]);
-  const rp = report.repair ?? {};
-  const ac = report.acceptance ?? {};
-  const digits = (v?: string) => (v ?? "").replace(/[/:]/g, "");
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
-
-  const M = 12;
-  const PW = 210;
-  const TW = PW - 2 * M; // 186mm
-  const FORM_GREY: RGB = [237, 237, 237];
-  const BK: RGB = [0, 0, 0];
-
-  // Parse date "DD/MM/YYYY" → "DDMMYYYY", time "HH:MM" → "HHMM"
-  const dp = report.date.split("/");
-  const dateDigits = dp.length === 3 ? dp[0] + dp[1] + dp[2] : "        ";
-  const timeDigits = report.time.replace(":", "");
-
-  doc.setDrawColor(...BK);
-  doc.setLineWidth(0.35);
-
-  // ── HEADER ──────────────────────────────────────────────────────────
-  let y = 11;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.setTextColor(...BK);
-  doc.text("AIRPORT RESCUE AND FIREFIGHTING DEPARTMENT", M, y);
-  doc.text("REIGIONAL AIRPORTS COMPANY LTD", M, y + 5);
-
-  // Logo (right)
-  const LOGO_W = 31;
-  const LOGO_H = LOGO_W * LOGO_RATIO;
-  doc.addImage(RACL_LOGO, "PNG", PW - M - LOGO_W, y - 5, LOGO_W, LOGO_H);
-
-  // Title
-  y = 32;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(...BK);
-  doc.text("FAULT REPORT FORM", PW / 2, y, { align: "center" });
-  const tw = doc.getTextWidth("FAULT REPORT FORM");
-  doc.line(PW / 2 - tw / 2, y + 0.8, PW / 2 + tw / 2, y + 0.8);
-
-  y = 38;
-
-  // Column widths
-  const COL1 = 50; // label column
-  const COL2 = TW - COL1;
-  const HALF = TW / 2;
-  const SIG_LABEL = 17;
-  const SIG_BOX = 50;
-  const NAME_W = COL2 - SIG_LABEL - SIG_BOX;
-
-  // Helper: section header row
-  function secHeader(title: string, h = 7) {
-    doc.setFillColor(...FORM_GREY);
-    doc.rect(M, y, TW, h, "FD");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.setTextColor(...BK);
-    doc.text(title, M + TW / 2, y + h / 2 + 1.6, { align: "center" });
-    y += h;
-  }
-
-  // Helper: simple label | value row
-  function labelRow(label: string, value: string, h = 7) {
-    doc.rect(M, y, COL1, h, "D");
-    doc.rect(M + COL1, y, COL2, h, "D");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.setTextColor(...BK);
-    doc.text(label, M + 1.8, y + h / 2 + 1.4);
-    doc.setFont("times", "normal");
-    doc.setFontSize(9);
-    doc.text(value, M + COL1 + 1.8, y + h / 2 + 1.5);
-    y += h;
-  }
-
-  // Helper: label | tall text row
-  function labelTextRow(label: string, text: string, h: number) {
-    doc.rect(M, y, COL1, h, "D");
-    doc.rect(M + COL1, y, COL2, h, "D");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.setTextColor(...BK);
-    doc.text(label, M + 1.8, y + h / 2 + 1.4);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    const lines = doc.splitTextToSize(text, COL2 - 4);
-    const textTop = y + h / 2 - (lines.length * 3.5) / 2 + 2.6;
-    doc.text(lines, M + COL1 + COL2 / 2, textTop, { align: "center", lineHeightFactor: 1.4 });
-    y += h;
-  }
-
-  // Helper: name + signature row (label | name | Signature | box)
-  function sigRow(label: string, name: string, h = 16, sigImg?: string) {
-    doc.rect(M, y, COL1, h, "D");
-    doc.rect(M + COL1, y, NAME_W, h, "D");
-    doc.rect(M + COL1 + NAME_W, y, SIG_LABEL, h, "D");
-    doc.rect(M + COL1 + NAME_W + SIG_LABEL, y, SIG_BOX, h, "D");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.setTextColor(...BK);
-    doc.text(label, M + 1.8, y + h / 2 + 1.4);
-    doc.setFont("helvetica", "normal");
-    doc.setFont("times", "normal");
-    doc.setFontSize(9);
-    if (name) doc.text(name, M + COL1 + 1.8, y + h / 2 + 1.5);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text("Signature", M + COL1 + NAME_W + SIG_LABEL / 2, y + h / 2 + 1.4, { align: "center" });
-    if (sigImg) {
-      try {
-        doc.addImage(sigImg, "PNG", M + COL1 + NAME_W + SIG_LABEL + 1, y + 1, SIG_BOX - 2, h - 2);
-      } catch { /* ignore bad image data */ }
-    }
-    y += h;
-  }
-
-  // Helper: date/time block — label line + contiguous digit strips (DDMMYYYY | hh:mm), two halves
-  function dtBlock(leftLabel: string, rightLabel: string, leftDate: string, leftTime: string, rightDate: string, rightTime: string, h = 13) {
-    doc.rect(M, y, TW, h, "D");
-    const BW = 5.8;
-    const BH = 4.6;
-    const by = y + 6.5;
-
-    function label(x: number, text: string) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
-      doc.setTextColor(...BK);
-      doc.text(text, x, y + 4);
-      const labelW = doc.getTextWidth(text);
-      doc.setFont("helvetica", "italic");
-      doc.text("(DD MM YYYY & hh:mm formal)", x + labelW + 1, y + 4);
-    }
-
-    function strip(x: number, chars: string[]) {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7.5);
-      chars.forEach((c, i) => {
-        const cx = x + i * BW;
-        doc.rect(cx, by, BW, BH, "D");
-        if (c.trim()) {
-          if (c === ":") doc.setFont("helvetica", "bolditalic");
-          doc.text(c, cx + BW / 2, by + BH / 2 + 1.3, { align: "center" });
-          if (c === ":") doc.setFont("helvetica", "normal");
-        }
-      });
-    }
-
-    function half(x: number, text: string, dStr: string, tStr: string) {
-      label(x, text);
-      strip(x, dStr.padEnd(8).slice(0, 8).split(""));
-      strip(x + 8 * BW + 3.8, [tStr[0] ?? " ", tStr[1] ?? " ", ":", tStr[2] ?? " ", tStr[3] ?? " "]);
-    }
-
-    half(M + 3.8, leftLabel, leftDate, leftTime);
-    half(M + HALF + 3.8, rightLabel, rightDate, rightTime);
-    y += h;
-  }
-
-  // Helper: blank tall box row for repair sections
-  function blankRow(label: string, h: number, text = "") {
-    doc.rect(M, y, COL1, h, "D");
-    doc.rect(M + COL1, y, COL2, h, "D");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.setTextColor(...BK);
-    doc.text(label, M + 1.8, y + 5.5);
-    if (text) {
-      doc.setFont("times", "normal");
-      doc.setFontSize(9);
-      const lines = doc.splitTextToSize(text, COL2 - 4).slice(0, Math.floor((h - 3) / 4));
-      doc.text(lines, M + COL1 + 2, y + 5.5);
-    }
-    y += h;
-  }
-
-  // Helper: bottom two-col row (label | Signature | box) full width
-  function maintRow(label: string, name = "", sigImg?: string, h = 13) {
-    const LAB_W = 74;
-    doc.rect(M, y, LAB_W, h, "D");
-    doc.rect(M + LAB_W, y, SIG_LABEL, h, "D");
-    doc.rect(M + LAB_W + SIG_LABEL, y, TW - LAB_W - SIG_LABEL, h, "D");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.setTextColor(...BK);
-    doc.text(label, M + 1.8, y + h / 2 + 1.4);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text("Signature", M + LAB_W + SIG_LABEL / 2, y + h / 2 + 1.4, { align: "center" });
-    if (name) {
-      doc.setFont("times", "normal");
-      doc.setFontSize(9);
-      doc.text(name, M + 40, y + h / 2 + 1.5, { maxWidth: LAB_W - 41 });
-    }
-    if (sigImg) {
-      const boxW = TW - LAB_W - SIG_LABEL;
-      try { doc.addImage(sigImg, "PNG", M + LAB_W + SIG_LABEL + 1, y + 1, Math.min(boxW - 2, (h - 2) * 3), h - 2); } catch { /* ignore bad image data */ }
-    }
-    y += h;
-  }
-
-  // ── DETAILS OF REPORT ───────────────────────────────────────────────
-  secHeader("DETAILS OF REPORT");
-
-  labelRow("1. Document Number :", report.reportNumber, 6.5);
-  labelRow("2. Type of Vehicle / Equipment :", report.vehicleEquipmentLine || report.vehicle, 6.5);
-
-  // 3. Details of Defects — dynamic height
-  const defectText = report.detailsOfDefects || report.faultSummary;
-  const defectLines = doc.splitTextToSize(defectText, COL2 - 4);
-  const defectH = Math.max(26, defectLines.length * 4.6 + 8);
-  doc.setFontSize(7);
-  labelTextRow("3. Details of Defects :", defectText, defectH);
-
-  // 4. Reported by
-  sigRow("4. Reported by :", report.operatorName, 16, sig);
-
-  // Malfunction / Notification date row
-  dtBlock("MALFUNCTION DATE / TIME", "NOTIFICATION DATE / TIME", dateDigits, timeDigits, dateDigits, timeDigits);
-
-  // Shift In-Charge (blank)
-  sigRow("Shift In-Charge", report.shiftSignoff?.name ?? "", 15, shiftSig);
-
-  // ── DETAILS OF REPAIR ───────────────────────────────────────────────
-  secHeader("DETAILS OF REPAIR");
-
-  dtBlock("DESIRED START DATE / TIME", "REQUIRED END DATE / TIME", digits(rp.desiredStartDate), digits(rp.desiredStartTime), digits(rp.requiredEndDate), digits(rp.requiredEndTime));
-
-  sigRow("1. Repaired by :", rp.repairedBy ?? "", 13, repairSig);
-  blankRow("2. Details of Repair Works :", 22, rp.details);
-  blankRow("3. Remarks :", 26, rp.remarks);
-
-  // ── ACCEPTANCE TEST ─────────────────────────────────────────────────
-  secHeader("ACCEPTANCE TEST");
-
-  dtBlock("DATE / TIME", "REQUIRED END DATE / TIME", digits(ac.date), digits(ac.time), digits(ac.requiredEndDate), digits(ac.requiredEndTime));
-
-  blankRow("Comments :", 16, ac.comments);
-  maintRow("MAINTENANCE TEAM (HDK) :", ac.maintenanceName, maintSig);
-  maintRow("ARFF (Name) :", ac.arffName, arffSig);
-
-  // ── PHOTOGRAPHIC EVIDENCE (new page if faults have evidence) ──────────
-  const faultsWithEvidence = report.faults.filter((f) => f.evidence && f.evidence.length > 0);
-  if (faultsWithEvidence.length > 0) {
-    doc.addPage();
-
-    // Evidence page header
-    doc.setFillColor(...NAVY);
-    doc.rect(M, 10, TW, 14, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text("PHOTOGRAPHIC / VIDEO EVIDENCE", M + TW / 2, 17, { align: "center" });
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "normal");
-    doc.text(`${report.reportNumber}  ·  ${report.date}  ·  ${report.operatorName}`, M + TW / 2, 21.5, { align: "center" });
-
-    let ey = 30;
-    const IMG_W = 56;
-    const IMG_H = 42;
-    const IMG_GAP = 6;
-    const IMGS_PER_ROW = 3;
-
-    for (const fault of faultsWithEvidence) {
-      if (ey > 250) { doc.addPage(); ey = 14; }
-
-      // Fault label bar
-      doc.setFillColor(31, 51, 77);
-      doc.rect(M, ey, TW, 7, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
-      const secShort = fault.section.includes("—") ? fault.section.split("—").pop()!.trim() : fault.section;
-      doc.text(`[${fault.status}]  ${fault.label}  —  ${secShort}`, M + 2, ey + 4.8);
-      ey += 9;
-
-      // Evidence grid
-      let col = 0;
-      for (const ev of fault.evidence) {
-        if (ey + IMG_H + 10 > 280) { doc.addPage(); ey = 14; col = 0; }
-        const ex = M + col * (IMG_W + IMG_GAP);
-        try {
-          doc.addImage(await imageData(ev.dataUrl), "JPEG", ex, ey, IMG_W, IMG_H);
-        } catch {
-          doc.setFillColor(...LIGHT);
-          doc.rect(ex, ey, IMG_W, IMG_H, "F");
-          doc.setTextColor(...GREY);
-          doc.setFontSize(8);
-          doc.text("No preview", ex + IMG_W / 2, ey + IMG_H / 2, { align: "center" });
-        }
-        // Caption
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(5.5);
-        doc.setTextColor(...GREY);
-        const cap = `${ev.type === "video" ? "▶ VIDEO" : "📷"} ${ev.name.length > 20 ? ev.name.substring(0, 20) + "…" : ev.name}`;
-        doc.text(cap, ex + IMG_W / 2, ey + IMG_H + 3.5, { align: "center" });
-
-        col++;
-        if (col >= IMGS_PER_ROW) { col = 0; ey += IMG_H + 10; }
-      }
-      if (col > 0) ey += IMG_H + 12;
-      ey += 4;
-    }
-  }
-
-  return toFile(doc, `HDK-FaultReport-${report.reportNumber.replace(/\//g, "-")}.pdf`);
+  const me = operators.find((o) => o.name.trim().toLowerCase() === report.operatorName.trim().toLowerCase());
+  const doc = buildFaultReportPdf(report, {
+    designation: me?.rank?.trim() || "ARFF",
+    signatures: { operator, shift, repair, maintenance, arff },
+    photos: photos.filter(Boolean),
+  }, art);
+  return toFile(doc, `${report.reportNumber.replace(/\//g, "-")}.pdf`);
 }
 
 /**

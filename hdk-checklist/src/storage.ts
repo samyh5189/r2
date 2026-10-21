@@ -261,15 +261,16 @@ export async function saveFaultReport(report: FaultReport, pin = ""): Promise<Fa
 /** Provisional number for display/offline; the server assigns the final one on save. */
 export async function nextFaultReportNumber(): Promise<string> {
   const reports = await getFaultBriefs();
+  // Provisional: the server gives the final number (mirrors server.js)
   const year = new Date().getFullYear();
-  const prefix = `HDK-ARFF/${year}/`;
+  const prefixes = [`HDK/FR/ARFF/${year}/`, `HDK-ARFF/${year}/`];
   const existing = reports
     .map((r) => r.reportNumber)
-    .filter((n) => n.startsWith(prefix))
-    .map((n) => parseInt(n.replace(prefix, ""), 10))
+    .filter((n) => prefixes.some((p) => n.startsWith(p)))
+    .map((n) => parseInt(n.slice(n.lastIndexOf("/") + 1), 10))
     .filter((n) => !isNaN(n));
   const next = existing.length > 0 ? Math.max(...existing) + 1 : 1;
-  return `${prefix}${String(next).padStart(2, "0")}`;
+  return `HDK/FR/ARFF/${year}/${String(next).padStart(3, "0")}`;
 }
 
 // ── Inspection week (Sat–Fri, same as the weekly sheet) ───────────────

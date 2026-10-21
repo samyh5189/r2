@@ -745,13 +745,14 @@ app.post("/api/fault-reports", writeLimit, async (req, res) => {
     if (existing.rowCount > 0) { await client.query("COMMIT"); return res.json({ ok: true, report: existing.rows[0].data }); }
     const deleted = await client.query("SELECT 1 FROM deleted_records WHERE id = $1", [report.id]);
     if (deleted.rowCount > 0) { await client.query("ROLLBACK"); return res.status(410).json({ error: "This report was deleted." }); }
-    const prefix = `HDK-ARFF/${report.date.slice(6)}/`;
+    // HDK/FR/ARFF/<year>/<sequence>; the year's sequence carries on from reports numbered HDK-ARFF/<year>/NN
+    const year = report.date.slice(6);
     const max = await client.query(
       `SELECT COALESCE(MAX(NULLIF(regexp_replace(data->>'reportNumber', '^.*/', ''), '')::int), 0) AS n
-       FROM fault_reports WHERE data->>'reportNumber' LIKE $1 AND data->>'reportNumber' ~ '/[0-9]+$'`,
-      [prefix + "%"]
+       FROM fault_reports WHERE (data->>'reportNumber' LIKE $1 OR data->>'reportNumber' LIKE $2) AND data->>'reportNumber' ~ '/[0-9]+$'`,
+      [`HDK/FR/ARFF/${year}/%`, `HDK-ARFF/${year}/%`]
     );
-    const saved = { ...incoming, reportNumber: prefix + String(max.rows[0].n + 1).padStart(2, "0") };
+    const saved = { ...incoming, reportNumber: `HDK/FR/ARFF/${year}/${String(max.rows[0].n + 1).padStart(3, "0")}` };
     await client.query("INSERT INTO fault_reports (id, data, created_at) VALUES ($1, $2, $3)", [saved.id, saved, saved.createdAt]);
     await client.query("COMMIT");
     res.json({ ok: true, report: saved });
