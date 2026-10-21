@@ -21,7 +21,7 @@ export default function QrCodes() {
 
   if (items.length === 0) return null;
   return (
-    <div className="editor-section ops-editor" style={{ marginTop: 16 }}>
+    <div className="editor-section ops-editor">
       <div className="editor-bar" style={{ padding: "10px 12px", margin: 0 }}>
         <div>
           <strong>QR codes</strong>

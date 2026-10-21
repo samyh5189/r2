@@ -13,6 +13,8 @@ import { exportInspectionPDF, exportFaultReportPDF } from "../pdfExport";
 import { processFile } from "../evidenceUtils";
 import rescue2Photo from "../assets/rescue2.jpg";
 import { deleteDraft, loadDraft, saveDraft, type Draft } from "../drafts";
+import { useGeneralSettings } from "../settings";
+import { confirmDialog } from "../dialogs";
 
 type Phase = "intro" | "item" | "review" | "outro" | "submitting" | "faultReview" | "saving" | "done" | "blocked";
 
@@ -127,6 +129,8 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
   // Each item's guide (what it is, where, reference photo) from the checklist setup
   const guides = useMemo(() => new Map((config ?? []).flatMap((sec) => sec.items).filter((it) => it.guide || it.location || it.refPhoto).map((it) => [it.id, it])), [config]);
   const [zoom, setZoom] = useState<string | null>(null);
+  const rules = useGeneralSettings();
+  const photoMissing = !!rules.requirePhotoUS && pendingStatus === "U/S" && pendingEvidence.length === 0;
   const total = flatItems.length;
 
   const answeredCount = sections.reduce((a, s) => a + s.items.filter((it) => it.status !== "").length, 0);
@@ -416,8 +420,8 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     if (!needsPin(operators, draft.operatorName)) handleStart(draft);
   }
 
-  function discardDraft() {
-    if (!window.confirm("Discard the unfinished inspection? Its answers and photos will be lost.")) return;
+  async function discardDraft() {
+    if (!await confirmDialog({ title: "Discard the unfinished inspection?", message: "Its answers and photos will be lost.", confirmLabel: "Discard", danger: true })) return;
     deleteDraft(kind);
     setDraft(null);
   }
@@ -486,8 +490,8 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
             // Picking the draft's operator continues their inspection; anyone else starts a new one
             const resume = draft && operatorName.trim().toLowerCase() === draft.operatorName.toLowerCase() ? draft : null;
             return (
-              <button className="btn-submit" disabled={!operatorName.trim() || (needsPin(operators, operatorName) && pin.length < 4) || todayLog === undefined || starting} onClick={() => {
-                if (draft && !resume && !window.confirm(`Start a new inspection? The unfinished one started by ${draft.operatorName} will be discarded.`)) return;
+              <button className="btn-submit" disabled={!operatorName.trim() || (needsPin(operators, operatorName) && pin.length < 4) || todayLog === undefined || starting} onClick={async () => {
+                if (draft && !resume && !await confirmDialog({ title: "Start a new inspection?", message: `The unfinished one started by ${draft.operatorName} will be discarded.`, confirmLabel: "Start new", danger: true })) return;
                 handleStart(resume);
               }}>
                 {starting ? "Checking…" : resume ? "Continue Inspection →" : "Start Inspection →"}
@@ -819,7 +823,8 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
                 )}
               </div>
 
-              <button className="cl-confirm-btn" onClick={confirmFault} disabled={uploadingEvidence}>
+              {photoMissing && <p className="cl-photo-required">📷 A photo is required for U/S items.</p>}
+              <button className="cl-confirm-btn" onClick={confirmFault} disabled={uploadingEvidence || photoMissing}>
                 Confirm & Continue →
               </button>
             </div>
@@ -893,7 +898,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
           </div>
         )}
 
-        {!pendingStatus && unansweredOk.length >= 2 && (
+        {!pendingStatus && rules.allowMarkAllOk !== false && unansweredOk.length >= 2 && (
           confirmAllOk ? (
             <div className="cl-allok-confirm">
               <p>Mark the <strong>{unansweredOk.length} unanswered items</strong> as OK?</p>

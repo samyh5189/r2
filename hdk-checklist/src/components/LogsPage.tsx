@@ -12,6 +12,7 @@ import { availableMonths, monthTitle } from "../monthlySummary";
 import { showPdf } from "../pdfViewer";
 import { RACL_LOGO } from "../raclLogo";
 import { exportInspectionPDF, exportFaultReportPDF, exportWeeklyPDF } from "../pdfExport";
+import { confirmDialog, toast } from "../dialogs";
 
 async function migrateLocalStorage(): Promise<{ logs: number; faults: number }> {
   let migratedLogs = 0, migratedFaults = 0;
@@ -385,7 +386,6 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
   const [faultView, setFaultView] = useState<"active" | "overdue" | "resolved" | "all">("active");
   const [migrating, setMigrating] = useState(false);
-  const [migrateResult, setMigrateResult] = useState<string | null>(null);
   const request = useRef(0);
 
   const query = useCallback((before: string | null, limit = PAGE) => {
@@ -429,7 +429,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
   const handleMigrate = async () => {
     setMigrating(true);
     const result = await migrateLocalStorage();
-    setMigrateResult(`Migrated ${result.logs} log${result.logs !== 1 ? "s" : ""} and ${result.faults} fault report${result.faults !== 1 ? "s" : ""} to the database.`);
+    toast(`Synced ${result.logs} log${result.logs !== 1 ? "s" : ""} and ${result.faults} fault report${result.faults !== 1 ? "s" : ""} to the database.`);
     setMigrating(false);
     setUnsynced(await countUnsynced());
     reload();
@@ -441,7 +441,6 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
   const [signOff, setSignOff] = useState<InspectionLog | null>(null);
   const [repairFault, setRepairFault] = useState<FaultReport | null>(null);
   const [newFault, setNewFault] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
 
   async function adminAction(action: () => Promise<void>) {
     try {
@@ -454,9 +453,9 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
     }
   }
 
-  function confirmDelete(what: string, action: () => Promise<void>) {
-    if (!window.confirm(`Delete ${what}? This cannot be undone.`)) return;
-    adminAction(action).catch((e) => window.alert(e instanceof Error ? e.message : "Delete failed."));
+  async function confirmDelete(what: string, action: () => Promise<void>) {
+    if (!await confirmDialog({ title: `Delete ${what}?`, message: "This can't be undone.", confirmLabel: "Delete", danger: true })) return;
+    adminAction(action).then(() => toast(`Deleted ${what}.`)).catch((e) => toast(e instanceof Error ? e.message : "Delete failed.", "error"));
   }
 
   // The server filters; this just keeps the loaded page tidy while a new one is on its way
@@ -537,19 +536,7 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
 
   return (
     <div className="container records">
-      {notice && (
-        <div className="migrate-banner">
-          <span>{notice}</span>
-          <button onClick={() => setNotice(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16 }}>×</button>
-        </div>
-      )}
-      {migrateResult && (
-        <div className="migrate-banner" style={{ background: "#dcfce7", borderColor: "#86efac", color: "#15803d" }}>
-          <span>{migrateResult}</span>
-          <button onClick={() => setMigrateResult(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#15803d" }}>×</button>
-        </div>
-      )}
-      {!migrateResult && unsynced > 0 && (
+      {unsynced > 0 && (
         <div className="migrate-banner">
           <span>{unsynced} record{unsynced === 1 ? "" : "s"} on this device {unsynced === 1 ? "isn't" : "aren't"} in the database yet. Sync now?</span>
           <button className="btn-export" style={{ padding: "6px 14px", fontSize: 12 }} onClick={handleMigrate} disabled={migrating}>
@@ -721,18 +708,18 @@ export default function LogsPage({ showFaults, isAdmin, onAuthLost }: Props) {
           </>}
         </>} />
       )}
-      {signOff && <SignOffModal log={signOff} onClose={() => setSignOff(null)} onDone={() => { setSignOff(null); reload(logs.length); }} />}
+      {signOff && <SignOffModal log={signOff} onClose={() => setSignOff(null)} onDone={() => { setSignOff(null); reload(logs.length); toast("Inspection signed off."); }} />}
       {newFault && <NewFaultModal onClose={() => setNewFault(false)} onDone={(r) => {
         setNewFault(false);
         reload();
         const pdf = exportFaultReportPDF(r);
         showPdf(pdf);
-        setNotice("Emailing fault report…");
-        pdf.then((file) => emailFaultReport(r, file)).then((res) => setNotice(describeEmail(res)));
+        toast(`${r.reportNumber} saved. Emailing it…`, "info");
+        pdf.then((file) => emailFaultReport(r, file)).then((res) => toast(describeEmail(res), "error" in res ? "error" : res.skipped ? "info" : "success"));
       }} />}
-      {repairFault && <RepairModal report={repairFault} onClose={() => setRepairFault(null)} onDone={() => { setRepairFault(null); reload(faults.length); }} />}
-      {editLog && <EditLogModal item={editLog} onClose={() => setEditLog(null)} onSave={(l) => adminAction(() => updateLog(l)).then(() => setEditLog(null))} />}
-      {editFault && <EditFaultModal item={editFault} onClose={() => setEditFault(null)} onSave={(r) => adminAction(() => updateFaultReport(r)).then(() => setEditFault(null))} />}
+      {repairFault && <RepairModal report={repairFault} onClose={() => setRepairFault(null)} onDone={() => { setRepairFault(null); reload(faults.length); toast("Repair progress saved."); }} />}
+      {editLog && <EditLogModal item={editLog} onClose={() => setEditLog(null)} onSave={(l) => adminAction(() => updateLog(l)).then(() => { setEditLog(null); toast("Inspection updated."); })} />}
+      {editFault && <EditFaultModal item={editFault} onClose={() => setEditFault(null)} onSave={(r) => adminAction(() => updateFaultReport(r)).then(() => { setEditFault(null); toast("Fault report updated."); })} />}
     </div>
   );
 }

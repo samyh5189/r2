@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import type { Operator } from "../types";
 import { getOperators, saveOperators } from "../storage";
+import { toast } from "../dialogs";
 
 export default function OperatorsEditor({ onAuthLost }: { onAuthLost: () => void }) {
   const [ops, setOps] = useState<Operator[] | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => { getOperators().then(setOps); }, []);
   if (!ops) return null;
@@ -14,7 +14,7 @@ export default function OperatorsEditor({ onAuthLost }: { onAuthLost: () => void
   function update(next: Operator[]) {
     setOps(next);
     setDirty(true);
-    setMessage(null);
+   
   }
 
   const badPin = ops.some((o) => o.pin && !/^\d{4,8}$/.test(o.pin));
@@ -31,11 +31,11 @@ export default function OperatorsEditor({ onAuthLost }: { onAuthLost: () => void
         ...o, hasPin: pin ? true : clearPin ? false : o.hasPin, hasSignature: clearSignature ? false : o.hasSignature,
       })));
       setDirty(false);
-      setMessage({ ok: true, text: "Operators saved." });
+      toast("Operators saved.");
     } catch (e) {
       const text = e instanceof Error ? e.message : "Save failed.";
       if (/signed in|expired/i.test(text)) onAuthLost();
-      setMessage({ ok: false, text });
+      toast(text, "error");
     }
     setSaving(false);
   }
@@ -49,7 +49,6 @@ export default function OperatorsEditor({ onAuthLost }: { onAuthLost: () => void
         </div>
         <button className="btn-export" onClick={save} disabled={saving || !dirty || badPin}>{saving ? "Saving…" : "Save"}</button>
       </div>
-      {message && <p className={message.ok ? "editor-ok" : "form-error"} style={{ padding: "0 12px" }}>{message.text}</p>}
       {badPin && <p className="form-error" style={{ padding: "0 12px" }}>PINs are 4 to 8 digits.</p>}
       {ops.length > 0 && noPin > 0 && <p className="editor-hint" style={{ padding: "0 12px", margin: "6px 0 0" }}>⚠ {noPin} operator{noPin === 1 ? " has" : "s have"} no PIN and can submit without one.</p>}
       <div className="editor-items">

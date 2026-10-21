@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FaultReport } from "../types";
 import { describeEmail, emailPdf, getEmailSettings, saveEmailSettings, type EmailSettings } from "../storage";
+import { toast } from "../dialogs";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -18,9 +19,9 @@ export default function EmailSettingsEditor({ onAuthLost }: { onAuthLost: () => 
   const [toText, setToText] = useState("");
   const [ccText, setCcText] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   function load() {
     getEmailSettings()
@@ -31,12 +32,12 @@ export default function EmailSettingsEditor({ onAuthLost }: { onAuthLost: () => 
         setProblem(problem);
         setDirty(false);
       })
-      .catch((e) => setMessage({ ok: false, text: e.message }));
+      .catch((e) => setLoadError(e.message));
   }
   useEffect(load, []);
-  if (!s) return message ? <p className="form-error">{message.text}</p> : null;
+  if (!s) return loadError ? <p className="form-error">{loadError}</p> : null;
 
-  const update = (patch: Partial<EmailSettings>) => { setS({ ...s, ...patch }); setDirty(true); setMessage(null); };
+  const update = (patch: Partial<EmailSettings>) => { setS({ ...s, ...patch }); setDirty(true); };
   const to = splitEmails(toText), cc = splitEmails(ccText);
   const invalid = [...to, ...cc, s.fromAddress, s.replyTo].filter((e) => e && !EMAIL_RE.test(e));
   const preset = Object.entries(PRESETS).find(([, p]) => p.host === s.host)?.[0] ?? "Custom";
@@ -45,26 +46,26 @@ export default function EmailSettingsEditor({ onAuthLost }: { onAuthLost: () => 
     setBusy(true);
     try {
       await saveEmailSettings({ ...s!, to, cc });
-      setMessage({ ok: true, text: "Email settings saved." });
+      toast("Email settings saved.");
       load();
     } catch (e) {
       const text = e instanceof Error ? e.message : "Save failed.";
       if (/signed in|expired/i.test(text)) onAuthLost();
-      setMessage({ ok: false, text });
+      toast(text, "error");
     }
     setBusy(false);
   }
 
   async function test() {
     setBusy(true);
-    setMessage({ ok: true, text: "Sending test email…" });
+    toast("Sending test email…");
     const r = await emailPdf("Test email", "This is a test from the HDK ARFF inspection app. New fault reports will arrive like this, with the PDF attached.");
-    setMessage({ ok: "sent" in r, text: describeEmail(r) });
+    toast(describeEmail(r), "sent" in r ? (r.skipped ? "info" : "success") : "error");
     setBusy(false);
   }
 
   return (
-    <div className="editor-section ops-editor" style={{ marginTop: 16 }}>
+    <div className="editor-section ops-editor">
       <div className="editor-bar" style={{ padding: "10px 12px", margin: 0 }}>
         <div>
           <strong>Email</strong>
@@ -72,8 +73,7 @@ export default function EmailSettingsEditor({ onAuthLost }: { onAuthLost: () => 
         </div>
         <button className="btn-export" onClick={save} disabled={busy || !dirty || invalid.length > 0}>Save</button>
       </div>
-      {message && <p className={message.ok ? "editor-ok" : "form-error"} style={{ padding: "0 12px" }}>{message.text}</p>}
-      {!message && problem && <p className="form-error" style={{ padding: "0 12px" }}>{problem}</p>}
+      {problem && <p className="form-error" style={{ padding: "0 12px" }}>{problem}</p>}
 
       <div className="editor-items edit-form">
         <h4 className="repair-step">Mail server</h4>
@@ -113,8 +113,8 @@ export default function EmailSettingsEditor({ onAuthLost }: { onAuthLost: () => 
         <label>Reply-to (optional)<input value={s.replyTo} placeholder="where replies should go" onChange={(e) => update({ replyTo: e.target.value })} /></label>
 
         <h4 className="repair-step">Recipients</h4>
-        <label>To (one per line)<textarea rows={3} value={toText} placeholder="chief@example.com" onChange={(e) => { setToText(e.target.value); setDirty(true); setMessage(null); }} /></label>
-        <label>CC (optional)<textarea rows={2} value={ccText} onChange={(e) => { setCcText(e.target.value); setDirty(true); setMessage(null); }} /></label>
+        <label>To (one per line)<textarea rows={3} value={toText} placeholder="chief@example.com" onChange={(e) => { setToText(e.target.value); setDirty(true); }} /></label>
+        <label>CC (optional)<textarea rows={2} value={ccText} onChange={(e) => { setCcText(e.target.value); setDirty(true); }} /></label>
 
         <h4 className="repair-step">What to send</h4>
         <label className="ops-check" style={{ flexDirection: "row", alignItems: "center", textTransform: "none", fontSize: 13, color: "var(--text)" }}>

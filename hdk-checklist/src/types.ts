@@ -166,6 +166,16 @@ export type FaultBrief = Pick<FaultReport, "id" | "reportNumber" | "date" | "tim
   faults: Pick<FaultItem, "itemId" | "label">[];
 };
 
+/** Setup → Rules */
+export interface GeneralSettings {
+  /** Days a fault may stay open before it counts as overdue */
+  targetDays?: { grounding?: number; urgent?: number; routine?: number };
+  /** An item marked U/S can't be confirmed without a photo */
+  requirePhotoUS?: boolean;
+  /** Offer "Mark remaining OK" on the checklist (default on) */
+  allowMarkAllOk?: boolean;
+}
+
 /** Engine service schedule (Setup) */
 export interface ServiceSettings {
   intervalHours?: number;

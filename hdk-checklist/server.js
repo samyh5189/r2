@@ -285,6 +285,17 @@ configRoutes("/api/service-settings", "service", {
     && ["intervalHours", "intervalMonths", "lastServiceHours", "warnHours"].every((k) => optNum(c[k]))
     && (c.lastServiceDate === undefined || DATE_RE.test(c.lastServiceDate)),
 });
+// Rules (Setup → Rules): repair targets, photo for U/S, "mark remaining OK"
+const optBool = (v) => v === undefined || typeof v === "boolean";
+const optDays = (v) => v === undefined || (typeof v === "number" && Number.isFinite(v) && v > 0 && v <= 365);
+const isRules = (c) => c && typeof c === "object" && !Array.isArray(c)
+  && optBool(c.requirePhotoUS) && optBool(c.allowMarkAllOk)
+  && (c.targetDays === undefined || (c.targetDays && typeof c.targetDays === "object" && ["grounding", "urgent", "routine"].every((k) => optDays(c.targetDays[k]))));
+configRoutes("/api/general-settings", "general", { validate: isRules });
+async function loadRules() {
+  return (await pool.query("SELECT data FROM app_config WHERE key = 'general'")).rows[0]?.data ?? {};
+}
+
 // ── Operators and PINs ────────────────────────────────────────────────
 // PINs are stored as salted scrypt hashes and never leave the server; neither do saved signatures
 // (they're only returned after the right PIN). Once the list exists, only listed names are accepted.
@@ -571,6 +582,11 @@ app.post("/api/logs", writeLimit, async (req, res) => {
   // Listed operators only, with their PIN; the PIN itself is never stored
   const check = await checkOperator(pool, body.operatorName, body.pin, { arffOnly: true }).catch(() => ({ status: 500, error: "Check failed." }));
   if (check.error) return res.status(check.status).json({ error: check.error });
+  // Setup → Rules: every U/S answer needs a photo
+  if ((await loadRules().catch(() => ({}))).requirePhotoUS
+    && body.sections.some((s) => Array.isArray(s?.items) && s.items.some((it) => it?.status === "U/S" && !(Array.isArray(it.evidence) && it.evidence.length)))) {
+    return res.status(400).json({ error: "Every U/S item needs at least one photo." });
+  }
   const { pin: _pin, ...rest } = body;
   const log = await extractFiles(pool, { ...rest, operatorName: check.name, kind, periodKey: periodKey(kind, body.date) });
   const client = await pool.connect();

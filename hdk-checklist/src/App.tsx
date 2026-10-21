@@ -4,10 +4,12 @@ import "./index.css";
 import ChecklistHub from "./components/ChecklistHub";
 import LogsPage from "./components/LogsPage";
 import AdminLogin from "./components/AdminLogin";
-import ChecklistEditor from "./components/ChecklistEditor";
+import SetupPage from "./components/SetupPage";
 import TrendsPage from "./components/TrendsPage";
 import PdfViewer from "./components/PdfViewer";
+import DialogHost from "./components/DialogHost";
 import { getAdminToken, signOutAdmin } from "./storage";
+import { useGeneralSettings } from "./settings";
 import { CHECK_KINDS } from "./checkKinds";
 import type { CheckKind } from "./types";
 
@@ -36,6 +38,7 @@ const tabFromHash = (): Tab => {
 
 export default function App() {
   const [startKind] = useState(checkFromUrl);
+  useGeneralSettings(); // Setup → Rules (repair targets) take effect app-wide
   const [tab, setTabState] = useState<Tab>(tabFromHash);
   const [isAdmin, setIsAdmin] = useState(() => !!getAdminToken());
   const [showLogin, setShowLogin] = useState(false);
@@ -91,7 +94,7 @@ export default function App() {
         {shown === "logs" && <LogsPage showFaults={false} isAdmin={isAdmin} onAuthLost={signOut} />}
         {shown === "faults" && <LogsPage showFaults={true} isAdmin={isAdmin} onAuthLost={signOut} />}
         {shown === "trends" && <TrendsPage isAdmin={isAdmin} />}
-        {shown === "setup" && isAdmin && <ChecklistEditor onAuthLost={signOut} />}
+        {shown === "setup" && isAdmin && <SetupPage onAuthLost={signOut} />}
       </main>
 
       {!inspecting && (
@@ -106,6 +109,7 @@ export default function App() {
       )}
 
       <PdfViewer />
+      <DialogHost />
       {showLogin && (
         <AdminLogin onClose={() => setShowLogin(false)} onSignedIn={() => { setIsAdmin(true); setShowLogin(false); }} />
       )}

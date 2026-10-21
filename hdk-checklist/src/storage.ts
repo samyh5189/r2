@@ -1,4 +1,4 @@
-import type { CheckKind, FaultBrief, ServiceSettings, InspectionLog, FaultReport, ChecklistSectionConfig, Operator, ShiftSignoff, FaultRepair, FaultAcceptance } from "./types";
+import type { CheckKind, FaultBrief, GeneralSettings, ServiceSettings, InspectionLog, FaultReport, ChecklistSectionConfig, Operator, ShiftSignoff, FaultRepair, FaultAcceptance } from "./types";
 import { defaultChecklistConfig } from "./checklistData";
 import { logKind, periodKey } from "./checkKinds";
 import { engineEntries, type EngineEntry } from "./service";
@@ -430,6 +430,9 @@ export async function updateRepair(reportId: string, recordedBy: string, pin: st
 }
 
 // ── Service schedule and email ────────────────────────────────────────
+
+export const getGeneralSettings = () => getConfig<GeneralSettings>("/api/general-settings", "hdk_general", () => ({}));
+export const saveGeneralSettings = (settings: GeneralSettings) => putConfig("/api/general-settings", "hdk_general", settings);
 
 export const getServiceSettings = () => getConfig<ServiceSettings>("/api/service-settings", "hdk_service_settings", () => ({}));
 export const saveServiceSettings = (settings: ServiceSettings) => putConfig("/api/service-settings", "hdk_service_settings", settings);

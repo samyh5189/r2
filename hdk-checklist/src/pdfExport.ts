@@ -544,368 +544,313 @@ export async function exportFaultReportPDF(report: FaultReport) {
   return toFile(doc, `HDK-FaultReport-${report.reportNumber.replace(/\//g, "-")}.pdf`);
 }
 
+/**
+ * Weekly sheet of the daily inspections (Sat–Fri). One column per day; a day with more than one
+ * inspection shows the most serious answer, a missed day is greyed. Fault remarks are numbered in
+ * the Notes column and written out in full after the table, then operator and in-charge signatures.
+ */
 export async function exportWeeklyPDF(logs: InspectionLog[]) {
   if (logs.length === 0) return;
-  const sigs = new Map(await Promise.all(logs.map(async (l) => [l, l.operatorSignature ? await stripWhiteBg(l.operatorSignature) : ""] as const)));
-
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
-  function parseDateGB(s: string): Date {
-    const [d, m, y] = s.split("/").map(Number);
-    return new Date(y, m - 1, d);
-  }
-
-  function fmtDateGB(d: Date): string {
-    return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
-  }
-
-  // Find week (Sat–Fri) containing the most recent log
-  const recentDate = parseDateGB(logs[0].date);
-  const dow = recentDate.getDay(); // 0=Sun … 6=Sat
-  const daysFromSat = dow === 6 ? 0 : dow + 1;
-  const weekStart = new Date(recentDate);
-  weekStart.setDate(weekStart.getDate() - daysFromSat);
-
   const DAY_NAMES = ["Sat","Sun","Mon","Tue","Wed","Thu","Fri"];
-  const days: Date[] = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d;
-  });
-  const dayStrs = days.map(fmtDateGB);
+  const parseGB = (s: string) => { const [d, m, y] = s.split("/").map(Number); return new Date(y, m - 1, d); };
+  const fmtGB = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  const shortName = (n: string) => { const p = n.trim().split(/\s+/); return p.length > 1 ? `${p[0]} ${p[p.length - 1][0]}.` : p[0]; };
+  const initials = (n: string) => n.trim().split(/\s+/).map((p) => p[0]?.toUpperCase() ?? "").join("").slice(0, 3);
 
-  const logByDate: Record<string, InspectionLog> = {};
-  for (const log of logs) {
-    if (!logByDate[log.date]) logByDate[log.date] = log;
+  // The week (Sat–Fri) of the most recent log, and each day's inspections in time order
+  const latest = logs.map((l) => parseGB(l.date)).sort((a, b) => b.getTime() - a.getTime())[0];
+  const weekStart = new Date(latest);
+  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 1) % 7));
+  const days = Array.from({ length: 7 }, (_, i) => new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + i));
+  const dayLogs = days.map((d) => logs.filter((l) => l.date === fmtGB(d)).sort((a, b) => a.time.localeCompare(b.time)));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const missed = days.map((d, i) => dayLogs[i].length === 0 && d.getTime() < today.getTime());
+  const templateLog = [...dayLogs].reverse().find((l) => l.length > 0)!.slice(-1)[0];
+  // Signature images by their source (operators often reuse a saved signature)
+  const sources = [...new Set(logs.flatMap((l) => [l.operatorSignature, l.shiftSignoff?.signature ?? ""]).filter(Boolean))];
+  const sigs = new Map(await Promise.all(sources.map(async (src) => [src, await stripWhiteBg(src)] as const)));
+
+  const RANK: Record<string, number> = { "U/S": 4, NOK: 3, OK: 2, NA: 1, "": 0 };
+  /** A day's answer for an item: the most serious across that day's inspections; readings use the last one */
+  function dayAnswer(di: number, secId: string, itemId: string) {
+    let best: { status: string; remarks: string } | null = null;
+    for (const l of dayLogs[di]) {
+      const it = l.sections.find((s) => s.id === secId)?.items.find((i) => i.id === itemId)
+        ?? l.sections.flatMap((s) => s.items).find((i) => i.id === itemId);
+      if (!it) continue;
+      if (!best || RANK[it.status] >= RANK[best.status]) best = { status: it.status, remarks: it.remarks };
+    }
+    return best;
   }
-  const dayLogs: (InspectionLog | null)[] = dayStrs.map(ds => logByDate[ds] ?? null);
-  // Latest log of the week defines the rows (reflects the current checklist setup)
-  const templateLog = [...dayLogs].reverse().find(l => l !== null)!;
+
+  // Notes: one per item + remark, listing the days it was recorded
+  interface Note { n: number; item: string; status: string; remark: string; days: string[]; operators: Set<string> }
+  const notes: Note[] = [];
+  const noteFor = new Map<string, Note>();
+
+  const range = `${days[0].getDate()} ${MONTHS[days[0].getMonth()]}${days[0].getFullYear() !== days[6].getFullYear() ? ` ${days[0].getFullYear()}` : ""} – ${days[6].getDate()} ${MONTHS[days[6].getMonth()]} ${days[6].getFullYear()}`;
 
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const M = 10;
-  const PW = 210;
-  const TW = PW - 2 * M; // 190
+  const M = 10, PW = 210, TW = PW - 2 * M, BOTTOM = 282;
+  const NUM_W = 7, DESC_W = 70, DAY_W = 13, NOTE_W = TW - NUM_W - DESC_W - 7 * DAY_W; // 22
+  const DAYS_X = M + NUM_W + DESC_W, NOTE_X = DAYS_X + 7 * DAY_W;
+  const H_DAY = 5, H_DATE = 3.8, H_OP = 3.6, H_ITEM = 5.4;
+  const HEAD_BG: RGB = [232, 238, 246], PART_BG: RGB = [36, 62, 98], SEC_BG: RGB = [221, 228, 238];
+  const LINE: RGB = [196, 201, 209], OK_BG: RGB = [226, 248, 234], NOK_BG: RGB = [254, 243, 199], US_BG: RGB = [254, 226, 226];
+  const MISS_BG: RGB = [241, 242, 244];
 
-  // Column widths
-  const NUM_W = 7;
-  const DESC_W = 68;
-  const DAY_W = 13;
-  const REM_W = TW - NUM_W - DESC_W - 7 * DAY_W; // 190-7-68-91=24
-
-  const H_DAY = 5.5;
-  const H_DATE = 4.0;
-  const H_OP = 3.5;   // operator name sub-row
-  const H_ITEM = 5.5;
-  const LIGHT_BLUE: RGB = [232, 240, 250];
-  const PART_BG: RGB = [50, 80, 120];
-  const SEC_BG: RGB = [200, 210, 225];
-  const LINE: RGB = [180, 185, 195];
-  const OK_BG: RGB = [220, 252, 231];
-
-  // Centred green checkmark drawn as one rounded stroke (scale 1 fits an item cell)
   function drawTick(cx: number, cy: number, scale: number) {
     doc.setDrawColor(0, 130, 55);
-    doc.setLineWidth(0.55 * scale);
-    doc.setLineCap("round");
-    doc.setLineJoin("round");
+    doc.setLineWidth(0.5 * scale);
+    doc.setLineCap("round"); doc.setLineJoin("round");
     doc.lines([[1.1 * scale, 1.1 * scale], [2.1 * scale, -2.4 * scale]], cx - 1.6 * scale, cy + 0.05 * scale, [1, 1], "S");
-    doc.setLineCap("butt");
-    doc.setLineJoin("miter");
+    doc.setLineCap("butt"); doc.setLineJoin("miter");
   }
-  const NOK_BG: RGB = [254, 243, 199];
-  const US_BG: RGB = [254, 226, 226];
+  const cellFill = (x: number, y0: number, h: number, c: RGB) => { doc.setFillColor(...c); doc.rect(x + 0.2, y0 + 0.2, DAY_W - 0.4, h - 0.4, "F"); };
 
-  let y = 10;
+  let y = 0;
 
-  function drawPageHeader() {
-    doc.setFillColor(...NAVY);
-    doc.rect(M, y, TW, 11, "F");
-    logoTile(doc, M + TW - 17.5, y + 0.9, 16.5, 9.2);
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.text("REGIONAL AIRPORTS COMPANY LTD — ARFF DEPARTMENT", PW / 2, y + 4.5, { align: "center" });
-    doc.setFontSize(7);
+  // ── First page: letterhead, week and summary ─────────────────────────
+  header(doc, "Weekly Inspection Log — Daily Checks");
+  doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
+  doc.text(`Week ${range}`, PW - M - 2, 31, { align: "right" });
+  y = 39;
+
+  const inspectedDays = dayLogs.filter((d) => d.length > 0).length;
+  const elapsedDays = days.filter((d) => d.getTime() <= today.getTime()).length;
+  const faultItems = new Set<string>();
+  for (const dl of dayLogs) for (const l of dl) for (const s of l.sections) for (const it of s.items) if (it.status === "NOK" || it.status === "U/S") faultItems.add(it.id);
+  const operators = [...new Set(logs.map((l) => l.operatorName.trim()))];
+  const tiles: [string, string][] = [
+    [`${inspectedDays} / ${Math.min(7, Math.max(elapsedDays, inspectedDays))}`, "days inspected"],
+    [String(logs.length), logs.length === 1 ? "inspection" : "inspections"],
+    [String(faultItems.size), faultItems.size === 1 ? "item with a fault" : "items with faults"],
+    [String(operators.length), operators.length === 1 ? "operator" : "operators"],
+  ];
+  const tileW = (TW - 3 * 3) / 4;
+  tiles.forEach(([big, small], i) => {
+    const x = M + i * (tileW + 3);
+    doc.setFillColor(...LIGHT); doc.roundedRect(x, y, tileW, 11, 1.5, 1.5, "F");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(...(i === 2 && faultItems.size ? [180, 83, 9] as RGB : NAVY));
+    doc.text(big, x + 4, y + 7.2);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.3); doc.setTextColor(...GREY);
+    doc.text(small, x + 4 + doc.getTextWidth(big) * (10 / 6.3) + 2, y + 7);
+  });
+  y += 14;
+  doc.setFont("helvetica", "italic"); doc.setFontSize(6); doc.setTextColor(...GREY);
+  doc.text("To be inspected and filled out by the assigned vehicle operators. Where a day has more than one inspection, the most serious answer is shown.", M, y + 1);
+  y += 4;
+  drawColumnHeaders();
+
+  function continuationHeader() {
+    doc.setFillColor(...NAVY); doc.rect(M, 8, TW, 7, "F");
+    doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(7);
+    doc.text("RESCUE 2  |  Weekly Inspection Log — Daily Checks", M + 3, 12.6);
     doc.setFont("helvetica", "normal");
-    doc.text("RESCUE 2  |  SECTION ONE — VEHICLE OPERATORS  |  Weekly Inspection Log", PW / 2, y + 9, { align: "center" });
-    y += 13;
-
-    const weekEndDate = days[6];
-    const range = `${days[0].getDate()}-${MONTHS[days[0].getMonth()]}-${days[0].getFullYear()}  to  ${weekEndDate.getDate()}-${MONTHS[weekEndDate.getMonth()]}-${weekEndDate.getFullYear()}`;
-    doc.setFontSize(6.5);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Week: ${range}`, M, y + 3);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6);
-    doc.setTextColor(...GREY);
-    doc.text("Note: The items/things included in this section shall be inspected and filled out by the assigned Vehicle Operators.", M, y + 7);
-    doc.setTextColor(0, 0, 0);
-    y += 10;
-
-    drawColumnHeaders();
+    doc.text(`Week ${range}  (continued)`, PW - M - 3, 12.6, { align: "right" });
+    y = 17;
   }
 
   function drawColumnHeaders() {
-    const totalH = H_DAY + H_DATE + H_OP;
-    doc.setFillColor(...LIGHT_BLUE);
-    doc.rect(M, y, TW, totalH, "F");
-    doc.setLineWidth(0.3);
-    doc.setDrawColor(...LINE);
-
-    // # cell
-    doc.rect(M, y, NUM_W, totalH, "D");
-    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
-    doc.text("#", M + NUM_W / 2, y + totalH / 2 + 1.5, { align: "center" });
-
-    // Description cell
-    doc.rect(M + NUM_W, y, DESC_W, totalH, "D");
-    doc.text("Type and Location of Inspection", M + NUM_W + 2, y + totalH / 2 + 1.5);
-
-    // Day columns — 3 sub-rows: day name | date | operator
-    for (let i = 0; i < 7; i++) {
-      const x = M + NUM_W + DESC_W + i * DAY_W;
-      doc.rect(x, y, DAY_W, H_DAY, "D");
-      doc.rect(x, y + H_DAY, DAY_W, H_DATE, "D");
-      doc.rect(x, y + H_DAY + H_DATE, DAY_W, H_OP, "D");
-
-      doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(0,0,0);
-      doc.text(DAY_NAMES[i], x + DAY_W / 2, y + H_DAY / 2 + 1.5, { align: "center" });
-
-      doc.setFont("helvetica", "normal"); doc.setFontSize(5.5); doc.setTextColor(60,60,60);
-      doc.text(`${days[i].getDate()}-${MONTHS[days[i].getMonth()]}`, x + DAY_W / 2, y + H_DAY + H_DATE / 2 + 1.4, { align: "center" });
-
-      // Operator initials
-      const opLog = dayLogs[i];
-      if (opLog) {
-        const parts = opLog.operatorName.trim().split(" ");
-        const initials = parts.map(p => p[0]?.toUpperCase() ?? "").join("").substring(0, 3);
-        doc.setFontSize(4.8); doc.setTextColor(40, 80, 140);
-        doc.text(initials, x + DAY_W / 2, y + H_DAY + H_DATE + H_OP / 2 + 1.2, { align: "center" });
-      }
-      doc.setTextColor(0,0,0);
-    }
-
-    // Remarks cell
-    const remX = M + NUM_W + DESC_W + 7 * DAY_W;
-    doc.rect(remX, y, REM_W, totalH, "D");
-    doc.setFont("helvetica", "bold"); doc.setFontSize(6);
-    doc.text("Remarks", remX + REM_W / 2, y + totalH / 2 + 1.5, { align: "center" });
-
-    y += totalH;
-  }
-
-  function checkPageBreak(needed = H_ITEM) {
-    if (y + needed > 282) {
-      doc.addPage();
-      y = 10;
-      drawColumnHeaders();
-    }
-  }
-
-  function drawPartRow(title: string) {
-    checkPageBreak(6);
-    doc.setFillColor(...PART_BG);
-    doc.rect(M, y, TW, 6, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5);
-    doc.text(title, M + 2, y + 4.2);
-    y += 6;
-  }
-
-  function drawSectionRow(title: string) {
-    checkPageBreak(5);
-    doc.setFillColor(...SEC_BG);
-    doc.rect(M, y, TW, 5, "F");
-    doc.setDrawColor(...LINE); doc.setLineWidth(0.3);
-    doc.rect(M, y, TW, 5, "D");
-    doc.setTextColor(20, 40, 80);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5);
-    doc.text(title, M + 2, y + 3.6);
-    y += 5;
-  }
-
-  function drawItemRow(secId: string, itemId: string, label: string, isHours: boolean, rowNum: number) {
-    checkPageBreak(H_ITEM);
-    const rowBg = rowNum % 2 === 0 ? WHITE : LIGHT;
-    doc.setFillColor(...rowBg);
-    doc.rect(M, y, TW, H_ITEM, "F");
+    const H = H_DAY + H_DATE + H_OP;
+    doc.setFillColor(...HEAD_BG); doc.rect(M, y, TW, H, "F");
     doc.setDrawColor(...LINE); doc.setLineWidth(0.25);
+    doc.rect(M, y, NUM_W, H, "D"); doc.rect(M + NUM_W, y, DESC_W, H, "D"); doc.rect(NOTE_X, y, NOTE_W, H, "D");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(20, 30, 50);
+    doc.text("#", M + NUM_W / 2, y + H / 2 + 1.2, { align: "center" });
+    doc.text("Item inspected", M + NUM_W + 2, y + H / 2 + 1.2);
+    doc.text("Notes", NOTE_X + NOTE_W / 2, y + H / 2 + 1.2, { align: "center" });
+    for (let i = 0; i < 7; i++) {
+      const x = DAYS_X + i * DAY_W;
+      if (missed[i]) { doc.setFillColor(...MISS_BG); doc.rect(x, y, DAY_W, H, "F"); }
+      doc.rect(x, y, DAY_W, H, "D");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(...(missed[i] ? [150, 150, 150] as RGB : [20, 30, 50] as RGB));
+      doc.text(DAY_NAMES[i], x + DAY_W / 2, y + 3.6, { align: "center" });
+      doc.setFont("helvetica", "normal"); doc.setFontSize(5.6);
+      doc.text(`${days[i].getDate()} ${MONTHS[days[i].getMonth()]}`, x + DAY_W / 2, y + H_DAY + 2.8, { align: "center" });
+      doc.setFontSize(5); doc.setFont("helvetica", "bold");
+      doc.setTextColor(...(missed[i] ? [185, 28, 28] as RGB : [40, 80, 140] as RGB));
+      const who = missed[i] ? "MISSED" : dayLogs[i].map((l) => initials(l.operatorName)).join("+");
+      doc.text(who, x + DAY_W / 2, y + H_DAY + H_DATE + 2.6, { align: "center" });
+    }
+    y += H;
+  }
 
-    // # cell
-    doc.rect(M, y, NUM_W, H_ITEM, "D");
-    doc.setFont("helvetica", "normal"); doc.setFontSize(6); doc.setTextColor(100,100,100);
-    doc.text(String(rowNum), M + NUM_W / 2, y + H_ITEM / 2 + 1.3, { align: "center" });
+  // Column headings repeat on new pages only while the item table continues
+  let inTable = true;
+  function ensure(h: number) {
+    if (y + h > BOTTOM) { doc.addPage(); continuationHeader(); if (inTable) drawColumnHeaders(); }
+  }
 
-    // Description cell
-    doc.rect(M + NUM_W, y, DESC_W, H_ITEM, "D");
-    doc.setTextColor(0,0,0); doc.setFontSize(6);
-    doc.text(itemId === ENGINE_HOURS_ID ? "Engine Running Hours" : label, M + NUM_W + 2, y + H_ITEM / 2 + 1.3);
+  function bandRow(title: string, bg: RGB, fg: RGB, h: number, size: number) {
+    ensure(h + H_ITEM);
+    doc.setFillColor(...bg); doc.rect(M, y, TW, h, "F");
+    doc.setTextColor(...fg); doc.setFont("helvetica", "bold"); doc.setFontSize(size);
+    doc.text(title, M + 2.5, y + h / 2 + size * 0.13);
+    y += h;
+  }
 
-    // Day cells
-    const remX = M + NUM_W + DESC_W + 7 * DAY_W;
-    const weekRemarks: string[] = [];
+  function itemRow(secId: string, itemId: string, label: string, isValue: boolean, n: number) {
+    ensure(H_ITEM);
+    doc.setFillColor(...(n % 2 ? WHITE : [248, 249, 251] as RGB)); doc.rect(M, y, TW, H_ITEM, "F");
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.2);
+    doc.rect(M, y, NUM_W, H_ITEM, "D"); doc.rect(M + NUM_W, y, DESC_W, H_ITEM, "D"); doc.rect(NOTE_X, y, NOTE_W, H_ITEM, "D");
+    const mid = y + H_ITEM / 2 + 1.1;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(5.8); doc.setTextColor(130, 130, 130);
+    doc.text(String(n), M + NUM_W / 2, mid, { align: "center" });
+    doc.setFontSize(6.4); doc.setTextColor(15, 23, 42);
+    const text = itemId === ENGINE_HOURS_ID ? "Engine Running Hours" : label;
+    doc.text(doc.splitTextToSize(text, DESC_W - 3)[0], M + NUM_W + 2, mid);
 
+    const rowNotes: number[] = [];
     for (let di = 0; di < 7; di++) {
-      const x = M + NUM_W + DESC_W + di * DAY_W;
-      doc.rect(x, y, DAY_W, H_ITEM, "D");
-      const dl = dayLogs[di];
-      if (dl) {
-        const sec = dl.sections.find(s => s.id === secId);
-        // Match by id so a checklist edited mid-week doesn't shift rows
-        const it = sec?.items.find((i) => i.id === itemId);
-        if (it) {
-          if (isHours) {
-            if (it.remarks) {
-              const bad = it.status === "NOK" || it.status === "U/S";
-              doc.setFillColor(...(bad ? NOK_BG : OK_BG));
-              doc.rect(x + 0.15, y + 0.15, DAY_W - 0.3, H_ITEM - 0.3, "F");
-              doc.setFontSize(5.5);
-              if (bad) doc.setTextColor(160, 80, 0); else doc.setTextColor(0, 100, 50);
-              doc.text(it.remarks, x + DAY_W / 2, y + H_ITEM / 2 + 1.3, { align: "center" });
-            }
-          } else if (it.status === "OK") {
-            doc.setFillColor(...OK_BG);
-            doc.rect(x + 0.15, y + 0.15, DAY_W - 0.3, H_ITEM - 0.3, "F");
-            drawTick(x + DAY_W / 2, y + H_ITEM / 2, 1);
-            doc.setDrawColor(...LINE); doc.setLineWidth(0.25);
-          } else if (it.status === "NOK") {
-            doc.setFillColor(...NOK_BG);
-            doc.rect(x + 0.15, y + 0.15, DAY_W - 0.3, H_ITEM - 0.3, "F");
-            doc.setTextColor(160, 80, 0); doc.setFont("helvetica", "bold"); doc.setFontSize(5.5);
-            doc.text("NOK", x + DAY_W / 2, y + H_ITEM / 2 + 1.3, { align: "center" });
-            if (it.remarks) weekRemarks.push(it.remarks);
-          } else if (it.status === "U/S") {
-            doc.setFillColor(...US_BG);
-            doc.rect(x + 0.15, y + 0.15, DAY_W - 0.3, H_ITEM - 0.3, "F");
-            doc.setTextColor(180, 30, 30); doc.setFont("helvetica", "bold"); doc.setFontSize(5.5);
-            doc.text("U/S", x + DAY_W / 2, y + H_ITEM / 2 + 1.3, { align: "center" });
-            if (it.remarks) weekRemarks.push(it.remarks);
-          } else if (it.status === "NA") {
-            doc.setTextColor(160,160,160); doc.setFont("helvetica", "normal"); doc.setFontSize(7);
-            doc.text("—", x + DAY_W / 2, y + H_ITEM / 2 + 1.3, { align: "center" });
-          }
-          doc.setFont("helvetica", "normal"); doc.setTextColor(0,0,0);
-        }
+      const x = DAYS_X + di * DAY_W;
+      if (missed[di]) { doc.setFillColor(...MISS_BG); doc.rect(x, y, DAY_W, H_ITEM, "F"); }
+      doc.setDrawColor(...LINE); doc.rect(x, y, DAY_W, H_ITEM, "D");
+      const a = dayAnswer(di, secId, itemId);
+      if (!a) continue;
+      if (isValue) {
+        if (!a.remarks) continue;
+        const bad = a.status === "NOK" || a.status === "U/S";
+        cellFill(x, y, H_ITEM, bad ? NOK_BG : OK_BG);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(5.4); doc.setTextColor(...(bad ? [160, 80, 0] as RGB : [6, 95, 70] as RGB));
+        doc.text(doc.splitTextToSize(a.remarks, DAY_W - 1)[0], x + DAY_W / 2, mid, { align: "center" });
+        continue;
+      }
+      if (a.status === "OK") { cellFill(x, y, H_ITEM, OK_BG); drawTick(x + DAY_W / 2, y + H_ITEM / 2, 0.95); }
+      else if (a.status === "NA") { doc.setTextColor(160, 160, 160); doc.setFontSize(7); doc.text("–", x + DAY_W / 2, mid + 0.2, { align: "center" }); }
+      else if (a.status === "NOK" || a.status === "U/S") {
+        const us = a.status === "U/S";
+        cellFill(x, y, H_ITEM, us ? US_BG : NOK_BG);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(5.6); doc.setTextColor(...(us ? [185, 28, 28] as RGB : [160, 80, 0] as RGB));
+        doc.text(a.status, x + DAY_W / 2, mid, { align: "center" });
+        const key = `${itemId}|${a.status}|${a.remarks.trim().toLowerCase()}`;
+        let note = noteFor.get(key);
+        if (!note) { note = { n: notes.length + 1, item: text, status: a.status, remark: a.remarks.trim(), days: [], operators: new Set() }; notes.push(note); noteFor.set(key, note); }
+        note.days.push(DAY_NAMES[di]);
+        dayLogs[di].forEach((l) => note!.operators.add(l.operatorName));
+        if (!rowNotes.includes(note.n)) rowNotes.push(note.n);
       }
     }
-
-    // Remarks cell
-    doc.rect(remX, y, REM_W, H_ITEM, "D");
-    if (weekRemarks.length > 0) {
-      doc.setFontSize(4.8); doc.setTextColor(100,100,100);
-      // Same fault re-marked on several days → list its remark once
-      const seen = new Set<string>();
-      const rem = weekRemarks.filter((r) => {
-        const k = r.trim().toLowerCase();
-        if (seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      }).join("; ");
-      doc.text(rem.length > 28 ? rem.substring(0, 28) + "…" : rem, remX + 1, y + H_ITEM / 2 + 1.3);
+    if (rowNotes.length) {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(5.8); doc.setTextColor(...NAVY);
+      doc.text(rowNotes.map((n) => `Note ${n}`).join(", "), NOTE_X + NOTE_W / 2, mid, { align: "center" });
     }
-
+    doc.setFont("helvetica", "normal");
     y += H_ITEM;
   }
 
-  // ── Render ────────────────────────────────────────────────────────────
-  drawPageHeader();
-
+  // ── Table ─────────────────────────────────────────────────────────────
   let lastPart = "";
-  let itemCounter = 0;
-
+  let n = 0;
   for (const sec of templateLog.sections) {
-    const hasPartPrefix = sec.title.startsWith("PART ");
-    let partTitle = "";
-    let sectionLabel = sec.title;
-
-    if (hasPartPrefix) {
-      const dashIdx = sec.title.indexOf(" — ");
-      if (dashIdx > 0) {
-        partTitle = sec.title.substring(0, dashIdx);
-        sectionLabel = sec.title.substring(dashIdx + 3);
-      } else {
-        partTitle = sec.title;
-        sectionLabel = "";
-      }
+    let part = "", label = sec.title;
+    if (sec.title.startsWith("PART ")) {
+      const dash = sec.title.indexOf(" — ");
+      part = dash > 0 ? sec.title.slice(0, dash) : sec.title;
+      label = dash > 0 ? sec.title.slice(dash + 3) : "";
     }
+    if (part && part !== lastPart) { bandRow(part, PART_BG, [255, 255, 255], 5.6, 6.6); lastPart = part; }
+    if (label) bandRow(label, SEC_BG, [20, 40, 80], 4.8, 6.3);
+    for (const it of sec.items) itemRow(sec.id, it.id, it.label, itemType(it) !== "status", ++n);
+  }
 
-    if (partTitle && partTitle !== lastPart) {
-      drawPartRow(partTitle);
-      lastPart = partTitle;
-    }
-    if (sectionLabel) drawSectionRow(sectionLabel);
+  inTable = false;
 
-    for (let idx = 0; idx < sec.items.length; idx++) {
-      itemCounter++;
-      const lbl = sec.items[idx].label;
-      const isHours = itemType(sec.items[idx]) !== "status";
-      drawItemRow(sec.id, sec.items[idx].id, lbl, isHours, itemCounter);
+  // ── Notes: faults and remarks in full ────────────────────────────────
+  if (notes.length) {
+    y += 5;
+    bandRow("FAULTS AND REMARKS THIS WEEK", PART_BG, [255, 255, 255], 5.6, 6.6);
+    const cols = [14, 50, 12, 24, 90]; // note, item, status, days, remark
+    const heads = ["Note", "Item", "Status", "Days", "Remark (operator)"];
+    ensure(5);
+    doc.setFillColor(...HEAD_BG); doc.rect(M, y, TW, 5, "F");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6); doc.setTextColor(20, 30, 50);
+    let cx = M;
+    heads.forEach((h, i) => { doc.text(h, cx + 2, y + 3.4); cx += cols[i]; });
+    y += 5;
+    for (const note of notes) {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(6.2);
+      const remark = `${note.remark || "No remark"} (${[...note.operators].map(shortName).join(", ")})`;
+      const lines = doc.splitTextToSize(remark, cols[4] - 4) as string[];
+      const h = Math.max(5, lines.length * 2.8 + 2.2);
+      ensure(h);
+      doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(M, y + h, M + TW, y + h);
+      cx = M;
+      doc.setFont("helvetica", "bold"); doc.setTextColor(...NAVY); doc.text(`Note ${note.n}`, cx + 2, y + 3.4); cx += cols[0];
+      doc.setFont("helvetica", "normal"); doc.setTextColor(15, 23, 42); doc.text(doc.splitTextToSize(note.item, cols[1] - 3)[0], cx + 2, y + 3.4); cx += cols[1];
+      doc.setFont("helvetica", "bold"); doc.setTextColor(...(note.status === "U/S" ? [185, 28, 28] as RGB : [160, 80, 0] as RGB)); doc.text(note.status, cx + 2, y + 3.4); cx += cols[2];
+      doc.setFont("helvetica", "normal"); doc.setTextColor(15, 23, 42); doc.text(note.days.join(", "), cx + 2, y + 3.4); cx += cols[3];
+      doc.setTextColor(55, 65, 81); doc.text(lines, cx + 2, y + 3.4);
+      y += h;
     }
   }
 
-  // ── Operator signature row ───────────────────────────────────────────
-  const SIG_H = 22;
-  if (y + SIG_H + 8 > 282) { doc.addPage(); y = 10; }
+  // ── Signatures: operator and shift in-charge, per day ────────────────
+  const SIG_H = 19, LABEL_W = 20, cellW = (TW - LABEL_W) / 7;
+  y += 5;
+  ensure(5.6 + 5 + SIG_H * 2);
+  bandRow("SIGNATURES", PART_BG, [255, 255, 255], 5.6, 6.6);
+  doc.setFillColor(...HEAD_BG); doc.rect(M, y, TW, 5, "F");
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.25); doc.rect(M, y, LABEL_W, 5, "D");
+  for (let i = 0; i < 7; i++) {
+    const x = M + LABEL_W + i * cellW;
+    doc.rect(x, y, cellW, 5, "D");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6); doc.setTextColor(20, 30, 50);
+    doc.text(`${DAY_NAMES[i]} ${days[i].getDate()} ${MONTHS[days[i].getMonth()]}`, x + cellW / 2, y + 3.4, { align: "center" });
+  }
   y += 5;
 
-  // Header bar
-  doc.setFillColor(...PART_BG);
-  doc.rect(M, y, TW, 5.5, "F");
-  doc.setTextColor(255,255,255);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(6.5);
-  doc.text("OPERATOR SIGNATURES", M + 2, y + 3.8);
-  y += 5.5;
-
-  // One cell per day
-  const cellW = TW / 7;
-  for (let i = 0; i < 7; i++) {
-    const x = M + i * cellW;
-    const dl = dayLogs[i];
-    doc.setFillColor(...LIGHT_BLUE);
-    doc.rect(x, y, cellW, SIG_H, "F");
-    doc.setDrawColor(...LINE); doc.setLineWidth(0.3);
-    doc.rect(x, y, cellW, SIG_H, "D");
-
-    // Day + date header inside cell
-    doc.setFont("helvetica", "bold"); doc.setFontSize(5.5); doc.setTextColor(20,40,80);
-    doc.text(`${DAY_NAMES[i]}  ${days[i].getDate()}-${MONTHS[days[i].getMonth()]}`, x + cellW / 2, y + 3.5, { align: "center" });
-
-    if (dl) {
-      const sigData = sigs.get(dl);
-      if (sigData) {
-        try {
-          doc.addImage(sigData, "PNG", x + 1, y + 5, cellW - 2, SIG_H - 10);
-        } catch { /* no-op */ }
+  function sigRow(label: string, pick: (l: InspectionLog) => { name: string; sig?: string; note: string } | null) {
+    doc.setFillColor(...LIGHT); doc.rect(M, y, LABEL_W, SIG_H, "F");
+    doc.setDrawColor(...LINE); doc.rect(M, y, LABEL_W, SIG_H, "D");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6); doc.setTextColor(20, 30, 50);
+    doc.text(doc.splitTextToSize(label, LABEL_W - 3), M + 2, y + SIG_H / 2);
+    for (let i = 0; i < 7; i++) {
+      const x = M + LABEL_W + i * cellW;
+      if (missed[i]) { doc.setFillColor(...MISS_BG); doc.rect(x, y, cellW, SIG_H, "F"); }
+      doc.setDrawColor(...LINE); doc.rect(x, y, cellW, SIG_H, "D");
+      const entries = dayLogs[i].map(pick).filter((e): e is NonNullable<typeof e> => e != null);
+      if (entries.length === 0) {
+        doc.setFont("helvetica", "normal"); doc.setFontSize(5.4); doc.setTextColor(160, 160, 160);
+        doc.text(missed[i] ? "Not inspected" : dayLogs[i].length ? "Not signed off" : "", x + cellW / 2, y + SIG_H / 2 + 1, { align: "center" });
+        continue;
       }
-      const nameParts = dl.operatorName.trim().split(" ");
-      const shortName = nameParts[0];
-      doc.setFont("helvetica", "normal"); doc.setFontSize(4.8); doc.setTextColor(60,60,60);
-      doc.text(shortName, x + cellW / 2, y + SIG_H - 2, { align: "center" });
-    } else {
-      doc.setFont("helvetica", "normal"); doc.setFontSize(5); doc.setTextColor(160,160,160);
-      doc.text("No inspection", x + cellW / 2, y + SIG_H / 2 + 1, { align: "center" });
+      const w = (cellW - 2) / entries.length;
+      entries.forEach((e, k) => {
+        const sx = x + 1 + k * w;
+        const img = e.sig ? sigs.get(e.sig) : "";
+        if (img) { try { doc.addImage(img, "PNG", sx + 0.5, y + 1.5, w - 1, SIG_H - 9); } catch { /* unreadable signature */ } }
+        doc.setFont("helvetica", "bold"); doc.setFontSize(entries.length > 1 ? 4.6 : 5.2); doc.setTextColor(30, 41, 59);
+        doc.text(doc.splitTextToSize(shortName(e.name), w - 0.5)[0], sx + w / 2, y + SIG_H - 4.2, { align: "center" });
+        doc.setFont("helvetica", "normal"); doc.setTextColor(120, 120, 120);
+        doc.text(e.note, sx + w / 2, y + SIG_H - 1.6, { align: "center" });
+      });
     }
+    y += SIG_H;
   }
-  y += SIG_H;
+  sigRow("Vehicle operator", (l) => ({ name: l.operatorName, sig: l.operatorSignature, note: l.time }));
+  sigRow("Shift in-charge", (l) => l.shiftSignoff ? {
+    name: l.shiftSignoff.name, sig: l.shiftSignoff.signature,
+    note: new Date(l.shiftSignoff.signedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+  } : null);
 
-  // Footer on every page
-  const totalPages = doc.getNumberOfPages();
-  for (let p = 1; p <= totalPages; p++) {
+  // ── Footer on every page: legend, generated time, page number ────────
+  const total = doc.getNumberOfPages();
+  const generated = new Date().toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  for (let p = 1; p <= total; p++) {
     doc.setPage(p);
-    doc.setFontSize(5.5); doc.setTextColor(...GREY);
-    const legend = "= OK    NOK = Minor defect but operational    U/S = Unserviceable    — = Not Applicable";
-    const TICK_W = 3.6;
-    const legendX = PW / 2 - (doc.getTextWidth("Legend:  " + legend) + TICK_W) / 2;
-    const tickX = legendX + doc.getTextWidth("Legend:  ");
-    doc.text("Legend:", legendX, 293);
-    drawTick(tickX + 0.9, 292.3, 0.55);
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(M, 288, PW - M, 288);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(5.8); doc.setTextColor(...GREY);
+    drawTick(M + 1.6, 291.6, 0.55);
     doc.setTextColor(...GREY);
-    doc.text(legend, tickX + TICK_W, 293);
-    doc.text(`Page ${p} of ${totalPages}  |  HDK-ARFF/R2/CHK`, PW - M, 293, { align: "right" });
+    doc.text("OK     NOK minor defect, operational     U/S unserviceable     – not applicable     grey = no inspection", M + 4, 292.4);
+    doc.text(`HDK-ARFF/R2/CHK  ·  Generated ${generated}  ·  Page ${p} of ${total}`, PW - M, 292.4, { align: "right" });
   }
 
-  const ws = `${String(days[0].getDate()).padStart(2,"0")}-${MONTHS[days[0].getMonth()]}`;
-  const we = `${String(days[6].getDate()).padStart(2,"0")}-${MONTHS[days[6].getMonth()]}-${days[6].getFullYear()}`;
+  const ws = `${String(days[0].getDate()).padStart(2, "0")}-${MONTHS[days[0].getMonth()]}`;
+  const we = `${String(days[6].getDate()).padStart(2, "0")}-${MONTHS[days[6].getMonth()]}-${days[6].getFullYear()}`;
   return toFile(doc, `HDK-Weekly-${ws}-to-${we}.pdf`);
 }
 
