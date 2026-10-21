@@ -94,12 +94,15 @@ async function migrateEmbeddedFiles() {
 
 // ── PostgreSQL ────────────────────────────────────────────────────────
 let pool = null;
+// Set up tables and move any inline images. Serverless instances pause between requests, so
+// API requests wait for this instead of letting it run in the background.
+let dbReady = Promise.resolve();
 if (process.env.DATABASE_URL) {
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
   });
-  pool.query(`
+  dbReady = pool.query(`
     CREATE TABLE IF NOT EXISTS inspection_logs (
       id TEXT PRIMARY KEY,
       data JSONB NOT NULL,
@@ -134,6 +137,8 @@ if (process.env.DATABASE_URL) {
     .then(() => migrateEmbeddedFiles())
     .catch((e) => console.error("DB init error:", e));
 }
+
+app.use("/api", (_req, _res, next) => { dbReady.then(() => next(), () => next()); });
 
 app.post("/api/files", fileLimit, async (req, res) => {
   if (!pool) return res.status(503).json({ error: "No database configured." });
