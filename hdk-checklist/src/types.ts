@@ -186,6 +186,8 @@ export interface CheckSchedule {
   monthlyDay?: number;
   yearlyMonth?: number;
   yearlyDay?: number;
+  /** DD/MM/YYYY: a check isn't due before its first scheduled day on or after this */
+  startFrom?: Partial<Record<"weekly" | "monthly" | "yearly", string>>;
 }
 
 /** Engine service schedule (Setup) */

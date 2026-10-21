@@ -11,8 +11,9 @@ export function applyGeneral(s: GeneralSettings) {
   TARGET_DAYS["Immediate Grounding"] = s.targetDays?.grounding ?? DEFAULT_TARGETS["Immediate Grounding"];
   TARGET_DAYS.Urgent = s.targetDays?.urgent ?? DEFAULT_TARGETS.Urgent;
   TARGET_DAYS.Routine = s.targetDays?.routine ?? DEFAULT_TARGETS.Routine;
-  Object.assign(SCHEDULE, DEFAULT_SCHEDULE);
-  for (const [k, v] of Object.entries(s.schedule ?? {})) if (typeof v === "number") SCHEDULE[k as keyof typeof SCHEDULE] = v;
+  const { startFrom, ...days } = s.schedule ?? {};
+  Object.assign(SCHEDULE, DEFAULT_SCHEDULE, { startFrom: { ...startFrom } });
+  for (const [k, v] of Object.entries(days)) if (typeof v === "number") SCHEDULE[k as keyof typeof days] = v;
 }
 
 function cached(): GeneralSettings {

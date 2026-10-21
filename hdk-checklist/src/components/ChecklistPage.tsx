@@ -437,6 +437,20 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
   }
 
   // ── INTRO ────────────────────────────────────────────────────────────
+  // Opened from a QR code before Setup's start date for this check
+  const notYet = phase === "intro" && kind !== "daily" ? checkStatus(kind, null) : null;
+  if (notYet?.notStarted) {
+    return (
+      <div className="cl-screen cl-screen-auto">
+        <div className="cl-intro-card">
+          <img className="cl-intro-photo" src={rescue2Photo} alt="RESCUE 2 fire vehicle" />
+          <h2 className="cl-intro-title">{KIND_LABEL[kind]} inspection not due yet</h2>
+          <p className="cl-intro-sub">The first one is due on {dayLabel(notYet.next)}.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (phase === "blocked" || (phase === "intro" && todayLog)) {
     return (
       <div className="cl-screen cl-screen-auto">

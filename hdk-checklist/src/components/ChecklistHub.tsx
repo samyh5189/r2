@@ -14,13 +14,13 @@ const STATE_TEXT = { serviceable: "Serviceable", restricted: "Restricted", groun
  * their scheduled day and stay until someone does them (amber dot, red once a cycle was missed).
  */
 function KindPicker({ overview, kind, onKind }: { overview: Overview | null; kind: CheckKind; onKind: (k: CheckKind) => void }) {
-  const shown = CHECK_KINDS.filter((k) => k === "daily" || k === kind || !overview || !checkStatus(k, overview.latest[k]).done);
+  const shown = CHECK_KINDS.filter((k) => k === "daily" || k === kind || !overview || checkStatus(k, overview.latest[k]).due);
   if (shown.length === 1) return null;
   return (
     <div className="seg" role="tablist">
       {shown.map((k) => {
         const st = overview && checkStatus(k, overview.latest[k]);
-        const dot = !st ? null : st.done ? "done" : st.overdue ? "overdue" : "due";
+        const dot = !st || st.notStarted ? null : st.done ? "done" : st.overdue ? "overdue" : "due";
         return (
           <button key={k} role="tab" aria-selected={k === kind} className={`seg-btn${k === kind ? " active" : ""}`} onClick={() => onKind(k)}>
             {KIND_LABEL[k]}
@@ -32,9 +32,9 @@ function KindPicker({ overview, kind, onKind }: { overview: Overview | null; kin
   );
 }
 
-/** The periodic checks already done, and when each is next due */
+/** The periodic checks not due yet (done, or before their start date), and when each next is */
 function ComingUp({ overview }: { overview: Overview }) {
-  const done = CHECK_KINDS.filter((k) => k !== "daily").map((k) => ({ k, st: checkStatus(k, overview.latest[k]) })).filter((x) => x.st.done);
+  const done = CHECK_KINDS.filter((k) => k !== "daily").map((k) => ({ k, st: checkStatus(k, overview.latest[k]) })).filter((x) => !x.st.due);
   if (done.length === 0) return null;
   return <p className="status-last">Coming up · {done.map(({ k, st }) => `${KIND_LABEL[k]} ${dayLabel(st.next)}`).join(" · ")}</p>;
 }

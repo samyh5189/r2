@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { CheckSchedule, GeneralSettings } from "../types";
 import { getGeneralSettings, saveGeneralSettings } from "../storage";
 import { applyGeneral } from "../settings";
-import { DEFAULT_SCHEDULE, WEEKDAYS } from "../checkKinds";
+import { DEFAULT_SCHEDULE, WEEKDAYS, dayLabel, firstDue } from "../checkKinds";
 import { toast } from "../dialogs";
 
 const TARGETS = [
@@ -29,6 +29,20 @@ export default function RulesEditor({ onAuthLost }: { onAuthLost: () => void }) 
 
   const sched = { ...DEFAULT_SCHEDULE, ...s.schedule };
   const setSched = (patch: CheckSchedule) => update({ schedule: { ...sched, ...patch } });
+  // Start dates: DD/MM/YYYY stored, YYYY-MM-DD in the date field
+  const toIso = (gb?: string) => (gb ? gb.split("/").reverse().join("-") : "");
+  const setFrom = (kind: "weekly" | "monthly" | "yearly", iso: string) =>
+    setSched({ startFrom: { ...sched.startFrom, [kind]: iso ? iso.split("-").reverse().join("/") : undefined } });
+  const startField = (kind: "weekly" | "monthly" | "yearly") => {
+    const first = firstDue(kind, sched); // under the edited, unsaved schedule
+    return (
+      <div className="start-from">
+        <small>Starts from</small>
+        <input type="date" value={toIso(sched.startFrom?.[kind])} onChange={(e) => setFrom(kind, e.target.value)} aria-label={`${kind} checks start from`} />
+        <small className="start-first">{first ? `First due ${dayLabel(first)}` : "Due from now"}</small>
+      </div>
+    );
+  };
 
   async function save() {
     setSaving(true);
@@ -66,19 +80,21 @@ export default function RulesEditor({ onAuthLost }: { onAuthLost: () => void }) 
       </label>
 
       <h4 className="setup-sub">Check schedule</h4>
-      <p className="editor-hint" style={{ margin: "0 0 8px" }}>Each check appears on the Checklist on its day and stays there until someone does it. Once done, it's hidden until the next one is due.</p>
+      <p className="editor-hint" style={{ margin: "0 0 8px" }}>Each check appears on the Checklist on its day and stays there until someone does it. Once done, it's hidden until the next one is due. Leave "Starts from" empty for a check that's due now.</p>
       <div className="target-grid">
         <label className="target-field">
           <span>Weekly, every</span>
           <select value={sched.weeklyDay} onChange={(e) => setSched({ weeklyDay: Number(e.target.value) })}>
             {WEEKDAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}
           </select>
+          {startField("weekly")}
         </label>
         <label className="target-field">
           <span>Monthly, on the</span>
           <select value={sched.monthlyDay} onChange={(e) => setSched({ monthlyDay: Number(e.target.value) })}>
             {DAYS.map((d) => <option key={d} value={d}>{d === 31 ? "Last day" : ordinal(d)}{d > 28 && d < 31 ? " (or last day)" : ""}</option>)}
           </select>
+          {startField("monthly")}
         </label>
         <label className="target-field">
           <span>Yearly, on</span>
@@ -90,6 +106,7 @@ export default function RulesEditor({ onAuthLost }: { onAuthLost: () => void }) 
               {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
             </select>
           </div>
+          {startField("yearly")}
         </label>
       </div>
 

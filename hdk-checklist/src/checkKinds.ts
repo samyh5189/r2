@@ -11,36 +11,36 @@ export const PERIOD_NAME: Record<CheckKind, string> = { daily: "today", weekly: 
 export const logKind = (log: Pick<InspectionLog, "kind">): CheckKind => log.kind ?? "daily";
 
 /** Setup → Rules: the day each periodic check falls due. Set by applyGeneral (src/settings.ts). */
-export const SCHEDULE: Required<CheckSchedule> = { weeklyDay: 6, monthlyDay: 1, yearlyMonth: 1, yearlyDay: 1 };
-export const DEFAULT_SCHEDULE = { ...SCHEDULE };
+export const SCHEDULE: Required<CheckSchedule> = { weeklyDay: 6, monthlyDay: 1, yearlyMonth: 1, yearlyDay: 1, startFrom: {} };
+export const DEFAULT_SCHEDULE: Required<CheckSchedule> = { ...SCHEDULE };
 
 export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-const parseGB = (dateGB: string) => { const [d, m, y] = dateGB.split("/").map(Number); return new Date(y, m - 1, d); };
+export const parseGB = (dateGB: string) => { const [d, m, y] = dateGB.split("/").map(Number); return new Date(y, m - 1, d); };
 const daysIn = (y: number, m0: number) => new Date(y, m0 + 1, 0).getDate();
 // A day past the month's end (e.g. 31 in April) falls on its last day
 const onDay = (y: number, m0: number, day: number) => new Date(y, m0, Math.min(day, daysIn(y, m0)));
 
 /** The day the current cycle of a check began: the latest scheduled day on or before `date` */
-export function cycleStart(kind: CheckKind, date: Date): Date {
+export function cycleStart(kind: CheckKind, date: Date, s: Required<CheckSchedule> = SCHEDULE): Date {
   const y = date.getFullYear(), m = date.getMonth(), d = date.getDate();
   if (kind === "daily") return new Date(y, m, d);
-  if (kind === "weekly") return new Date(y, m, d - ((date.getDay() - SCHEDULE.weeklyDay + 7) % 7));
+  if (kind === "weekly") return new Date(y, m, d - ((date.getDay() - s.weeklyDay + 7) % 7));
   if (kind === "monthly") {
-    const here = onDay(y, m, SCHEDULE.monthlyDay);
-    return d >= here.getDate() ? here : onDay(y, m - 1, SCHEDULE.monthlyDay);
+    const here = onDay(y, m, s.monthlyDay);
+    return d >= here.getDate() ? here : onDay(y, m - 1, s.monthlyDay);
   }
-  const here = onDay(y, SCHEDULE.yearlyMonth - 1, SCHEDULE.yearlyDay);
-  return date >= here ? here : onDay(y - 1, SCHEDULE.yearlyMonth - 1, SCHEDULE.yearlyDay);
+  const here = onDay(y, s.yearlyMonth - 1, s.yearlyDay);
+  return date >= here ? here : onDay(y - 1, s.yearlyMonth - 1, s.yearlyDay);
 }
 
 /** The day the next cycle begins after the one starting on `start` */
-export function nextCycle(kind: CheckKind, start: Date): Date {
+export function nextCycle(kind: CheckKind, start: Date, s: Required<CheckSchedule> = SCHEDULE): Date {
   const y = start.getFullYear(), m = start.getMonth();
   if (kind === "daily") return new Date(y, m, start.getDate() + 1);
   if (kind === "weekly") return new Date(y, m, start.getDate() + 7);
-  if (kind === "monthly") return onDay(y, m + 1, SCHEDULE.monthlyDay);
-  return onDay(y + 1, SCHEDULE.yearlyMonth - 1, SCHEDULE.yearlyDay);
+  if (kind === "monthly") return onDay(y, m + 1, s.monthlyDay);
+  return onDay(y + 1, s.yearlyMonth - 1, s.yearlyDay);
 }
 
 /**
@@ -62,9 +62,22 @@ export function inspectionWeek(dateGB: string): string {
   return date.toLocaleDateString("en-GB");
 }
 
+/** The first day a check is due under its start date (null: due from the first cycle) */
+export function firstDue(kind: CheckKind, s: Required<CheckSchedule> = SCHEDULE): Date | null {
+  const from = kind === "daily" ? undefined : s.startFrom?.[kind];
+  if (!from) return null;
+  const day = parseGB(from);
+  const start = cycleStart(kind, day, s);
+  return start.getTime() === day.getTime() ? day : nextCycle(kind, start, s);
+}
+
 export interface CheckStatus {
-  /** Done in the current cycle: hidden on the Checklist until `next` */
+  /** Shown on the Checklist: not done this cycle, and past its start date */
+  due: boolean;
+  /** Done in the current cycle: hidden until `next` */
   done: boolean;
+  /** Its start date hasn't come yet: hidden until `next` */
+  notStarted: boolean;
   /** Not done, and the cycle before went without it too */
   overdue: boolean;
   since: Date;
@@ -73,12 +86,16 @@ export interface CheckStatus {
 
 /** Whether a periodic check is due: it appears on its scheduled day and stays until someone does it */
 export function checkStatus(kind: CheckKind, last: Pick<InspectionLog, "date"> | null, now = new Date()): CheckStatus {
+  const first = firstDue(kind);
+  if (first && now < first) return { due: false, done: false, notStarted: true, overdue: false, since: first, next: first };
   const since = cycleStart(kind, now);
   const next = nextCycle(kind, since);
   const lastDate = last ? parseGB(last.date) : null;
   const done = !!lastDate && lastDate >= since;
   const prevStart = cycleStart(kind, new Date(since.getFullYear(), since.getMonth(), since.getDate() - 1));
-  return { done, overdue: !done && !!lastDate && lastDate < prevStart, since, next };
+  // A cycle before the start date doesn't count as missed
+  const overdue = !done && !!lastDate && lastDate < prevStart && (!first || prevStart >= first);
+  return { due: !done, done, notStarted: false, overdue, since, next };
 }
 
 /** "Sat 25 Oct", with the year when it isn't this year */

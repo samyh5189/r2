@@ -37,7 +37,8 @@ const DATE_RE = /^\d{2}\/\d{2}\/\d{4}$/;
 // Inspection kinds and the period each covers (mirrors src/checkKinds.ts)
 const KINDS = ["daily", "weekly", "monthly", "yearly"];
 const PERIOD_NAME = { daily: "Today's", weekly: "This week's", monthly: "This month's", yearly: "This year's" };
-// Setup → Rules → Check schedule: weekday 0–6, day of month 1–31 (past the end = last day), yearly month and day
+// Setup → Rules → Check schedule: weekday 0–6, day of month 1–31 (past the end = last day), yearly month and day,
+// and an optional start date per check (DD/MM/YYYY) before which it isn't due
 const DEFAULT_SCHEDULE = { weeklyDay: 6, monthlyDay: 1, yearlyMonth: 1, yearlyDay: 1 };
 const scheduleOf = (rules) => ({ ...DEFAULT_SCHEDULE, ...rules?.schedule });
 const utc = (y, m0, d) => new Date(Date.UTC(y, m0, d));
@@ -59,6 +60,14 @@ function nextCycle(kind, start, s) {
   if (kind === "weekly") return utc(y, m, start.getUTCDate() + 7);
   if (kind === "monthly") return onDay(y, m + 1, s.monthlyDay);
   return onDay(y + 1, s.yearlyMonth - 1, s.yearlyDay);
+}
+/** The first day a check is due under its start date, or null */
+function firstDue(kind, s) {
+  const from = s.startFrom?.[kind];
+  if (!from) return null;
+  const day = gbToDate(from);
+  const start = cycleStart(kind, day, s);
+  return start.getTime() === day.getTime() ? day : nextCycle(kind, start, s);
 }
 function periodKey(kind, dateGB, s = DEFAULT_SCHEDULE) {
   if (kind === "daily") return dateGB;
@@ -313,7 +322,9 @@ const optBool = (v) => v === undefined || typeof v === "boolean";
 const optDays = (v) => v === undefined || (typeof v === "number" && Number.isFinite(v) && v > 0 && v <= 365);
 const optInt = (v, min, max) => v === undefined || (Number.isInteger(v) && v >= min && v <= max);
 const isSchedule = (c) => c === undefined || (c && typeof c === "object" && !Array.isArray(c)
-  && optInt(c.weeklyDay, 0, 6) && optInt(c.monthlyDay, 1, 31) && optInt(c.yearlyMonth, 1, 12) && optInt(c.yearlyDay, 1, 31));
+  && optInt(c.weeklyDay, 0, 6) && optInt(c.monthlyDay, 1, 31) && optInt(c.yearlyMonth, 1, 12) && optInt(c.yearlyDay, 1, 31)
+  && (c.startFrom === undefined || (c.startFrom && typeof c.startFrom === "object" && !Array.isArray(c.startFrom)
+    && Object.entries(c.startFrom).every(([k, v]) => KINDS.slice(1).includes(k) && (v === undefined || DATE_RE.test(v))))));
 const isRules = (c) => c && typeof c === "object" && !Array.isArray(c)
   && optBool(c.requirePhotoUS) && optBool(c.allowMarkAllOk) && isSchedule(c.schedule)
   && (c.targetDays === undefined || (c.targetDays && typeof c.targetDays === "object" && ["grounding", "urgent", "routine"].every((k) => optDays(c.targetDays[k]))));
@@ -614,6 +625,10 @@ app.post("/api/logs", writeLimit, async (req, res) => {
   if (rules.requirePhotoUS
     && body.sections.some((s) => Array.isArray(s?.items) && s.items.some((it) => it?.status === "U/S" && !(Array.isArray(it.evidence) && it.evidence.length)))) {
     return res.status(400).json({ error: "Every U/S item needs at least one photo." });
+  }
+  const first = kind === "daily" ? null : firstDue(kind, schedule);
+  if (first && gbToDate(body.date) < first) {
+    return res.status(400).json({ error: `${kind[0].toUpperCase()}${kind.slice(1)} inspections start on ${dateToGB(first)}.` });
   }
   const { pin: _pin, ...rest } = body;
   const log = await extractFiles(pool, { ...rest, operatorName: check.name, kind, periodKey: periodKey(kind, body.date, schedule) });

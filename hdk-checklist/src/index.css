@@ -993,6 +993,10 @@ button, a, input, select, textarea, label { touch-action: manipulation; }
 .target-field div { display: flex; align-items: center; gap: 6px; }
 .target-field input { width: 100%; min-height: 44px; border: 1px solid var(--border); border-radius: 12px; padding: 0 12px; font-size: 16px; font-family: inherit; }
 .target-field select { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border); border-radius: 12px; padding: 0 10px; font-size: 16px; font-family: inherit; background: white; color: var(--text); }
+.target-field .start-from { display: flex; align-items: stretch; flex-direction: column; gap: 4px; margin-top: 4px; }
+.start-from small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.start-from input { min-height: 40px; }
+.start-from .start-first { color: var(--text); font-weight: 600; }
 .target-field em { font-style: normal; color: var(--muted); font-weight: 500; }
 .data-actions { display: flex; flex-direction: column; gap: 8px; }
 .data-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 14px; border-radius: 14px; border: 1px solid var(--border); background: white; text-align: left; font-family: inherit; cursor: pointer; color: var(--text); }
