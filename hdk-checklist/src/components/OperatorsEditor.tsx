@@ -44,8 +44,8 @@ export default function OperatorsEditor({ onAuthLost }: { onAuthLost: () => void
     <div className="editor-section ops-editor">
       <div className="editor-bar" style={{ padding: "10px 12px", margin: 0 }}>
         <div>
-          <strong>Operators</strong>
-          <span className="editor-sub">Only these names can submit, sign off or record repairs, each with their own 4–8 digit PIN. Shift in-charge can sign off inspections.</span>
+          <strong>People</strong>
+          <span className="editor-sub">Only these people can use the app, each with their own 4–8 digit PIN. ARFF operators do the checks and report faults; shift in-charge also sign off inspections. Maintenance officers record repairs and sign the maintenance part of the acceptance test.</span>
         </div>
         <button className="btn-export" onClick={save} disabled={saving || !dirty || badPin}>{saving ? "Saving…" : "Save"}</button>
       </div>
@@ -59,8 +59,14 @@ export default function OperatorsEditor({ onAuthLost }: { onAuthLost: () => void
             <div className="editor-item-row ops-row">
               <input className="editor-label" style={{ flex: 2, minWidth: 0 }} placeholder="Full name" value={o.name} onChange={(e) => set(i, { name: e.target.value })} />
               <input className="editor-label" style={{ flex: 1, minWidth: 0 }} placeholder="Rank (e.g. LFM)" value={o.rank ?? ""} onChange={(e) => set(i, { rank: e.target.value })} />
-              <label className="ops-check"><input type="checkbox" checked={o.inCharge} onChange={(e) => set(i, { inCharge: e.target.checked })} /> In-charge</label>
               <button className="icon-btn danger" title="Remove" onClick={() => update(ops.filter((_, j) => j !== i))}>×</button>
+            </div>
+            <div className="editor-item-row ops-row">
+              <select className="ops-role" value={o.role ?? "arff"} onChange={(e) => set(i, e.target.value === "maintenance" ? { role: "maintenance", inCharge: false } : { role: undefined })}>
+                <option value="arff">ARFF operator</option>
+                <option value="maintenance">Maintenance officer</option>
+              </select>
+              {o.role !== "maintenance" && <label className="ops-check"><input type="checkbox" checked={o.inCharge} onChange={(e) => set(i, { inCharge: e.target.checked })} /> Shift in-charge</label>}
             </div>
             <div className="editor-item-row ops-row">
               <input className="editor-num pin-input" type="password" inputMode="numeric" autoComplete="new-password" maxLength={8}
@@ -72,7 +78,10 @@ export default function OperatorsEditor({ onAuthLost }: { onAuthLost: () => void
             </div>
           </div>
         ))}
-        <button className="btn-new" onClick={() => update([...ops, { id: crypto.randomUUID(), name: "", inCharge: false }])}>+ Add operator</button>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <button className="btn-new" onClick={() => update([...ops, { id: crypto.randomUUID(), name: "", inCharge: false }])}>+ Add ARFF operator</button>
+          <button className="btn-new" onClick={() => update([...ops, { id: crypto.randomUUID(), name: "", inCharge: false, role: "maintenance" }])}>+ Add maintenance officer</button>
+        </div>
       </div>
     </div>
   );

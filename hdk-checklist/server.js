@@ -266,7 +266,7 @@ function configRoutes(path, key, { validate = isArray, adminRead = false } = {})
       else await pool.query(
         `INSERT INTO app_config (key, data, updated_at) VALUES ($1, $2, NOW())
          ON CONFLICT (key) DO UPDATE SET data = $2, updated_at = NOW()`,
-        [key, JSON.stringify(config)]
+        [key, JSON.stringify(await extractFiles(pool, config))] // reference photos go to the files table
       );
       res.json({ ok: true });
     } catch (e) {
@@ -302,7 +302,7 @@ const publicOperator = ({ pinHash, pinSalt: _salt, signature, ...o }) => ({ ...o
  * Checks a name (and PIN, when that operator has one) against the operators list.
  * Returns { name, op } with the name as listed, or { status, error }.
  */
-async function checkOperator(q, name, pin, { needInCharge = false } = {}) {
+async function checkOperator(q, name, pin, { needInCharge = false, arffOnly = false } = {}) {
   const ops = await loadOperators(q);
   const typed = String(name || "").trim();
   if (!typed) return { status: 400, error: "Your name is required." };
@@ -311,6 +311,7 @@ async function checkOperator(q, name, pin, { needInCharge = false } = {}) {
   }
   const op = ops.find((o) => o.name.trim().toLowerCase() === typed.toLowerCase());
   if (!op) return { status: 403, error: "Choose your name from the operator list." };
+  if ((arffOnly || needInCharge) && op.role === "maintenance") return { status: 403, error: "This is for ARFF operators. Maintenance officers record repairs from the Faults tab." };
   if (needInCharge && !op.inCharge) return { status: 403, error: "Only a shift in-charge can sign off." };
   if (op.pinHash) {
     const fails = await q.query("SELECT COUNT(*)::int AS n FROM pin_failures WHERE operator_id = $1 AND at > NOW() - INTERVAL '15 minutes'", [op.id]);
@@ -356,7 +357,8 @@ app.put("/api/operators", requireAdmin, async (req, res) => {
     const old = new Map((await loadOperators(client)).map((o) => [o.id, o]));
     const next = list.map((o) => {
       const prev = old.get(o.id) ?? {};
-      const out = { id: o.id, name: String(o.name).trim(), rank: o.rank ? String(o.rank).slice(0, 40) : undefined, inCharge: !!o.inCharge };
+      const maintenance = o.role === "maintenance";
+      const out = { id: o.id, name: String(o.name).trim(), rank: o.rank ? String(o.rank).slice(0, 40) : undefined, inCharge: !maintenance && !!o.inCharge, ...(maintenance ? { role: "maintenance" } : {}) };
       if (o.pin) { out.pinSalt = randomBytes(16).toString("hex"); out.pinHash = hashPin(o.pin, out.pinSalt); }
       else if (!o.clearPin && prev.pinHash) { out.pinSalt = prev.pinSalt; out.pinHash = prev.pinHash; }
       if (!o.clearSignature && prev.signature) out.signature = prev.signature;
@@ -382,7 +384,7 @@ app.put("/api/operators", requireAdmin, async (req, res) => {
 app.post("/api/operators/verify", writeLimit, async (req, res) => {
   if (!pool) return res.status(503).json({ error: "No database configured." });
   try {
-    const check = await checkOperator(pool, req.body?.name, req.body?.pin, { needInCharge: !!req.body?.inCharge });
+    const check = await checkOperator(pool, req.body?.name, req.body?.pin, { needInCharge: !!req.body?.inCharge, arffOnly: req.body?.role === "arff" });
     if (check.error) return res.status(check.status).json({ error: check.error });
     res.json({ ok: true, name: check.name, signature: check.op?.pinHash ? check.op.signature ?? null : null });
   } catch (e) {
@@ -560,7 +562,7 @@ app.post("/api/logs", writeLimit, async (req, res) => {
   const existingLog = await pool.query("SELECT 1 FROM inspection_logs WHERE id = $1", [body.id]).catch(() => ({ rowCount: 0 }));
   if (existingLog.rowCount > 0) return res.json({ ok: true }); // a retry or a sync of a log we already have
   // Listed operators only, with their PIN; the PIN itself is never stored
-  const check = await checkOperator(pool, body.operatorName, body.pin).catch(() => ({ status: 500, error: "Check failed." }));
+  const check = await checkOperator(pool, body.operatorName, body.pin, { arffOnly: true }).catch(() => ({ status: 500, error: "Check failed." }));
   if (check.error) return res.status(check.status).json({ error: check.error });
   const { pin: _pin, ...rest } = body;
   const log = await extractFiles(pool, { ...rest, operatorName: check.name, kind, periodKey: periodKey(kind, body.date) });
@@ -657,7 +659,7 @@ app.post("/api/fault-reports", writeLimit, async (req, res) => {
   }
   const known = await pool.query("SELECT data FROM fault_reports WHERE id = $1", [report.id]).catch(() => ({ rowCount: 0 }));
   if (known.rowCount > 0) return res.json({ ok: true, report: known.rows[0].data });
-  const check = await checkOperator(pool, report.operatorName, report.pin).catch(() => ({ status: 500, error: "Check failed." }));
+  const check = await checkOperator(pool, report.operatorName, report.pin, { arffOnly: true }).catch(() => ({ status: 500, error: "Check failed." }));
   if (check.error) return res.status(check.status).json({ error: check.error });
   const { pin: _pin, ...rest } = report;
   const incoming = await extractFiles(pool, { ...rest, operatorName: check.name });
@@ -689,10 +691,14 @@ app.post("/api/fault-reports", writeLimit, async (req, res) => {
   }
 });
 
-// Repair workflow (maintenance team): fills the form's repair + acceptance sections.
+// Repair workflow: fills the form's repair + acceptance sections.
+// Once maintenance officers are listed, they record the repair and the maintenance half of the
+// acceptance test, and ARFF operators only the ARFF half. Before that, any listed operator may do all of it.
 // Status follows progress; a Resolved report is locked (admin edit only).
 const REPAIR_KEYS = ["desiredStartDate", "desiredStartTime", "requiredEndDate", "requiredEndTime", "repairedBy", "repairedBySignature", "details", "remarks"];
 const ACCEPT_KEYS = ["date", "time", "requiredEndDate", "requiredEndTime", "comments", "maintenanceName", "maintenanceSignature", "arffName", "arffSignature"];
+const MAINT_ACCEPT_KEYS = ["date", "time", "requiredEndDate", "requiredEndTime", "comments", "maintenanceName", "maintenanceSignature"];
+const ARFF_ACCEPT_KEYS = ["date", "time", "comments", "arffName", "arffSignature"];
 
 function pickFields(input, keys) {
   const out = {};
@@ -712,6 +718,10 @@ app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
   // The ARFF operator recording the update identifies themselves with their PIN
   const check = await checkOperator(pool, req.body?.recordedBy, req.body?.pin).catch(() => ({ status: 500, error: "Check failed." }));
   if (check.error) return res.status(check.status).json({ error: check.error });
+  const role = check.op?.role === "maintenance" ? "maintenance" : "arff";
+  const split = role === "maintenance" || (await loadOperators(pool).catch(() => [])).some((o) => o.role === "maintenance");
+  const repairKeys = !split || role === "maintenance" ? REPAIR_KEYS : [];
+  const acceptKeys = !split ? ACCEPT_KEYS : role === "maintenance" ? MAINT_ACCEPT_KEYS : ARFF_ACCEPT_KEYS;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -724,8 +734,13 @@ app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
       for (const k of Object.keys(upd)) if (k.endsWith("Signature") && old[k]) delete upd[k];
       return { ...old, ...upd };
     };
-    const repair = await extractFiles(client, merge(report.repair, pickFields(req.body?.repair, REPAIR_KEYS)));
-    const acceptance = await extractFiles(client, merge(report.acceptance, pickFields(req.body?.acceptance, ACCEPT_KEYS)));
+    const repairUpd = pickFields(req.body?.repair, repairKeys);
+    const acceptUpd = pickFields(req.body?.acceptance, acceptKeys);
+    // Whoever signs is the name on that signature
+    if (check.op && acceptUpd.maintenanceSignature && !report.acceptance?.maintenanceSignature && role === "maintenance") acceptUpd.maintenanceName = check.name;
+    if (check.op && acceptUpd.arffSignature && !report.acceptance?.arffSignature && role === "arff") acceptUpd.arffName = check.name;
+    const repair = await extractFiles(client, merge(report.repair, repairUpd));
+    const acceptance = await extractFiles(client, merge(report.acceptance, acceptUpd));
     const accepted = acceptance.maintenanceName && acceptance.maintenanceSignature && acceptance.arffName && acceptance.arffSignature;
     const started = Object.values(repair).some(Boolean) || Object.values(acceptance).some(Boolean);
     const status = accepted ? "Resolved" : started ? "In Progress" : report.status;
@@ -734,7 +749,8 @@ app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
     const saved = {
       ...report, repair, acceptance, status,
       repairUpdatedBy: check.name, repairUpdatedAt: now,
-      ...(started && !report.repairStartedAt ? { repairStartedAt: now, repairStartedBy: check.name } : {}),
+      // The repair counts as started once repair work (not just a comment) is recorded
+      ...(Object.values(repair).some(Boolean) && !report.repairStartedAt ? { repairStartedAt: now, repairStartedBy: check.name } : {}),
       ...(status === "Resolved" ? { resolvedAt: now } : {}),
     };
     await client.query("UPDATE fault_reports SET data = $2 WHERE id = $1", [req.params.id, saved]);

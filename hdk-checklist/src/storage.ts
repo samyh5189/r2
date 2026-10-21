@@ -360,6 +360,7 @@ async function getConfig<T>(path: string, cacheKey: string, fallback: () => T): 
 }
 
 async function putConfig(path: string, cacheKey: string, config: unknown) {
+  config = await uploadImages(config);
   await adminRequest("PUT", path, { config });
   try { localStorage.setItem(cacheKey, JSON.stringify(config)); } catch { /* ignore */ }
 }
@@ -399,8 +400,8 @@ async function postJson<T>(path: string, body: object, fallbackError: string): P
 }
 
 /** Checks an operator's name and PIN; returns their saved signature link, if any */
-export async function verifyOperator(name: string, pin: string, inCharge = false): Promise<{ name: string; signature: string | null }> {
-  return postJson("/api/operators/verify", { name, pin, inCharge }, "Could not check your PIN.");
+export async function verifyOperator(name: string, pin: string, inCharge = false, role?: "arff"): Promise<{ name: string; signature: string | null }> {
+  return postJson("/api/operators/verify", { name, pin, inCharge, role }, "Could not check your PIN.");
 }
 
 /** Saves (or with null, clears) the operator's signature for next time */

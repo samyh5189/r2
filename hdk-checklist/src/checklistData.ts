@@ -206,7 +206,8 @@ export function buildChecklist(config: ChecklistSectionConfig[]): ChecklistSecti
   return config.map((sec) => ({
     id: sec.id,
     title: sec.title,
-    items: sec.items.map((it): ChecklistItem => ({ ...it, status: "", remarks: "", evidence: [] })),
+    // The guide stays in the checklist setup; logs keep only what was answered
+    items: sec.items.map(({ guide: _g, location: _l, refPhoto: _p, ...it }): ChecklistItem => ({ ...it, status: "", remarks: "", evidence: [] })),
   }));
 }
 

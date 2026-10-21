@@ -21,6 +21,12 @@ export interface ChecklistItemConfig {
   unit?: string;
   min?: number;
   max?: number;
+  /** Shown to the operator on the item: what it is and what OK looks like */
+  guide?: string;
+  /** Where on the vehicle to find it */
+  location?: string;
+  /** Reference photo of the item / location (an uploaded file link) */
+  refPhoto?: string;
 }
 
 export interface ChecklistSectionConfig {
@@ -52,6 +58,8 @@ export interface Operator {
   name: string;
   rank?: string;
   inCharge: boolean;
+  /** Maintenance officers record repairs; everyone else is ARFF (absent = ARFF) */
+  role?: "arff" | "maintenance";
   hasPin?: boolean;         // from the server; the PIN itself never leaves it
   hasSignature?: boolean;
   pin?: string;             // admin: set a new PIN

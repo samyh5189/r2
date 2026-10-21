@@ -810,3 +810,75 @@ button { -webkit-tap-highlight-color: transparent; }
 .cl-fault-strip { border-radius: 12px; }
 .success-screen h2 { letter-spacing: -0.02em; }
 .success-photo { border-radius: 20px; }
+
+/* ══ Mobile-first navigation ══════════════════════════════════════════
+   Phones: compact header + bottom tab bar (thumb reach). Wider screens: tabs under the header. */
+button, a, input, select, textarea, label { touch-action: manipulation; }
+.app-header-top > div:first-child { min-width: 0; }
+.bottom-nav { display: none; }
+
+@media (max-width: 767px) {
+  .app-header { padding: calc(10px + env(safe-area-inset-top)) 16px 10px; }
+  .app-header h1 { font-size: 16px; }
+  .app-header p { font-size: 11px; }
+  .doc-badge { display: none; }
+  .top-tabs { display: none; }
+  .app-main { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .app.inspecting .app-main { padding-bottom: env(safe-area-inset-bottom); }
+  .bottom-nav {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 90;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    background: rgba(255, 255, 255, 0.92); -webkit-backdrop-filter: saturate(180%) blur(16px); backdrop-filter: saturate(180%) blur(16px);
+    border-top: 1px solid var(--border);
+  }
+  .bottom-tab {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 54px; border: none; background: none; border-radius: 14px; color: #8a919c;
+    font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer; transition: color 0.15s, background 0.15s;
+  }
+  .bottom-tab.active { color: var(--navy); background: #eef1f6; }
+  .bottom-tab:active { transform: scale(0.96); }
+
+  /* 16px stops iOS zooming into fields; comfortable tap targets everywhere */
+  input, select, textarea { font-size: 16px !important; }
+  .action-btn { min-height: 40px; font-size: 13px; padding: 8px 10px; }
+  .btn-export, .btn-small { min-height: 44px; }
+  .trend-window, .kind-tab { min-height: 40px; }
+  .container { padding: 14px 14px 20px; }
+  .modal { max-height: 94dvh; padding-bottom: env(safe-area-inset-bottom); }
+  .modal-body { padding-bottom: 24px; }
+  .log-table tr { border-radius: 16px !important; }
+  .cl-screen { min-height: 0; }
+}
+@media (min-width: 768px) { .app-main { padding-bottom: 24px; } }
+
+/* Item guide on the checklist */
+.cl-guide { display: flex; gap: 12px; align-items: flex-start; margin-top: 14px; padding: 12px; border-radius: 14px; background: var(--section-bg); }
+.cl-guide-photo { flex: none; width: 76px; height: 76px; padding: 0; border: none; border-radius: 12px; overflow: hidden; cursor: zoom-in; background: #dfe3e8; }
+.cl-guide-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cl-guide-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cl-guide-loc { font-size: 13px; font-weight: 700; color: var(--navy); }
+.cl-guide-text { font-size: 14px; color: #374151; line-height: 1.45; }
+.lightbox { position: fixed; inset: 0; z-index: 1001; background: rgba(0, 0, 0, 0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; cursor: zoom-out; }
+.lightbox img { max-width: 100%; max-height: 82dvh; border-radius: 14px; object-fit: contain; }
+.lightbox-hint { color: rgba(255, 255, 255, 0.7); font-size: 13px; }
+
+/* Setup: guide editor */
+.guide-toggle { align-self: flex-start; background: none; border: none; padding: 4px 0; font-size: 12px; font-weight: 600; color: var(--muted); font-family: inherit; cursor: pointer; }
+.guide-toggle.has { color: var(--navy); }
+.guide-edit { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; background: var(--section-bg); }
+.guide-edit input, .guide-edit textarea { width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; font-size: 14px; font-family: inherit; background: white; resize: vertical; }
+.guide-photo-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.guide-thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
+.guide-upload { display: inline-flex; align-items: center; cursor: pointer; }
+.ops-role { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-family: inherit; background: white; }
+
+/* Repair: sign slots and read-only fields */
+.sign-btn { align-self: flex-start; min-height: 44px; padding: 0 18px; border: 1.5px dashed var(--navy); border-radius: 12px; background: white; color: var(--navy); font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
+.sign-open { display: flex; flex-direction: column; gap: 6px; }
+.sign-pair { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.sign-pair > div { display: flex; flex-direction: column; gap: 6px; }
+.sign-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.ro-field { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.ro-field span { font-size: 12px; color: var(--muted); }
+.ro-field strong { font-weight: 600; white-space: pre-wrap; }

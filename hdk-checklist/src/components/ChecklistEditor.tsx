@@ -7,6 +7,8 @@ import EmailSettingsEditor from "./EmailSettingsEditor";
 import ServiceEditor from "./ServiceEditor";
 import QrCodes from "./QrCodes";
 import { CHECK_KINDS, KIND_LABEL } from "../checkKinds";
+import { compressImage } from "../evidenceUtils";
+import { draftGuides } from "../guideAI";
 
 interface Props {
   onAuthLost: () => void;
@@ -36,6 +38,9 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  // Items whose guide editor is open, and the section the AI is drafting for
+  const [guideOpen, setGuideOpen] = useState<Record<string, boolean>>({});
+  const [drafting, setDrafting] = useState<string | null>(null);
 
   useEffect(() => {
     let current = true; // ignore a slow load for a checklist we've since switched away from
@@ -85,6 +90,30 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
     updateSection(si, { items: config![si].items.map((it, i) => (i === ii ? { ...it, ...patch } : it)) });
   }
 
+  async function addRefPhoto(si: number, ii: number, file?: File) {
+    if (!file) return;
+    try { updateItem(si, ii, { refPhoto: await compressImage(file) }); }
+    catch { setMessage({ ok: false, text: "Couldn't read that photo." }); }
+  }
+
+  /** AI drafts the "what to check" text for items in the section that have none; the admin reviews it */
+  async function draftSection(si: number) {
+    const sec = config![si];
+    const missing = sec.items.filter((it) => it.label.trim() && !it.guide?.trim());
+    if (missing.length === 0) { setMessage({ ok: true, text: "Every item in this section already has a guide." }); return; }
+    setDrafting(sec.id);
+    setMessage(null);
+    try {
+      const drafts = await draftGuides(sec.title, missing);
+      updateSection(si, { items: sec.items.map((it) => (drafts[it.id] && !it.guide?.trim() ? { ...it, guide: drafts[it.id] } : it)) });
+      setGuideOpen((g) => ({ ...g, ...Object.fromEntries(Object.keys(drafts).map((id) => [id, true])) }));
+      setMessage({ ok: true, text: `Drafted ${Object.keys(drafts).length} guides. Check each one, correct it for RESCUE 2, add the location and a photo, then Save.` });
+    } catch (e) {
+      setMessage({ ok: false, text: e instanceof Error ? e.message : "AI draft failed." });
+    }
+    setDrafting(null);
+  }
+
   async function persist(next: ChecklistSectionConfig[] | null, okText: string) {
     setSaving(true);
     try {
@@ -101,7 +130,9 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
 
   function save() {
     const cleaned = config!
-      .map((s) => ({ ...s, title: s.title.trim(), items: s.items.filter((it) => it.label.trim()).map((it) => ({ ...it, label: it.label.trim() })) }))
+      .map((s) => ({ ...s, title: s.title.trim(), items: s.items.filter((it) => it.label.trim()).map((it) => ({
+        ...it, label: it.label.trim(), guide: it.guide?.trim() || undefined, location: it.location?.trim() || undefined,
+      })) }))
       .filter((s) => s.title && s.items.length > 0);
     setConfig(cleaned);
     persist(cleaned, `${KIND_LABEL[kind]} checklist saved. New inspections use it now.`);
@@ -148,6 +179,9 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
 
           {open === sec.id && (
             <div className="editor-items">
+              <button className="btn-small" style={{ alignSelf: "flex-start" }} disabled={drafting !== null} onClick={() => draftSection(si)}>
+                {drafting === sec.id ? "Drafting…" : "✨ Draft missing guides with AI"}
+              </button>
               {sec.items.map((it, ii) => (
                 <div key={it.id} className="editor-item">
                   <input className="editor-label" value={it.label} placeholder="Item label" onChange={(e) => updateItem(si, ii, { label: e.target.value })} />
@@ -167,6 +201,23 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
                     <button className="icon-btn" title="Move down" onClick={() => updateSection(si, { items: move(sec.items, ii, 1) })}>↓</button>
                     <button className="icon-btn danger" title="Delete item" onClick={() => updateSection(si, { items: sec.items.filter((_, i) => i !== ii) })}>×</button>
                   </div>
+                  <button className={`guide-toggle${it.guide || it.location || it.refPhoto ? " has" : ""}`} onClick={() => setGuideOpen((g) => ({ ...g, [it.id]: !g[it.id] }))}>
+                    {guideOpen[it.id] ? "▾" : "▸"} Guide{it.guide || it.location || it.refPhoto ? ` · ${[it.location && "location", it.guide && "text", it.refPhoto && "photo"].filter(Boolean).join(", ")}` : " · none yet"}
+                  </button>
+                  {guideOpen[it.id] && (
+                    <div className="guide-edit">
+                      <input placeholder="Location, e.g. Engine bay, left side behind the cab" value={it.location ?? ""} onChange={(e) => updateItem(si, ii, { location: e.target.value || undefined })} />
+                      <textarea rows={2} placeholder="What to check and what OK looks like" value={it.guide ?? ""} onChange={(e) => updateItem(si, ii, { guide: e.target.value || undefined })} />
+                      <div className="guide-photo-row">
+                        {it.refPhoto && <img src={it.refPhoto} alt="Reference" className="guide-thumb" />}
+                        <label className="btn-small guide-upload">
+                          {it.refPhoto ? "Change photo" : "📷 Add reference photo"}
+                          <input type="file" accept="image/*" hidden onChange={(e) => { addRefPhoto(si, ii, e.target.files?.[0]); e.target.value = ""; }} />
+                        </label>
+                        {it.refPhoto && <button className="btn-small" onClick={() => updateItem(si, ii, { refPhoto: undefined })}>Remove</button>}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               <button className="btn-new" onClick={() => updateSection(si, { items: [...sec.items, { id: newId(sec.id), label: "", type: "status" }] })}>+ Add item</button>

@@ -33,7 +33,7 @@ export default function NewFaultModal({ onClose, onDone }: { onClose: () => void
     if (operators.length === 0) { setVerified({ saved: null }); return; }
     setBusy("checking");
     try {
-      const { signature: saved } = await verifyOperator(operatorName, pin);
+      const { signature: saved } = await verifyOperator(operatorName, pin, false, "arff");
       setVerified({ saved });
       setSignature(saved ?? "");
     } catch (err) { setError(err instanceof Error ? err.message : "Could not check your PIN."); }
@@ -91,7 +91,7 @@ export default function NewFaultModal({ onClose, onDone }: { onClose: () => void
           </div>
         ) : !verified ? (
           <form className="modal-body edit-form" onSubmit={identify}>
-            <OperatorField label="Operator name" operators={operators} name={operatorName} pin={pin}
+            <OperatorField label="Operator name" operators={operators} name={operatorName} pin={pin} rememberAs="operator"
               onName={(n) => { setOperatorName(n); setError(null); }} onPin={(p) => { setPin(p); setError(null); }} />
             {error && <p className="form-error">{error}</p>}
             <button className="btn-submit" disabled={busy !== "" || !operatorName.trim() || (needsPin(operators, operatorName) && pin.length < 4)}>

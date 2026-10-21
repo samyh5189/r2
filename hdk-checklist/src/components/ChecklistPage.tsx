@@ -124,6 +124,9 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
   const hoursInputRef = useRef<HTMLInputElement>(null);
 
   const flatItems = useMemo(() => buildFlatItems(sections), [sections]);
+  // Each item's guide (what it is, where, reference photo) from the checklist setup
+  const guides = useMemo(() => new Map((config ?? []).flatMap((sec) => sec.items).filter((it) => it.guide || it.location || it.refPhoto).map((it) => [it.id, it])), [config]);
+  const [zoom, setZoom] = useState<string | null>(null);
   const total = flatItems.length;
 
   const answeredCount = sections.reduce((a, s) => a + s.items.filter((it) => it.status !== "").length, 0);
@@ -377,7 +380,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     // With an operators list, check the name and PIN now rather than after the whole inspection
     if (operators.length > 0) {
       try {
-        const { signature: saved } = await verifyOperator(name, pin);
+        const { signature: saved } = await verifyOperator(name, pin, false, "arff");
         setSavedSignature(saved);
         setSignature(saved ?? "");
       } catch (e) {
@@ -478,7 +481,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
           })()}
 
           <div className="cl-intro-field">
-            <OperatorField label="Operator Name *" operators={operators} name={operatorName} pin={pin}
+            <OperatorField label="Operator Name *" operators={operators} name={operatorName} pin={pin} rememberAs="operator"
               onName={(n) => { setOperatorName(n); setStartError(null); }} onPin={(p) => { setPin(p); setStartError(null); }} />
             {startError && <p className="form-error" style={{ margin: 0 }}>{startError}</p>}
           </div>
@@ -700,6 +703,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
   const inputType = currentItem ? itemType(currentItem) : "status";
   const isValueItem = inputType !== "status";
   const unit = currentItem?.unit ?? "";
+  const guide = guides.get(flat.itemId);
   const limits = [currentItem?.min != null && `min ${currentItem.min}`, currentItem?.max != null && `max ${currentItem.max}`].filter(Boolean).join(" · ");
 
   return (
@@ -724,6 +728,19 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
         <div className={`cl-item-card${flash ? ` cl-flash-${flash.replace("/", "")}` : ""}`}>
           <div className="cl-item-num">#{currentIdx + 1}</div>
           <div className="cl-item-label">{flat.label}</div>
+          {guide && !pendingStatus && (
+            <div className="cl-guide">
+              {guide.refPhoto && (
+                <button type="button" className="cl-guide-photo" onClick={() => setZoom(guide.refPhoto!)} aria-label="Enlarge reference photo">
+                  <img src={guide.refPhoto} alt={`Reference: ${flat.label}`} />
+                </button>
+              )}
+              <div className="cl-guide-body">
+                {guide.location && <span className="cl-guide-loc">📍 {guide.location}</span>}
+                {guide.guide && <p className="cl-guide-text">{guide.guide}</p>}
+              </div>
+            </div>
+          )}
 
           {currentStatus && !pendingStatus && (
             <div className="cl-current-status">
@@ -871,6 +888,13 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
             <button className="cl-skip-btn" onClick={advance}>Next →</button>
           )}
         </div>
+
+        {zoom && (
+          <div className="lightbox" onClick={() => setZoom(null)} role="dialog" aria-label="Reference photo">
+            <img src={zoom} alt="Reference" />
+            <span className="lightbox-hint">Tap to close</span>
+          </div>
+        )}
 
         {!pendingStatus && unansweredOk.length >= 2 && (
           confirmAllOk ? (

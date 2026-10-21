@@ -79,9 +79,12 @@ function StatusPanel({ overview, onOpenFaults }: { overview: Overview; onOpenFau
 }
 
 /** Checklist tab: today's status, then the daily, weekly, monthly or yearly check. */
-export default function ChecklistHub({ initialKind = "daily", onOpenFaults }: { initialKind?: CheckKind; onOpenFaults?: () => void }) {
+export default function ChecklistHub({ initialKind = "daily", onOpenFaults, onActiveChange }: { initialKind?: CheckKind; onOpenFaults?: () => void; onActiveChange?: (active: boolean) => void }) {
   const [kind, setKind] = useState<CheckKind>(initialKind);
-  const [active, setActive] = useState(false);
+  const [active, setActiveState] = useState(false);
+  const setActive = useCallback((a: boolean) => { setActiveState(a); onActiveChange?.(a); }, [onActiveChange]);
+  // Leaving the tab mid-inspection brings the bottom bar back
+  useEffect(() => () => onActiveChange?.(false), [onActiveChange]);
   const [overview, setOverview] = useState<Overview | null>(null);
 
   const refresh = useCallback((fresh = false) => { getOverview(fresh).then(setOverview); }, []);
