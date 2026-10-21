@@ -12,6 +12,41 @@ function lsSet<T>(key: string, items: T[]) {
   try { localStorage.setItem(key, JSON.stringify(items)); } catch { /* storage full */ }
 }
 
+// ── Images ────────────────────────────────────────────────────────────
+// Signatures and photos are uploaded one by one and records keep only their link, so no request
+// or list comes near Vercel's 4.5 MB limit. Offline, images stay inline and the server moves them later.
+
+async function uploadImage(dataUrl: string): Promise<string> {
+  try {
+    const res = await fetch("/api/files", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataUrl }) });
+    if (res.ok) return (await res.json()).url;
+  } catch { /* offline */ }
+  return dataUrl;
+}
+
+/** Returns a copy of the value with every inline image replaced by its uploaded link */
+export async function uploadImages<T>(value: T): Promise<T> {
+  if (typeof value === "string") return (value.startsWith("data:image/") ? await uploadImage(value) : value) as T;
+  if (Array.isArray(value)) return (await Promise.all(value.map((v) => uploadImages(v)))) as T;
+  if (value && typeof value === "object") {
+    const entries = await Promise.all(Object.entries(value).map(async ([k, v]) => [k, await uploadImages(v)] as const));
+    return Object.fromEntries(entries) as T;
+  }
+  return value;
+}
+
+/** An image as a data URL, fetching uploaded ones (jsPDF and canvas work need the bytes) */
+export async function imageData(src: string): Promise<string> {
+  if (!src || src.startsWith("data:")) return src;
+  const blob = await (await fetch(src)).blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 // ── Inspection logs ───────────────────────────────────────────────────
 
 export async function getLogs(): Promise<InspectionLog[]> {
@@ -22,25 +57,34 @@ export async function getLogs(): Promise<InspectionLog[]> {
   return lsGet<InspectionLog>(LS_LOGS);
 }
 
-/** Returns an error message when the server rejects the log (e.g. today's inspection already exists). */
-export async function saveLog(log: InspectionLog): Promise<string | null> {
+export interface Rejection { error: string; conflict: boolean }
+
+/**
+ * Saves the log with the operator's PIN. Returns the server's reason when it refuses the log:
+ * `conflict` when the inspection is already done, otherwise e.g. a wrong PIN.
+ * Returns the saved copy (images as links) otherwise.
+ */
+export async function saveLog(log: InspectionLog, pin = ""): Promise<{ saved: InspectionLog } | Rejection> {
+  const uploaded = await uploadImages(log);
+  let offline = false;
   try {
     const res = await fetch("/api/logs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(log),
+      body: JSON.stringify({ ...uploaded, pin }),
     });
     if (res.status >= 400 && res.status < 500) {
       const data = await res.json().catch(() => ({}));
-      return data.error ?? "The inspection was rejected.";
+      return { error: data.error ?? "The inspection was rejected.", conflict: res.status === 409 };
     }
-  } catch { /* offline — keep it locally and sync later */ }
-  // Mirror to localStorage as offline fallback
+    offline = !res.ok;
+  } catch { offline = true; }
+  // Mirror to localStorage; an unsent log keeps the PIN so it can sync later
   const logs = lsGet<InspectionLog>(LS_LOGS);
-  if (!logs.find((l) => l.id === log.id)) {
-    lsSet(LS_LOGS, [log, ...logs]);
+  if (!logs.find((l) => l.id === uploaded.id)) {
+    lsSet(LS_LOGS, [offline && pin ? { ...uploaded, pin } : uploaded, ...logs]);
   }
-  return null;
+  return { saved: uploaded };
 }
 
 const LS_DEVICE = "hdk_device_id";
@@ -84,18 +128,28 @@ export async function getFaultReports(): Promise<FaultReport[]> {
   return lsGet<FaultReport>(LS_FAULTS);
 }
 
-/** Saves the report; the server assigns the final report number, so use the returned copy. */
-export async function saveFaultReport(report: FaultReport): Promise<FaultReport> {
-  let saved = report;
+/**
+ * Saves the report with the reporter's PIN; the server assigns the final report number, so use
+ * the returned copy. Throws when the server refuses it (e.g. wrong PIN).
+ */
+export async function saveFaultReport(report: FaultReport, pin = ""): Promise<FaultReport> {
+  let saved = await uploadImages(report);
+  let offline = false;
   try {
     const res = await fetch("/api/fault-reports", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(report),
+      body: JSON.stringify({ ...saved, pin }),
     });
     const data = await res.json().catch(() => ({}));
+    if (res.status >= 400 && res.status < 500) throw new Error(data.error ?? "The fault report was rejected.");
     if (res.ok && data.report) saved = data.report;
-  } catch { /* offline */ }
+    else offline = true;
+  } catch (e) {
+    if (e instanceof Error && !(e instanceof TypeError)) throw e; // a refusal, not a network failure
+    offline = true;
+  }
+  if (offline && pin) saved = { ...saved, pin } as FaultReport;
   const reports = lsGet<FaultReport>(LS_FAULTS);
   if (!reports.find((r) => r.id === saved.id)) {
     lsSet(LS_FAULTS, [saved, ...reports]);
@@ -176,6 +230,7 @@ function lsReplace<T extends { id: string }>(key: string, id: string, item: T | 
 }
 
 export async function updateLog(log: InspectionLog) {
+  log = await uploadImages(log);
   await adminRequest("PUT", `/api/logs/${log.id}`, log);
   lsReplace(LS_LOGS, log.id, log);
 }
@@ -186,6 +241,7 @@ export async function deleteLog(id: string) {
 }
 
 export async function updateFaultReport(report: FaultReport) {
+  report = await uploadImages(report);
   await adminRequest("PUT", `/api/fault-reports/${report.id}`, report);
   lsReplace(LS_FAULTS, report.id, report);
 }
@@ -229,31 +285,53 @@ export const saveChecklistConfig = (config: ChecklistSectionConfig[] | null, kin
   putConfig(configPath(kind), configCache(kind), config);
 
 export const getOperators = () => getConfig<Operator[]>("/api/operators", "hdk_operators", () => []);
-export const saveOperators = (ops: Operator[]) => putConfig("/api/operators", "hdk_operators", ops);
+/** Admin: new PINs go to the server only; the local cache keeps just whether one is set */
+export async function saveOperators(ops: Operator[]) {
+  await adminRequest("PUT", "/api/operators", { config: ops });
+  const cached = ops.map(({ pin, clearPin, clearSignature, ...o }) => ({
+    ...o,
+    hasPin: pin ? true : clearPin ? false : o.hasPin,
+    hasSignature: clearSignature ? false : o.hasSignature,
+  }));
+  try { localStorage.setItem("hdk_operators", JSON.stringify(cached)); } catch { /* ignore */ }
+}
+
+async function postJson<T>(path: string, body: object, fallbackError: string): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch {
+    throw new Error("No connection — try again when online.");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? fallbackError);
+  return data as T;
+}
+
+/** Checks an operator's name and PIN; returns their saved signature link, if any */
+export async function verifyOperator(name: string, pin: string, inCharge = false): Promise<{ name: string; signature: string | null }> {
+  return postJson("/api/operators/verify", { name, pin, inCharge }, "Could not check your PIN.");
+}
+
+/** Saves (or with null, clears) the operator's signature for next time */
+export async function saveOperatorSignature(name: string, pin: string, signature: string | null): Promise<void> {
+  await postJson("/api/operators/signature", { name, pin, signature: signature && await uploadImages(signature) }, "Could not save your signature.");
+}
 
 // ── Shift in-charge sign-off ──────────────────────────────────────────
 
-export async function signOffLog(logId: string, name: string, signature: string): Promise<ShiftSignoff> {
-  const res = await fetch(`/api/logs/${logId}/signoff`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, signature }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? "Sign-off failed.");
+export async function signOffLog(logId: string, name: string, pin: string, signature: string): Promise<ShiftSignoff> {
+  const data = await postJson<{ shiftSignoff: ShiftSignoff }>(`/api/logs/${logId}/signoff`, { name, pin, signature: await uploadImages(signature) }, "Sign-off failed.");
   return data.shiftSignoff;
 }
 
 // ── Repair workflow ───────────────────────────────────────────────────
 
-export async function updateRepair(reportId: string, repair: FaultRepair, acceptance: FaultAcceptance): Promise<FaultReport> {
-  const res = await fetch(`/api/fault-reports/${reportId}/repair`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ repair, acceptance }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? "Could not save the repair.");
+/** Repair progress, recorded by an ARFF operator identified with their PIN */
+export async function updateRepair(reportId: string, recordedBy: string, pin: string, repair: FaultRepair, acceptance: FaultAcceptance): Promise<FaultReport> {
+  const data = await postJson<{ report: FaultReport }>(`/api/fault-reports/${reportId}/repair`, {
+    recordedBy, pin, repair: await uploadImages(repair), acceptance: await uploadImages(acceptance),
+  }, "Could not save the repair.");
   lsReplace(LS_FAULTS, reportId, data.report);
   return data.report;
 }

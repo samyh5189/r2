@@ -7,10 +7,21 @@ import ChecklistEditor from "./components/ChecklistEditor";
 import TrendsPage from "./components/TrendsPage";
 import PdfViewer from "./components/PdfViewer";
 import { getAdminToken, signOutAdmin } from "./storage";
+import { CHECK_KINDS } from "./checkKinds";
+import type { CheckKind } from "./types";
+
+// A QR code on the vehicle links to /?check=<kind>; open that checklist, then tidy the address
+function checkFromUrl(): CheckKind | undefined {
+  const kind = new URLSearchParams(window.location.search).get("check") as CheckKind | null;
+  if (!kind || !CHECK_KINDS.includes(kind)) return undefined;
+  window.history.replaceState(null, "", window.location.pathname);
+  return kind;
+}
 
 type Tab = "checklist" | "logs" | "faults" | "trends" | "setup";
 
 export default function App() {
+  const [startKind] = useState(checkFromUrl);
   const [tab, setTab] = useState<Tab>("checklist");
   const [isAdmin, setIsAdmin] = useState(() => !!getAdminToken());
   const [showLogin, setShowLogin] = useState(false);
@@ -56,7 +67,7 @@ export default function App() {
         )}
       </nav>
 
-      {tab === "checklist" && <ChecklistHub />}
+      {tab === "checklist" && <ChecklistHub initialKind={startKind} />}
       {tab === "logs" && <LogsPage showFaults={false} isAdmin={isAdmin} onAuthLost={signOut} />}
       {tab === "faults" && <LogsPage showFaults={true} isAdmin={isAdmin} onAuthLost={signOut} />}
       {tab === "trends" && <TrendsPage isAdmin={isAdmin} />}

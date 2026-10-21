@@ -4,6 +4,8 @@ import { RACL_LOGO } from "./raclLogo";
 import { KIND_LABEL, logKind } from "./checkKinds";
 import { ENGINE_HOURS_ID, itemType } from "./checklistData";
 import type { MonthlySummary } from "./monthlySummary";
+import { imageData } from "./storage";
+import type { QrItem } from "./components/QrCodes";
 
 type RGB = [number, number, number];
 
@@ -18,7 +20,10 @@ function toFile(doc: jsPDF, filename: string): PdfFile {
 
 // Strip near-white pixels from a PNG data URL (for transparent signature rendering).
 // Older signatures were captured with a light background; this makes them transparent.
-async function stripWhiteBg(dataUrl: string): Promise<string> {
+async function stripWhiteBg(src: string): Promise<string> {
+  // Uploaded signatures are links; jsPDF needs the image itself
+  const dataUrl = await imageData(src).catch(() => "");
+  if (!dataUrl) return "";
   try {
     const img = new Image();
     img.src = dataUrl;
@@ -513,7 +518,7 @@ export async function exportFaultReportPDF(report: FaultReport) {
         if (ey + IMG_H + 10 > 280) { doc.addPage(); ey = 14; col = 0; }
         const ex = M + col * (IMG_W + IMG_GAP);
         try {
-          doc.addImage(ev.dataUrl, "JPEG", ex, ey, IMG_W, IMG_H);
+          doc.addImage(await imageData(ev.dataUrl), "JPEG", ex, ey, IMG_W, IMG_H);
         } catch {
           doc.setFillColor(...LIGHT);
           doc.rect(ex, ey, IMG_W, IMG_H, "F");
@@ -1065,4 +1070,41 @@ export async function exportMonthlySummaryPDF(sum: MonthlySummary) {
     doc.text(`Generated ${new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}  ·  Page ${i} of ${pages}`, 105, 290, { align: "center" });
   }
   return toFile(doc, `HDK-Monthly-Summary-${sum.month.replace("/", "-")}.pdf`);
+}
+
+// ── QR code sheet (stickers for the vehicle) ──────────────────────────
+
+export async function exportQrSheetPDF(items: QrItem[]) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const CELL_W = 90, CELL_H = 128, GAP = 6;
+  items.forEach((q, i) => {
+    const x = 12 + (i % 2) * (CELL_W + GAP);
+    const y = 14 + Math.floor(i / 2) * (CELL_H + GAP);
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineDashPattern([2, 2], 0);
+    doc.roundedRect(x, y, CELL_W, CELL_H, 3, 3, "S"); // cut line
+    doc.setLineDashPattern([], 0);
+    doc.setFillColor(...NAVY);
+    doc.roundedRect(x + 4, y + 4, CELL_W - 8, 16, 2, 2, "F");
+    logoTile(doc, x + CELL_W - 28, y + 5.5, 20, 13);
+    doc.setTextColor(...WHITE);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("RESCUE 2", x + 8, y + 11);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text("HDK ARFF", x + 8, y + 16);
+    doc.addImage(q.image, "PNG", x + 12, y + 25, CELL_W - 24, CELL_W - 24);
+    doc.setTextColor(...NAVY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text(q.label.toUpperCase(), x + CELL_W / 2, y + CELL_W + 10, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...GREY);
+    doc.text("Scan with the phone camera to start", x + CELL_W / 2, y + CELL_W + 16, { align: "center" });
+    doc.setFontSize(6.5);
+    doc.text(q.url, x + CELL_W / 2, y + CELL_W + 21, { align: "center" });
+  });
+  return toFile(doc, "HDK-RESCUE2-QR-codes.pdf");
 }

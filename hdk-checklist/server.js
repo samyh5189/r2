@@ -2,7 +2,8 @@ import express from "express";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { readFileSync } from "fs";
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "crypto";
+import compression from "compression";
 import pg from "pg";
 import nodemailer from "nodemailer";
 import "dotenv/config";
@@ -11,6 +12,7 @@ const { Pool } = pg;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.set("trust proxy", 1); // Railway sits behind a proxy; use the real client IP for rate limits
+app.use(compression()); // lists are repetitive JSON; keeps responses well under Vercel's 4.5 MB
 app.use(express.json({ limit: "20mb" }));
 
 // Simple per-IP fixed-window rate limiter for the public write endpoints
@@ -27,6 +29,7 @@ function rateLimit(max, windowMs) {
 }
 const HOUR = 60 * 60 * 1000;
 const writeLimit = rateLimit(60, HOUR);
+const fileLimit = rateLimit(600, HOUR);
 const aiLimit = rateLimit(30, HOUR);
 
 const DATE_RE = /^\d{2}\/\d{2}\/\d{4}$/;
@@ -44,6 +47,50 @@ function periodKey(kind, dateGB) {
   return [date.getUTCDate(), date.getUTCMonth() + 1].map((n) => String(n).padStart(2, "0")).join("/") + "/" + date.getUTCFullYear();
 }
 const isId = (v) => typeof v === "string" && v.length > 0 && v.length <= 64;
+
+// ── Files: signatures and photos live in their own table, records keep a link ──
+// Ids are the SHA-256 of the content, so the same signature is stored once and links never change.
+const FILE_URL_RE = /^\/api\/files\/[0-9a-f]{64}$/;
+const DATA_URL_RE = /^data:(image\/(?:png|jpeg));base64,([A-Za-z0-9+/=]+)$/;
+const MAX_FILE_BYTES = 3_000_000;
+/** A signature or photo: an uploaded file link, or (from older/offline clients) an inline image */
+const isImageRef = (v) => typeof v === "string" && (FILE_URL_RE.test(v) || (v.length <= 4_500_000 && DATA_URL_RE.test(v)));
+
+async function storeDataUrl(q, dataUrl) {
+  const m = DATA_URL_RE.exec(dataUrl);
+  if (!m) return null;
+  const data = Buffer.from(m[2], "base64");
+  if (data.length === 0 || data.length > MAX_FILE_BYTES) return null;
+  const id = createHash("sha256").update(data).digest("hex");
+  await q.query("INSERT INTO files (id, mime, data) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING", [id, m[1], data]);
+  return `/api/files/${id}`;
+}
+
+/** Moves any inline images inside a record into the files table, returning the record with links */
+async function extractFiles(q, value) {
+  if (typeof value === "string") return value.startsWith("data:image/") ? (await storeDataUrl(q, value)) ?? value : value;
+  if (Array.isArray(value)) { const out = []; for (const v of value) out.push(await extractFiles(q, v)); return out; }
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) out[k] = await extractFiles(q, v);
+    return out;
+  }
+  return value;
+}
+
+// One-off (and harmless to repeat): move images already embedded in stored records
+async function migrateEmbeddedFiles() {
+  let moved = 0;
+  for (const table of ["inspection_logs", "fault_reports", "app_config"]) {
+    const key = table === "app_config" ? "key" : "id";
+    const rows = await pool.query(`SELECT ${key} AS k, data FROM ${table} WHERE data::text LIKE '%data:image/%'`);
+    for (const row of rows.rows) {
+      await pool.query(`UPDATE ${table} SET data = $2 WHERE ${key} = $1`, [row.k, JSON.stringify(await extractFiles(pool, row.data))]);
+      moved++;
+    }
+  }
+  if (moved) console.log(`✓ Moved images out of ${moved} records`);
+}
 
 // ── PostgreSQL ────────────────────────────────────────────────────────
 let pool = null;
@@ -72,10 +119,48 @@ if (process.env.DATABASE_URL) {
       id TEXT PRIMARY KEY,
       deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS files (
+      id TEXT PRIMARY KEY,
+      mime TEXT NOT NULL,
+      data BYTEA NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS pin_failures (
+      operator_id TEXT NOT NULL,
+      at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `)
     .then(() => console.log("✓ DB tables ready"))
+    .then(() => migrateEmbeddedFiles())
     .catch((e) => console.error("DB init error:", e));
 }
+
+app.post("/api/files", fileLimit, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  try {
+    const url = typeof req.body?.dataUrl === "string" ? await storeDataUrl(pool, req.body.dataUrl) : null;
+    if (!url) return res.status(400).json({ error: "Only PNG or JPEG images up to 3 MB." });
+    res.json({ url });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Upload failed." });
+  }
+});
+
+app.get("/api/files/:id", async (req, res) => {
+  if (!pool) return res.status(503).end();
+  if (!/^[0-9a-f]{64}$/.test(req.params.id)) return res.status(404).end();
+  try {
+    const r = await pool.query("SELECT mime, data FROM files WHERE id = $1", [req.params.id]);
+    if (r.rowCount === 0) return res.status(404).end();
+    res.set("Content-Type", r.rows[0].mime);
+    res.set("Cache-Control", "public, max-age=31536000, immutable"); // content-addressed
+    res.send(r.rows[0].data);
+  } catch (e) {
+    console.error(e);
+    res.status(500).end();
+  }
+});
 
 // ── Admin auth ────────────────────────────────────────────────────────
 // Admin signs in with ADMIN_EMAIL + ADMIN_PASSWORD (Railway variables) and gets a
@@ -120,7 +205,7 @@ function adminRoutes(path, table) {
   app.put(`${path}/:id`, requireAdmin, async (req, res) => {
     if (!pool) return res.status(503).json({ error: "No database configured." });
     try {
-      const item = { ...req.body, id: req.params.id };
+      const item = await extractFiles(pool, { ...req.body, id: req.params.id });
       // An edited date can move a periodic inspection into another period
       if (table === "inspection_logs" && KINDS.includes(item.kind) && DATE_RE.test(item.date)) item.periodKey = periodKey(item.kind, item.date);
       // Fault age tracking: stamp when a report is closed, clear it if reopened
@@ -193,7 +278,138 @@ configRoutes("/api/service-settings", "service", {
     && ["intervalHours", "intervalMonths", "lastServiceHours", "warnHours"].every((k) => optNum(c[k]))
     && (c.lastServiceDate === undefined || DATE_RE.test(c.lastServiceDate)),
 });
-configRoutes("/api/operators", "operators");
+// ── Operators and PINs ────────────────────────────────────────────────
+// PINs are stored as salted scrypt hashes and never leave the server; neither do saved signatures
+// (they're only returned after the right PIN). Once the list exists, only listed names are accepted.
+const PIN_RE = /^\d{4,8}$/;
+const PIN_LOCK_TRIES = 5;
+const hashPin = (pin, salt) => scryptSync(pin, salt, 32).toString("hex");
+
+async function loadOperators(q) {
+  return (await q.query("SELECT data FROM app_config WHERE key = 'operators'")).rows[0]?.data ?? [];
+}
+
+const publicOperator = ({ pinHash, pinSalt: _salt, signature, ...o }) => ({ ...o, hasPin: !!pinHash, hasSignature: !!signature });
+
+/**
+ * Checks a name (and PIN, when that operator has one) against the operators list.
+ * Returns { name, op } with the name as listed, or { status, error }.
+ */
+async function checkOperator(q, name, pin, { needInCharge = false } = {}) {
+  const ops = await loadOperators(q);
+  const typed = String(name || "").trim();
+  if (!typed) return { status: 400, error: "Your name is required." };
+  if (ops.length === 0) {
+    return needInCharge ? { status: 403, error: "No shift in-charge is set up yet (Setup → Operators)." } : { name: typed, op: null };
+  }
+  const op = ops.find((o) => o.name.trim().toLowerCase() === typed.toLowerCase());
+  if (!op) return { status: 403, error: "Choose your name from the operator list." };
+  if (needInCharge && !op.inCharge) return { status: 403, error: "Only a shift in-charge can sign off." };
+  if (op.pinHash) {
+    const fails = await q.query("SELECT COUNT(*)::int AS n FROM pin_failures WHERE operator_id = $1 AND at > NOW() - INTERVAL '15 minutes'", [op.id]);
+    if (fails.rows[0].n >= PIN_LOCK_TRIES) return { status: 429, error: "Too many wrong PINs. Try again in 15 minutes." };
+    const ok = typeof pin === "string" && PIN_RE.test(pin) && safeEqual(hashPin(pin, op.pinSalt), op.pinHash);
+    if (!ok) {
+      await q.query("INSERT INTO pin_failures (operator_id) VALUES ($1)", [op.id]);
+      return { status: 401, error: pin ? "Wrong PIN." : "Enter your PIN." };
+    }
+    await q.query("DELETE FROM pin_failures WHERE operator_id = $1", [op.id]);
+  }
+  return { name: op.name, op };
+}
+
+app.get("/api/operators", async (_req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  try {
+    const ops = await loadOperators(pool);
+    res.json({ config: ops.length ? ops.map(publicOperator) : null });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "DB query failed." });
+  }
+});
+
+// Admin: replace the list. Each operator may carry a new `pin` or `clearPin`; otherwise its PIN is kept.
+app.put("/api/operators", requireAdmin, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  const list = req.body?.config;
+  if (!Array.isArray(list) || list.length > 100) return res.status(400).json({ error: "Invalid operators list." });
+  const names = new Set();
+  for (const o of list) {
+    const name = String(o?.name || "").trim().toLowerCase();
+    if (!isId(o?.id) || !name || name.length > 80 || names.has(name)) return res.status(400).json({ error: "Each operator needs a different name." });
+    if (o.pin !== undefined && o.pin !== "" && !PIN_RE.test(o.pin)) return res.status(400).json({ error: "PINs are 4 to 8 digits." });
+    names.add(name);
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Same lock as saving a signature, so neither overwrites the other
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('operators'))");
+    const old = new Map((await loadOperators(client)).map((o) => [o.id, o]));
+    const next = list.map((o) => {
+      const prev = old.get(o.id) ?? {};
+      const out = { id: o.id, name: String(o.name).trim(), rank: o.rank ? String(o.rank).slice(0, 40) : undefined, inCharge: !!o.inCharge };
+      if (o.pin) { out.pinSalt = randomBytes(16).toString("hex"); out.pinHash = hashPin(o.pin, out.pinSalt); }
+      else if (!o.clearPin && prev.pinHash) { out.pinSalt = prev.pinSalt; out.pinHash = prev.pinHash; }
+      if (!o.clearSignature && prev.signature) out.signature = prev.signature;
+      return out;
+    });
+    await client.query(
+      `INSERT INTO app_config (key, data, updated_at) VALUES ('operators', $1, NOW())
+       ON CONFLICT (key) DO UPDATE SET data = $1, updated_at = NOW()`,
+      [JSON.stringify(next)]
+    );
+    await client.query("COMMIT");
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(e);
+    res.status(500).json({ error: "DB update failed." });
+  } finally {
+    client.release();
+  }
+});
+
+// Operator checks their PIN before starting; returns their saved signature, if any
+app.post("/api/operators/verify", writeLimit, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  try {
+    const check = await checkOperator(pool, req.body?.name, req.body?.pin, { needInCharge: !!req.body?.inCharge });
+    if (check.error) return res.status(check.status).json({ error: check.error });
+    res.json({ ok: true, name: check.name, signature: check.op?.pinHash ? check.op.signature ?? null : null });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Check failed." });
+  }
+});
+
+// Save (or clear) an operator's signature for next time — needs their PIN
+app.post("/api/operators/signature", writeLimit, async (req, res) => {
+  if (!pool) return res.status(503).json({ error: "No database configured." });
+  // The PIN is checked outside the transaction so a wrong try is still recorded
+  const check = await checkOperator(pool, req.body?.name, req.body?.pin).catch(() => ({ status: 500, error: "Check failed." }));
+  if (check.error) return res.status(check.status).json({ error: check.error });
+  if (!check.op?.pinHash) return res.status(400).json({ error: "Ask an admin to set your PIN before saving a signature." });
+  const sig = req.body?.signature;
+  if (sig !== null && !isImageRef(sig)) return res.status(400).json({ error: "Invalid signature." });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('operators'))");
+    const signature = sig === null ? undefined : await extractFiles(client, sig);
+    const ops = (await loadOperators(client)).map((o) => (o.id === check.op.id ? { ...o, signature } : o));
+    await client.query("UPDATE app_config SET data = $1, updated_at = NOW() WHERE key = 'operators'", [JSON.stringify(ops)]);
+    await client.query("COMMIT");
+    res.json({ ok: true, signature: signature ?? null });
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error(e);
+    res.status(500).json({ error: "Could not save the signature." });
+  } finally {
+    client.release();
+  }
+});
 
 adminRoutes("/api/logs", "inspection_logs");
 adminRoutes("/api/fault-reports", "fault_reports");
@@ -220,7 +436,13 @@ app.post("/api/logs", writeLimit, async (req, res) => {
   }
   const kind = body.kind ?? "daily";
   if (!KINDS.includes(kind)) return res.status(400).json({ error: "Invalid inspection kind." });
-  const log = { ...body, kind, periodKey: periodKey(kind, body.date) };
+  const existingLog = await pool.query("SELECT 1 FROM inspection_logs WHERE id = $1", [body.id]).catch(() => ({ rowCount: 0 }));
+  if (existingLog.rowCount > 0) return res.json({ ok: true }); // a retry or a sync of a log we already have
+  // Listed operators only, with their PIN; the PIN itself is never stored
+  const check = await checkOperator(pool, body.operatorName, body.pin).catch(() => ({ status: 500, error: "Check failed." }));
+  if (check.error) return res.status(check.status).json({ error: check.error });
+  const { pin: _pin, ...rest } = body;
+  const log = await extractFiles(pool, { ...rest, operatorName: check.name, kind, periodKey: periodKey(kind, body.date) });
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -278,17 +500,14 @@ app.post("/api/logs", writeLimit, async (req, res) => {
 // Shift in-charge sign-off: once per log, by a name on the operators list marked in-charge
 app.post("/api/logs/:id/signoff", writeLimit, async (req, res) => {
   if (!pool) return res.status(503).json({ error: "No database configured." });
-  const name = String(req.body?.name || "").trim();
-  const signature = String(req.body?.signature || "");
-  if (!name || !signature.startsWith("data:image/png;base64,") || signature.length > 500_000) {
-    return res.status(400).json({ error: "Name and signature are required." });
-  }
+  if (!isImageRef(req.body?.signature)) return res.status(400).json({ error: "Name and signature are required." });
+  const check = await checkOperator(pool, req.body?.name, req.body?.pin, { needInCharge: true }).catch(() => ({ status: 500, error: "Check failed." }));
+  if (check.error) return res.status(check.status).json({ error: check.error });
+  const name = check.name;
+  const signature = await extractFiles(pool, req.body.signature);
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const ops = await client.query("SELECT data FROM app_config WHERE key = 'operators'");
-    const allowed = (ops.rows[0]?.data ?? []).some((o) => o.inCharge && o.name === name);
-    if (!allowed) { await client.query("ROLLBACK"); return res.status(403).json({ error: "Only a shift in-charge on the operators list can sign off." }); }
     const row = await client.query("SELECT data FROM inspection_logs WHERE id = $1 FOR UPDATE", [req.params.id]);
     if (row.rowCount === 0) { await client.query("ROLLBACK"); return res.status(404).json({ error: "Inspection not found." }); }
     const log = row.rows[0].data;
@@ -328,6 +547,12 @@ app.post("/api/fault-reports", writeLimit, async (req, res) => {
   if (!isId(report?.id) || !DATE_RE.test(report.date) || !Array.isArray(report.faults)) {
     return res.status(400).json({ error: "Invalid fault report." });
   }
+  const known = await pool.query("SELECT data FROM fault_reports WHERE id = $1", [report.id]).catch(() => ({ rowCount: 0 }));
+  if (known.rowCount > 0) return res.json({ ok: true, report: known.rows[0].data });
+  const check = await checkOperator(pool, report.operatorName, report.pin).catch(() => ({ status: 500, error: "Check failed." }));
+  if (check.error) return res.status(check.status).json({ error: check.error });
+  const { pin: _pin, ...rest } = report;
+  const incoming = await extractFiles(pool, { ...rest, operatorName: check.name });
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -343,7 +568,7 @@ app.post("/api/fault-reports", writeLimit, async (req, res) => {
        FROM fault_reports WHERE data->>'reportNumber' LIKE $1 AND data->>'reportNumber' ~ '/[0-9]+$'`,
       [prefix + "%"]
     );
-    const saved = { ...report, reportNumber: prefix + String(max.rows[0].n + 1).padStart(2, "0") };
+    const saved = { ...incoming, reportNumber: prefix + String(max.rows[0].n + 1).padStart(2, "0") };
     await client.query("INSERT INTO fault_reports (id, data, created_at) VALUES ($1, $2, $3)", [saved.id, saved, saved.createdAt]);
     await client.query("COMMIT");
     res.json({ ok: true, report: saved });
@@ -366,7 +591,7 @@ function pickFields(input, keys) {
   for (const k of keys) {
     const v = input?.[k];
     if (typeof v !== "string") continue;
-    if (k.endsWith("Signature")) { if (v.startsWith("data:image/png;base64,") && v.length <= 500_000) out[k] = v; }
+    if (k.endsWith("Signature")) { if (isImageRef(v)) out[k] = v; }
     else if (k.endsWith("Date")  || k === "date") { if (v === "" || DATE_RE.test(v)) out[k] = v; }
     else if (k.endsWith("Time") || k === "time") { if (v === "" || /^\d{2}:\d{2}$/.test(v)) out[k] = v; }
     else out[k] = v.slice(0, 2000);
@@ -376,6 +601,9 @@ function pickFields(input, keys) {
 
 app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
   if (!pool) return res.status(503).json({ error: "No database configured." });
+  // The ARFF operator recording the update identifies themselves with their PIN
+  const check = await checkOperator(pool, req.body?.recordedBy, req.body?.pin).catch(() => ({ status: 500, error: "Check failed." }));
+  if (check.error) return res.status(check.status).json({ error: check.error });
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -388,12 +616,12 @@ app.post("/api/fault-reports/:id/repair", writeLimit, async (req, res) => {
       for (const k of Object.keys(upd)) if (k.endsWith("Signature") && old[k]) delete upd[k];
       return { ...old, ...upd };
     };
-    const repair = merge(report.repair, pickFields(req.body?.repair, REPAIR_KEYS));
-    const acceptance = merge(report.acceptance, pickFields(req.body?.acceptance, ACCEPT_KEYS));
+    const repair = await extractFiles(client, merge(report.repair, pickFields(req.body?.repair, REPAIR_KEYS)));
+    const acceptance = await extractFiles(client, merge(report.acceptance, pickFields(req.body?.acceptance, ACCEPT_KEYS)));
     const accepted = acceptance.maintenanceName && acceptance.maintenanceSignature && acceptance.arffName && acceptance.arffSignature;
     const started = Object.values(repair).some(Boolean) || Object.values(acceptance).some(Boolean);
     const status = accepted ? "Resolved" : started ? "In Progress" : report.status;
-    const saved = { ...report, repair, acceptance, status, ...(status === "Resolved" ? { resolvedAt: new Date().toISOString() } : {}) };
+    const saved = { ...report, repair, acceptance, status, repairUpdatedBy: check.name, ...(status === "Resolved" ? { resolvedAt: new Date().toISOString() } : {}) };
     await client.query("UPDATE fault_reports SET data = $2 WHERE id = $1", [req.params.id, saved]);
     await client.query("COMMIT");
     res.json({ ok: true, report: saved });

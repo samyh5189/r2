@@ -5,6 +5,7 @@ import { defaultChecklistConfig, itemType } from "../checklistData";
 import OperatorsEditor from "./OperatorsEditor";
 import EmailSettingsEditor from "./EmailSettingsEditor";
 import ServiceEditor from "./ServiceEditor";
+import QrCodes from "./QrCodes";
 import { CHECK_KINDS, KIND_LABEL } from "../checkKinds";
 
 interface Props {
@@ -64,6 +65,7 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
       <OperatorsEditor onAuthLost={onAuthLost} />
       <EmailSettingsEditor onAuthLost={onAuthLost} />
       <ServiceEditor onAuthLost={onAuthLost} />
+      <QrCodes />
       {kindPicker}
       <p style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Loading checklist…</p>
     </div>
@@ -118,6 +120,7 @@ export default function ChecklistEditor({ onAuthLost }: Props) {
       <OperatorsEditor onAuthLost={onAuthLost} />
       <EmailSettingsEditor onAuthLost={onAuthLost} />
       <ServiceEditor onAuthLost={onAuthLost} />
+      <QrCodes />
       {kindPicker}
       <div className="editor-bar" style={{ marginTop: 12 }}>
         <div>

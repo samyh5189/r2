@@ -59,10 +59,10 @@ ${faultList}
 Status: NOK = Minor defect but operational, U/S = Unserviceable
 ${faults.some(f => f.evidence.length > 0) ? "Note: Photographic/video evidence has been attached to the relevant fault items." : ""}
 
-Generate a formal ARFF fault report as valid JSON:
+Write this up as a formal ARFF fault report. Report only what the inspection recorded: the items, their status and the operator's notes. Correct spelling and grammar, but do not add causes, measurements, parts, locations or observations that were not recorded — and do not state that something else was checked or found fine. If the operator's note is empty, describe only the item and its status. Return valid JSON:
 {
-  "faultTitle": "<ALL-CAPS SHORT TITLE, e.g. GEAR OIL LEAK or BRAKE SYSTEM FAULT>",
-  "detailsOfDefects": "<Formal 2-4 sentence narrative beginning with 'During ${kind} inspection,' describing findings, suspected cause, evidence collected, and urgency. Match the tone of an official ARFF maintenance report.>",
+  "faultTitle": "<ALL-CAPS SHORT TITLE naming the recorded fault(s), e.g. ENGINE OIL LEVEL LOW>",
+  "detailsOfDefects": "<Formal 2-4 sentence narrative beginning with 'During ${kind} inspection,' stating the recorded findings, any evidence attached, and the urgency implied by the status. Official ARFF maintenance report tone.>",
   "faultSummary": "<1-2 sentence plain summary for internal records>",
   "assessment": "<1 sentence on vehicle operational status>",
   "priority": "Routine|Urgent|Immediate Grounding",

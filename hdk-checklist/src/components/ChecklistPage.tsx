@@ -1,16 +1,19 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import SignaturePad from "signature_pad";
 import { buildChecklist, defaultChecklistConfig, itemType } from "../checklistData";
 import { KIND_LABEL, PERIOD_NAME } from "../checkKinds";
 import type { CheckKind, ChecklistSection, ChecklistSectionConfig, ItemStatus, InspectionLog, FaultReport, EvidenceItem, Operator } from "../types";
-import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek, getChecklistConfig, findLogForDate, getOperators, deviceId, emailFaultReport, describeEmail } from "../storage";
+import { saveLog, saveFaultReport, getFaultReports, sameInspectionWeek, getChecklistConfig, findLogForDate, getOperators, deviceId, emailFaultReport, describeEmail, verifyOperator, saveOperatorSignature } from "../storage";
+import OperatorField from "./OperatorField";
+import { needsPin } from "../operators";
+import SignatureChoice from "./SignatureChoice";
+import FaultDraftReview from "./FaultDraftReview";
 import { generateFaultReport } from "../faultReportAI";
 import { showPdf } from "../pdfViewer";
 import { exportInspectionPDF, exportFaultReportPDF } from "../pdfExport";
 import { processFile } from "../evidenceUtils";
 import rescue2Photo from "../assets/rescue2.jpg";
 
-type Phase = "intro" | "item" | "review" | "outro" | "submitting" | "done" | "blocked";
+type Phase = "intro" | "item" | "review" | "outro" | "submitting" | "faultReview" | "saving" | "done" | "blocked";
 
 interface RepeatFault {
   label: string;
@@ -88,6 +91,15 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
   const [todayLog, setTodayLog] = useState<InspectionLog | null | undefined>(undefined);
   const [blockedMsg, setBlockedMsg] = useState("");
   const [starting, setStarting] = useState(false);
+  const [pin, setPin] = useState("");
+  const [startError, setStartError] = useState<string | null>(null);
+  // The operator's saved signature (after their PIN), the signature to use, and whether to save it
+  const [savedSignature, setSavedSignature] = useState<string | null>(null);
+  const [signature, setSignature] = useState("");
+  const [saveSignature, setSaveSignature] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  // Inspection waiting while the operator checks its AI fault report
+  const [pending, setPending] = useState<{ log: InspectionLog; report: FaultReport; repeats: RepeatFault[] } | null>(null);
 
   // Outro fields
   const [overallCondition, setOverallCondition] = useState<"Excellent" | "Good" | "Poor" | "">("");
@@ -99,8 +111,6 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
   const [repeatFaults, setRepeatFaults] = useState<RepeatFault[]>([]);
   const [emailNote, setEmailNote] = useState("");
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const sigPad = useRef<SignaturePad | null>(null);
   const remarksRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -114,7 +124,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
   const faultsSoFar = sections.reduce((a, s) => a + s.items.filter((it) => it.status === "NOK" || it.status === "U/S").length, 0);
 
   const timerRunning = phase === "item";
-  const active = phase === "item" || phase === "review" || phase === "outro" || phase === "submitting";
+  const active = phase !== "intro" && phase !== "done" && phase !== "blocked";
   useEffect(() => { onActiveChange?.(active); }, [active, onActiveChange]);
   const { elapsed, display: timerDisplay } = useElapsedTimer(timerRunning);
 
@@ -130,25 +140,6 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
       setSections((cur) => (cur.every((sec) => sec.items.every((it) => !it.status)) ? buildChecklist(cfg) : cur));
     });
   }, [kind]);
-
-  // Set up sig pad when we enter outro phase
-  useEffect(() => {
-    if (phase !== "outro" || !canvasRef.current || sigPad.current) return;
-    sigPad.current = new SignaturePad(canvasRef.current, { backgroundColor: "rgba(0,0,0,0)", penColor: "#0B2A4A" });
-    const resize = () => {
-      if (!canvasRef.current || !sigPad.current) return;
-      const data = sigPad.current.toData();
-      const canvas = canvasRef.current;
-      const r = Math.max(window.devicePixelRatio || 1, 1);
-      canvas.width = canvas.offsetWidth * r;
-      canvas.height = canvas.offsetHeight * r;
-      canvas.getContext("2d")?.scale(r, r);
-      sigPad.current.fromData(data);
-    };
-    window.addEventListener("resize", resize);
-    resize();
-    return () => window.removeEventListener("resize", resize);
-  }, [phase]);
 
   useEffect(() => {
     if (pendingStatus === "NOK" || pendingStatus === "U/S") {
@@ -229,7 +220,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     setPhase("submitting");
     // One inspection per device and per operator a day — check before spending time on the AI report
     if (await checkAlreadyDone()) return;
-    const sig = sigPad.current?.isEmpty() ? "" : (sigPad.current?.toDataURL() ?? "");
+    const sig = signature;
     const count = faultsSoFar;
     const now = new Date();
     const log: InspectionLog = {
@@ -264,22 +255,44 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
       if (faultReport) faultReport.inspectionLogId = log.id;
       log.faultReportId = faultReport?.id ?? repeats[0]?.reportId;
     }
-    // The server enforces one inspection per day; save the log first so a rejected log leaves no report behind
-    const rejected = await saveLog(log);
-    if (rejected) {
-      setBlockedMsg(rejected);
-      setPhase("blocked");
+    // The operator checks the AI's write-up before anything is saved
+    if (faultReport) {
+      setPending({ log, report: faultReport, repeats });
+      setPhase("faultReview");
       return;
     }
-    if (faultReport) {
-      const saved = await saveFaultReport(faultReport);
-      faultReport = saved;
-      // Email the PDF in the background; the result shows on the done screen
-      setEmailNote("Emailing fault report…");
-      exportFaultReportPDF(saved).then((pdf) => emailFaultReport(saved, pdf)).then((r) => setEmailNote(describeEmail(r)));
+    await finishSubmit(log, null, repeats);
+  }
+
+  async function finishSubmit(log: InspectionLog, report: FaultReport | null, repeats: RepeatFault[]) {
+    setPhase("saving");
+    setSubmitError(null);
+    // The server enforces the limits and the PIN; save the log first so a rejected log leaves no report behind
+    const result = await saveLog(log, pin);
+    if ("error" in result) {
+      if (result.conflict) { setBlockedMsg(result.error); setPhase("blocked"); }
+      else { setSubmitError(result.error); setPhase(report ? "faultReview" : "outro"); }
+      return;
     }
-    setTodayLog(log);
-    setSavedLog(log);
+    let faultReport = report;
+    if (faultReport) {
+      try {
+        const saved = await saveFaultReport(faultReport, pin);
+        faultReport = saved;
+        // Email the PDF in the background; the result shows on the done screen
+        setEmailNote("Emailing fault report…");
+        exportFaultReportPDF(saved).then((pdf) => emailFaultReport(saved, pdf)).then((r) => setEmailNote(describeEmail(r)));
+      } catch (e) {
+        setEmailNote(`The fault report wasn't saved: ${e instanceof Error ? e.message : "error"}`);
+        faultReport = null;
+      }
+    }
+    if (saveSignature && signature && pin) {
+      saveOperatorSignature(operatorName, pin, signature).catch(() => { /* optional; the inspection is saved */ });
+    }
+    setPending(null);
+    setTodayLog(result.saved);
+    setSavedLog(result.saved);
     setSavedFault(faultReport);
     setRepeatFaults(repeats);
     setPhase("done");
@@ -298,6 +311,19 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
 
   async function handleStart() {
     setStarting(true);
+    setStartError(null);
+    // With an operators list, check the name and PIN now rather than after the whole inspection
+    if (operators.length > 0) {
+      try {
+        const { signature: saved } = await verifyOperator(operatorName, pin);
+        setSavedSignature(saved);
+        setSignature(saved ?? "");
+      } catch (e) {
+        setStartError(e instanceof Error ? e.message : "Could not check your PIN.");
+        setStarting(false);
+        return;
+      }
+    }
     const done = await checkAlreadyDone();
     setStarting(false);
     if (!done) setPhase("item");
@@ -309,7 +335,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     setPendingStatus(""); setPendingRemarks(""); setPendingEvidence([]); setFlash("");
     setOverallCondition(""); setComments("");
     setSavedLog(null); setSavedFault(null); setRepeatFaults([]);
-    sigPad.current = null;
+    setPin(""); setSignature(""); setSavedSignature(null); setSaveSignature(false); setPending(null); setSubmitError(null);
   }
 
   // ── INTRO ────────────────────────────────────────────────────────────
@@ -339,15 +365,9 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
           <p className="cl-intro-count">{total} items across {sections.length} sections</p>
 
           <div className="cl-intro-field">
-            <label>Operator Name *</label>
-            {operators.length > 0 ? (
-              <select value={operatorName} onChange={(e) => setOperatorName(e.target.value)}>
-                <option value="">Select your name…</option>
-                {operators.map((o) => <option key={o.id} value={o.name}>{o.name}{o.rank ? ` (${o.rank})` : ""}</option>)}
-              </select>
-            ) : (
-              <input type="text" placeholder="Full name" value={operatorName} onChange={(e) => setOperatorName(e.target.value)} autoFocus />
-            )}
+            <OperatorField label="Operator Name *" operators={operators} name={operatorName} pin={pin}
+              onName={(n) => { setOperatorName(n); setStartError(null); }} onPin={(p) => { setPin(p); setStartError(null); }} />
+            {startError && <p className="form-error" style={{ margin: 0 }}>{startError}</p>}
           </div>
           <div className="legend cl-legend-compact">
             <span className="legend-item"><span className="legend-dot" style={{ background: "var(--ok)" }} /> OK — Good</span>
@@ -355,7 +375,7 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
             <span className="legend-item"><span className="legend-dot" style={{ background: "var(--us)" }} /> U/S — Unserviceable</span>
             <span className="legend-item"><span className="legend-dot" style={{ background: "var(--na)" }} /> N/A — Not applicable</span>
           </div>
-          <button className="btn-submit" disabled={!operatorName.trim() || todayLog === undefined || starting} onClick={handleStart}>
+          <button className="btn-submit" disabled={!operatorName.trim() || (needsPin(operators, operatorName) && pin.length < 4) || todayLog === undefined || starting} onClick={handleStart}>
             {starting ? "Checking…" : "Start Inspection →"}
           </button>
         </div>
@@ -364,12 +384,12 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
   }
 
   // ── SUBMITTING ────────────────────────────────────────────────────────
-  if (phase === "submitting") {
+  if (phase === "submitting" || phase === "saving") {
     return (
       <div className="cl-screen">
         <div className="spinner-wrap">
           <div className="spinner" />
-          <span className="spinner-text">{faultsSoFar > 0 ? "Generating AI fault report…" : "Saving inspection log…"}</span>
+          <span className="spinner-text">{phase === "submitting" && faultsSoFar > 0 ? "Writing the fault report…" : "Saving inspection…"}</span>
         </div>
       </div>
     );
@@ -488,6 +508,30 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
     );
   }
 
+  // ── FAULT REPORT CHECK ────────────────────────────────────────────────
+  if (phase === "faultReview" && pending) {
+    const words = pending.report.faults.map((f) => `• [${f.status}] ${f.label}${f.remarks ? ` — ${f.remarks}` : ""}`);
+    return (
+      <div className="cl-screen">
+        <div className="container" style={{ paddingTop: 16, maxWidth: 620 }}>
+          <div className="card">
+            <h3>Check the fault report</h3>
+            <FaultDraftReview
+              draft={pending.report}
+              onChange={(report) => setPending({ ...pending, report })}
+              operatorWords={words}
+              busy={false}
+              error={submitError}
+              saveLabel="Submit inspection & report"
+              onBack={() => { setPending(null); setSubmitError(null); setPhase("outro"); }}
+              onSave={() => finishSubmit(pending.log, pending.report, pending.repeats)}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── OUTRO ─────────────────────────────────────────────────────────────
   if (phase === "outro") {
     return (
@@ -516,14 +560,9 @@ export default function ChecklistPage({ kind = "daily", onSubmitted, onActiveCha
 
           <div className="card">
             <h3>Operator Signature</h3>
-            <div className="sig-wrap">
-              <canvas ref={canvasRef} className="sig-canvas" style={{ width: "100%", height: 120 }} />
-              <div className="sig-actions">
-                <span className="sig-hint">Sign with finger or mouse</span>
-                <button className="btn-clear" onClick={() => sigPad.current?.clear()}>Clear</button>
-              </div>
-            </div>
+            <SignatureChoice saved={savedSignature} onChange={setSignature} canSave={needsPin(operators, operatorName)} onSaveChange={setSaveSignature} />
           </div>
+          {submitError && <p className="form-error">{submitError}</p>}
 
           <button className="btn-submit" disabled={!overallCondition} onClick={handleSubmit}>
             Submit Inspection

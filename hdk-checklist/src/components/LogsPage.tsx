@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import type { CheckKind, InspectionLog, FaultReport } from "../types";
-import { emailFaultReport, describeEmail, getLogs, getFaultReports, sameInspectionWeek, updateLog, deleteLog, updateFaultReport, deleteFaultReport } from "../storage";
+import { emailFaultReport, describeEmail, uploadImages, getLogs, getFaultReports, sameInspectionWeek, updateLog, deleteLog, updateFaultReport, deleteFaultReport } from "../storage";
 import { EditLogModal, EditFaultModal } from "./EditModals";
 import { SignOffModal, RepairModal } from "./WorkflowModals";
 import NewFaultModal from "./NewFaultModal";
@@ -18,7 +18,8 @@ async function migrateLocalStorage(): Promise<{ logs: number; faults: number }> 
     if (rawLogs) {
       const logs: InspectionLog[] = JSON.parse(rawLogs);
       for (const log of logs) {
-        const res = await fetch("/api/logs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(log) });
+        // Upload images first so the request stays small; an unsent log carries its operator's PIN
+        const res = await fetch("/api/logs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(await uploadImages(log)) });
         if (res.ok) migratedLogs++;
       }
     }
@@ -28,7 +29,7 @@ async function migrateLocalStorage(): Promise<{ logs: number; faults: number }> 
     if (rawFaults) {
       const faults: FaultReport[] = JSON.parse(rawFaults);
       for (const fault of faults) {
-        const res = await fetch("/api/fault-reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(fault) });
+        const res = await fetch("/api/fault-reports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(await uploadImages(fault)) });
         if (res.ok) migratedFaults++;
       }
     }

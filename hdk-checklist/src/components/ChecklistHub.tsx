@@ -6,8 +6,8 @@ import ChecklistPage from "./ChecklistPage";
 import { ServiceBanner } from "./ServiceCard";
 
 /** Checklist tab: pick the daily, weekly, monthly or yearly check. */
-export default function ChecklistHub() {
-  const [kind, setKind] = useState<CheckKind>("daily");
+export default function ChecklistHub({ initialKind = "daily" }: { initialKind?: CheckKind }) {
+  const [kind, setKind] = useState<CheckKind>(initialKind);
   const [active, setActive] = useState(false);
   // Whether each periodic check is already done for its current period
   const [done, setDone] = useState<Partial<Record<CheckKind, boolean>>>({});

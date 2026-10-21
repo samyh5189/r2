@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import type { FaultAcceptance, FaultRepair, FaultReport, InspectionLog, Operator } from "../types";
-import { getOperators, signOffLog, updateRepair } from "../storage";
+import { getOperators, signOffLog, updateRepair, verifyOperator } from "../storage";
 import SignatureField from "./SignatureField";
+import SignatureChoice from "./SignatureChoice";
+import OperatorField from "./OperatorField";
+import { needsPin } from "../operators";
 
 // <input type="date"> uses YYYY-MM-DD; the form and PDF use DD/MM/YYYY
 const toInputDate = (gb?: string) => (gb && /^\d{2}\/\d{2}\/\d{4}$/.test(gb) ? gb.split("/").reverse().join("-") : "");
@@ -24,45 +27,62 @@ function SignedOrPad({ existing, onChange }: { existing?: string; onChange: (v: 
 }
 
 export function SignOffModal({ log, onClose, onDone }: { log: InspectionLog; onClose: () => void; onDone: () => void }) {
-  const [inCharge, setInCharge] = useState<Operator[] | null>(null);
+  const [operators, setOperators] = useState<Operator[] | null>(null);
   const [name, setName] = useState("");
+  const [pin, setPin] = useState("");
+  // Set once the name and PIN check out: the in-charge's saved signature (or null)
+  const [verified, setVerified] = useState<{ saved: string | null } | null>(null);
   const [signature, setSignature] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { getOperators().then((ops) => setInCharge(ops.filter((o) => o.inCharge))); }, []);
+  useEffect(() => { getOperators().then(setOperators); }, []);
+  const inCharge = operators?.filter((o) => o.inCharge) ?? [];
+
+  async function check(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const { signature: saved } = await verifyOperator(name, pin, true);
+      setVerified({ saved });
+      setSignature(saved ?? "");
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not check your PIN."); }
+    setBusy(false);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name || !signature) { setError("Choose your name and sign."); return; }
+    if (!signature) { setError("Please sign."); return; }
     setBusy(true);
     setError(null);
-    try { await signOffLog(log.id, name, signature); onDone(); }
+    try { await signOffLog(log.id, name, pin, signature); onDone(); }
     catch (err) { setError(err instanceof Error ? err.message : "Sign-off failed."); setBusy(false); }
   }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <form className="modal modal-sm" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+      <form className="modal modal-sm" onClick={(e) => e.stopPropagation()} onSubmit={verified ? submit : check}>
         <div className="modal-header">
           <span className="modal-title">Shift in-charge sign-off</span>
           <button type="button" className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body edit-form">
           <p className="editor-hint">Inspection {log.date} · {log.time} by {log.operatorName}</p>
-          {inCharge && inCharge.length === 0 ? (
+          {operators && inCharge.length === 0 ? (
             <p className="form-error">No shift in-charge is set up yet. An admin can add them under Setup → Operators.</p>
-          ) : (
+          ) : verified ? (
             <>
-              <label>Shift in-charge
-                <select value={name} onChange={(e) => setName(e.target.value)} required>
-                  <option value="">Select…</option>
-                  {inCharge?.map((o) => <option key={o.id} value={o.name}>{o.name}{o.rank ? ` (${o.rank})` : ""}</option>)}
-                </select>
-              </label>
-              <SignatureField onChange={setSignature} />
+              <p className="editor-hint" style={{ margin: 0 }}>Signing as <strong>{name}</strong></p>
+              <SignatureChoice saved={verified.saved} onChange={setSignature} canSave={false} onSaveChange={() => {}} />
               {error && <p className="form-error">{error}</p>}
               <button className="btn-submit" disabled={busy}>{busy ? "Signing…" : "Sign off"}</button>
+            </>
+          ) : (
+            <>
+              <OperatorField label="Shift in-charge" operators={operators ?? []} inChargeOnly name={name} pin={pin} onName={setName} onPin={setPin} />
+              {error && <p className="form-error">{error}</p>}
+              <button className="btn-submit" disabled={busy || !name || (needsPin(inCharge, name) && pin.length < 4)}>{busy ? "Checking…" : "Continue"}</button>
             </>
           )}
         </div>
@@ -75,6 +95,8 @@ export function RepairModal({ report, onClose, onDone }: { report: FaultReport; 
   const [repair, setRepair] = useState<FaultRepair>(() => ({ ...report.repair }));
   const [acceptance, setAcceptance] = useState<FaultAcceptance>(() => ({ ...report.acceptance }));
   const [operators, setOperators] = useState<Operator[]>([]);
+  const [recordedBy, setRecordedBy] = useState("");
+  const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,7 +110,7 @@ export function RepairModal({ report, onClose, onDone }: { report: FaultReport; 
     e.preventDefault();
     setBusy(true);
     setError(null);
-    try { await updateRepair(report.id, repair, acceptance); onDone(); }
+    try { await updateRepair(report.id, recordedBy, pin, repair, acceptance); onDone(); }
     catch (err) { setError(err instanceof Error ? err.message : "Save failed."); setBusy(false); }
   }
 
@@ -127,8 +149,10 @@ export function RepairModal({ report, onClose, onDone }: { report: FaultReport; 
           <NameField label="ARFF (name)" value={acceptance.arffName ?? ""} onChange={(v) => a({ arffName: v })} operators={operators} />
           <SignedOrPad existing={signed.arffSignature} onChange={(v) => a({ arffSignature: v })} />
 
+          <h4 className="repair-step">Recorded by</h4>
+          <OperatorField label="ARFF operator saving this update" operators={operators} name={recordedBy} pin={pin} onName={setRecordedBy} onPin={setPin} />
           {error && <p className="form-error">{error}</p>}
-          <button className="btn-submit" disabled={busy}>{busy ? "Saving…" : "Save progress"}</button>
+          <button className="btn-submit" disabled={busy || !recordedBy || (needsPin(operators, recordedBy) && pin.length < 4)}>{busy ? "Saving…" : "Save progress"}</button>
         </div>
       </form>
     </div>

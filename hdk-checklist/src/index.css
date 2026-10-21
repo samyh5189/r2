@@ -619,3 +619,22 @@ textarea.comments-box:focus { border-color: var(--navy); background: white; }
 .log-group .log-table-wrap { margin-top: 6px; }
 .log-empty { background: white; border: 1px solid var(--border); border-radius: 10px; padding: 24px; text-align: center; }
 @media (max-width: 480px) { .log-group-meta { margin-left: 20px; width: 100%; } }
+
+/* Operator PIN and saved signatures */
+.operator-field { display: flex; gap: 10px; align-items: flex-end; }
+.operator-field label { flex: 1; min-width: 0; }
+.operator-field label:nth-child(2) { flex: 0 0 110px; }
+.pin-input { letter-spacing: 0.3em; text-align: center; }
+.sig-saved { border: 1.5px dashed var(--border); border-radius: 10px; padding: 8px; background: var(--bg); }
+.sig-saved .signed-img { display: block; max-height: 90px; margin: 0 auto; }
+.sig-save { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; font-size: 13px !important; text-transform: none !important; letter-spacing: normal !important; color: var(--text) !important; font-weight: 500 !important; margin-top: 6px; cursor: pointer; }
+.operator-field label { display: flex; flex-direction: column; gap: 6px; }
+.operator-field input, .operator-field select { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.ops-item { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.ops-item:last-of-type { border-bottom: none; }
+
+/* QR codes */
+.qr-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 12px; }
+.qr-card { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--navy); text-align: center; }
+.qr-card img { width: 100%; max-width: 140px; border: 1px solid var(--border); border-radius: 8px; background: white; }
+@media (max-width: 480px) { .qr-grid { grid-template-columns: repeat(2, 1fr); } }

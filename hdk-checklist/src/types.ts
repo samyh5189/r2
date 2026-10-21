@@ -52,6 +52,11 @@ export interface Operator {
   name: string;
   rank?: string;
   inCharge: boolean;
+  hasPin?: boolean;         // from the server; the PIN itself never leaves it
+  hasSignature?: boolean;
+  pin?: string;             // admin: set a new PIN
+  clearPin?: boolean;
+  clearSignature?: boolean;
 }
 
 export interface ShiftSignoff {
@@ -137,6 +142,7 @@ export interface FaultReport {
   repair?: FaultRepair;
   acceptance?: FaultAcceptance;
   resolvedAt?: string;     // set by the server when the report closes
+  repairUpdatedBy?: string;
   emailedAt?: string;
   emailedTo?: number;
   createdAt: string;
