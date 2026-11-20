@@ -5,6 +5,8 @@ import { supabase } from './supabase';
 export type SiteSettings = {
   hero_image_url: string | null; hero_credit: string | null; bank_transfer_note: string;
   support_phone: string | null; support_email: string | null;
+  /** WhatsApp Cloud API connected: WhatsApp codes and automatic messages are on. */
+  whatsapp_ready: boolean;
 };
 export type BankAccount = {
   id: string; bank_name: string; account_name: string; account_number: string; currency: 'MVR' | 'USD'; swift: string | null; note: string | null;
@@ -17,7 +19,7 @@ export function useSiteSettings() {
   const [s, setS] = useState<SiteSettings | null>(null);
   useEffect(() => {
     settingsCache ??= Promise.resolve(
-      supabase.from('site_settings').select('hero_image_url, hero_credit, bank_transfer_note, support_phone, support_email').maybeSingle(),
+      supabase.from('site_settings').select('hero_image_url, hero_credit, bank_transfer_note, support_phone, support_email, whatsapp_ready').maybeSingle(),
     ).then(({ data }) => (data as SiteSettings | null) ?? null, () => null);
     let live = true;
     settingsCache.then((v) => live && setS(v));

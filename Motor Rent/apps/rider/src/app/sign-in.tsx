@@ -10,6 +10,8 @@ import { ThemedView } from '@/components/themed-view';
 import { Button, ErrorText, Field } from '@/components/ui';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { ApiError, callFunction } from '@/lib/api';
+import { useSiteSettings } from '@/lib/site';
 import { supabase } from '@/lib/supabase';
 
 type Method = 'email' | 'phone';
@@ -29,13 +31,13 @@ function friendly(message: string) {
   return message;
 }
 
-/** Phone (SMS) sign-in needs an SMS provider in Supabase; hidden until EXPO_PUBLIC_PHONE_AUTH=1. */
-const PHONE_AUTH = process.env.EXPO_PUBLIC_PHONE_AUTH === '1';
 
 export default function SignInScreen() {
   const t = useTheme();
   const [method, setMethod] = useState<Method>('email');
   const [, setBusy] = useState(false);
+  // WhatsApp codes appear once the owner connects WhatsApp in admin Settings.
+  const whatsapp = !!useSiteSettings()?.whatsapp_ready;
 
 
   return (
@@ -53,12 +55,12 @@ export default function SignInScreen() {
 
             <SocialButtons onSignedIn={done} onBusy={setBusy} />
 
-            {PHONE_AUTH && <View style={[styles.segment, { backgroundColor: t.backgroundSelected }]} accessibilityRole="tablist">
+            {whatsapp && <View style={[styles.segment, { backgroundColor: t.backgroundSelected }]} accessibilityRole="tablist">
               {(['email', 'phone'] as const).map((m) => (
                 <Pressable key={m} accessibilityRole="tab" accessibilityState={{ selected: method === m }} onPress={() => setMethod(m)}
                   style={[styles.segmentBtn, method === m && { backgroundColor: t.backgroundElement }]}>
                   <ThemedText type="smallBold" themeColor={method === m ? 'text' : 'textSecondary'}>
-                    {m === 'email' ? 'Email' : 'Phone'}
+                    {m === 'email' ? 'Email' : 'WhatsApp'}
                   </ThemedText>
                 </Pressable>
               ))}
@@ -145,47 +147,47 @@ function EmailForm({ onBusy }: { onBusy: (b: boolean) => void }) {
 }
 
 function PhoneForm({ onBusy }: { onBusy: (b: boolean) => void }) {
-  const [phone, setPhone] = useState('+960');
+  const [phone, setPhone] = useState('');
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const [code, setCode] = useState('');
-  const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const digits = phone.replace(/[^\d+]/g, '');
+  const validPhone = /^\d{7}$/.test(digits) || /^\+\d{7,15}$/.test(digits);
 
-  const clean = phone.replace(/\s/g, '');
-  const validPhone = /^\+\d{7,15}$/.test(clean);
-
-  async function sendCode() {
+  async function run(fn: () => Promise<void>) {
     setBusy(true); onBusy(true); setError(null);
-    const { error } = await supabase.auth.signInWithOtp({ phone: clean });
-    setBusy(false); onBusy(false);
-    if (error) return setError(friendly(error.message));
-    setStep('code');
+    try { await fn(); } catch (e) { setError(e instanceof ApiError ? e.message : 'Something went wrong. Try again.'); }
+    finally { setBusy(false); onBusy(false); }
   }
-
-  async function verify() {
-    setBusy(true); onBusy(true); setError(null);
-    const { error } = await supabase.auth.verifyOtp({ phone: clean, token: code, type: 'sms' });
-    setBusy(false); onBusy(false);
-    if (error) return setError('That code is wrong or expired.');
+  const sendCode = () => run(async () => {
+    const r = await callFunction<{ phone: string }>('whatsapp-otp', { action: 'send', phone: digits, purpose: 'login' });
+    setSentTo(r.phone); setCode('');
+  });
+  const verify = () => run(async () => {
+    const r = await callFunction<{ tokenHash: string }>('whatsapp-otp', { action: 'verify', phone: sentTo!, code, purpose: 'login' });
+    const { error } = await supabase.auth.verifyOtp({ token_hash: r.tokenHash, type: 'email' });
+    if (error) throw new ApiError('LOGIN', 'Signing in failed. Request a new code.');
     done();
-  }
+  });
 
-  return step === 'phone' ? (
+  return !sentTo ? (
     <>
-      <Field label="Mobile number" value={phone} onChangeText={setPhone} keyboardType="phone-pad"
-        autoComplete="tel" textContentType="telephoneNumber" hint="We will text you a 6-digit code." />
+      <Field label="WhatsApp number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="7771234"
+        autoComplete="tel" textContentType="telephoneNumber" hint="Maldives numbers need no prefix. Visitors: include the country code, e.g. +44." />
       <ErrorText>{error}</ErrorText>
-      <Button variant="secondary" title="Send code" onPress={sendCode} disabled={!validPhone} loading={busy} />
+      <Button title="Send code on WhatsApp" onPress={sendCode} disabled={!validPhone} loading={busy} />
     </>
   ) : (
     <>
-      <ThemedText>Enter the code sent to {phone}.</ThemedText>
+      <ThemedText>We sent a 6-digit code to {sentTo} on WhatsApp. It works for 10 minutes.</ThemedText>
       <Field label="Code" value={code} onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
-        keyboardType="number-pad" autoComplete="sms-otp" textContentType="oneTimeCode" autoFocus
+        keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" autoFocus
         style={{ letterSpacing: 8, fontSize: 22, textAlign: 'center' }} />
       <ErrorText>{error}</ErrorText>
-      <Button title="Verify" onPress={verify} disabled={code.length !== 6} loading={busy} />
-      <Button title="Use a different number" variant="ghost" onPress={() => { setStep('phone'); setCode(''); }} />
+      <Button title="Sign in" onPress={verify} disabled={code.length !== 6} loading={busy} />
+      <Button title="Send a new code" variant="ghost" onPress={sendCode} disabled={busy} />
+      <Button title="Use a different number" variant="ghost" onPress={() => { setSentTo(null); setCode(''); }} />
     </>
   );
 }

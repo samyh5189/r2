@@ -9,6 +9,7 @@ import { Image } from 'expo-image';
 import { Avatar } from '@/components/avatar';
 import { StockPhotos } from '@/components/photo';
 import { useWebPullToRefresh } from '@/components/pull-to-refresh';
+import { WhatsAppCard } from '@/components/whatsapp-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, Pill, PressableScale } from '@/components/ui';
@@ -20,7 +21,7 @@ import { useSession } from '@/lib/session';
 import { useSiteSettings } from '@/lib/site';
 import { supabase } from '@/lib/supabase';
 
-type Profile = { avatar_path: string | null; full_name: string | null; phone: string | null; kyc_status: 'pending' | 'approved' | 'rejected'; licence_expires_on: string | null };
+type Profile = { avatar_path: string | null; full_name: string | null; phone: string | null; kyc_status: 'pending' | 'approved' | 'rejected'; licence_expires_on: string | null; whatsapp: string | null; whatsapp_verified: boolean };
 
 
 export default function AccountScreen() {
@@ -38,7 +39,7 @@ export default function AccountScreen() {
   const load = useCallback(async () => {
     if (!session) return;
     const [p, k] = await Promise.all([
-      supabase.from('profiles').select('avatar_path, full_name, phone, kyc_status, licence_expires_on').eq('id', session.user.id).single(),
+      supabase.from('profiles').select('avatar_path, full_name, phone, kyc_status, licence_expires_on, whatsapp, whatsapp_verified').eq('id', session.user.id).single(),
       supabase.from('kyc_submissions').select('status, note').eq('profile_id', session.user.id)
         .order('created_at', { ascending: false }).limit(1).maybeSingle(),
     ]);
@@ -175,7 +176,16 @@ export default function AccountScreen() {
             </Card>
           </Animated.View>
 
+          {session && profile && (
+            <WhatsAppCard userId={session.user.id} number={profile.whatsapp} verified={profile.whatsapp_verified}
+              ready={!!site?.whatsapp_ready} onSaved={load} />
+          )}
+
           <Animated.View style={{ gap: Spacing.two }}>
+            {site?.support_phone && (
+              <Button title="Message us on WhatsApp" variant="secondary"
+                onPress={() => Linking.openURL(`https://wa.me/${site.support_phone!.replace(/\D/g, '').replace(/^(\d{7})$/, '960$1')}`)} />
+            )}
             {site?.support_phone && (
               <Button title={`Call us · ${site.support_phone}`} variant="secondary" onPress={() => Linking.openURL(`tel:${site.support_phone!.replace(/\s/g, '')}`)} />
             )}

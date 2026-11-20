@@ -3,11 +3,12 @@ import { Suspense } from "react";
 import { requireStaff } from "@/lib/auth";
 import { SignOutButton } from "./sign-out";
 
-const NAV: { href: string; label: string; count?: "messages" | "kyc" | "slips" }[] = [
+const NAV: { href: string; label: string; count?: "messages" | "kyc" | "slips" | "whatsapp" }[] = [
   { href: "/", label: "Today" },
   { href: "/bookings", label: "Bookings", count: "messages" },
   { href: "/verifications", label: "Verifications", count: "kyc" },
   { href: "/transfers", label: "Transfers", count: "slips" },
+  { href: "/whatsapp", label: "WhatsApp", count: "whatsapp" },
   { href: "/fleet", label: "Fleet" },
   { href: "/blocklist", label: "Blocklist" },
   { href: "/settings", label: "Settings" },
@@ -17,11 +18,11 @@ const NAV: { href: string; label: string; count?: "messages" | "kyc" | "slips" }
 async function Nav() {
   const { db } = await requireStaff();
   const { data } = await db.rpc("staff_inbox_counts");
-  const counts = (data ?? {}) as Partial<Record<"messages" | "kyc" | "slips", number>>;
+  const counts = (data ?? {}) as Partial<Record<"messages" | "kyc" | "slips" | "whatsapp", number>>;
   return <NavLinks counts={counts} />;
 }
 
-function NavLinks({ counts }: { counts: Partial<Record<"messages" | "kyc" | "slips", number>> }) {
+function NavLinks({ counts }: { counts: Partial<Record<"messages" | "kyc" | "slips" | "whatsapp", number>> }) {
   return (
     <nav aria-label="Console" className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
       {NAV.map((n) => {
