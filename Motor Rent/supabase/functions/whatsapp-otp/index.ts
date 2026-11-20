@@ -4,7 +4,7 @@
 import { z } from "zod";
 import { handler, HttpError, json } from "../_shared/http.ts";
 import { adminClient, parseJson, requireUser } from "../_shared/supabase.ts";
-import { normalisePhone, sendTemplate, TEMPLATES, waConfig } from "../_shared/whatsapp.ts";
+import { CODE_TEMPLATE, normalisePhone, sendTemplate, waConfig } from "../_shared/whatsapp.ts";
 
 const Body = z.object({
   action: z.enum(["send", "verify"]),
@@ -40,7 +40,7 @@ Deno.serve(handler(async (req) => {
     if ((recent ?? 0) >= 3 || (today ?? 0) >= 10) throw new HttpError(429, "TOO_MANY", "Too many codes requested. Wait 10 minutes and try again.");
     const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
     await db.from("whatsapp_codes").insert({ phone, purpose: input.purpose, code_hash: await hash(phone, code), expires_at: new Date(Date.now() + TTL_MIN * 60_000).toISOString() });
-    try { await sendTemplate(cfg, phone, TEMPLATES.code, code, true); } catch (e) {
+    try { await sendTemplate(cfg, phone, CODE_TEMPLATE, [code], true); } catch (e) {
       console.error("whatsapp code", (e as Error).message);
       throw new HttpError(502, "SEND_FAILED", "We couldn't reach that number on WhatsApp. Check the number and try again.");
     }

@@ -77,61 +77,103 @@ export function MyWhatsApp({ userId, number, verified, alerts, ready }: { userId
   );
 }
 
+export type WaTemplate = { name: string; audience: string; body: string; status: string | null; rejected_reason: string | null };
+
+const TONE: Record<string, string> = {
+  APPROVED: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  PENDING: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  REJECTED: "bg-red-500/15 text-red-600",
+};
+
 /** Owner: connect WhatsApp's official Business Platform (Cloud API). The token is kept in the database vault. */
-export function ConnectWhatsApp({ ready, isOwner }: { ready: boolean; isOwner: boolean }) {
+export function ConnectWhatsApp({ ready, isOwner, templates }: { ready: boolean; isOwner: boolean; templates: WaTemplate[] }) {
   const router = useRouter();
   const [id, setId] = useState("");
+  const [waba, setWaba] = useState("");
   const [token, setToken] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
   const db = supabaseBrowser();
 
   async function connect(ev: React.FormEvent) {
     ev.preventDefault();
-    const { error } = await db.rpc("set_whatsapp_config", { p_phone_number_id: id, p_token: token });
-    setMsg(error ? { ok: false, text: error.message } : { ok: true, text: "Connected. Messages to confirmed numbers now send automatically." });
+    const { error } = await db.rpc("set_whatsapp_config", { p_phone_number_id: id, p_token: token, p_waba_id: waba });
+    setMsg(error ? { ok: false, text: error.message } : { ok: true, text: "Connected. Next, submit the message templates to Meta." });
     if (!error) { setToken(""); router.refresh(); }
   }
   async function disconnect() {
     const { error } = await db.rpc("clear_whatsapp_config");
     if (!error) router.refresh();
   }
+  async function submitTemplates() {
+    setBusy(true); setMsg(null);
+    const { data, error } = await db.functions.invoke<{ errors: Record<string, string> }>("whatsapp-templates", { body: {} });
+    setBusy(false);
+    if (error) return setMsg({ ok: false, text: await fnError(error) });
+    const failed = Object.keys(data?.errors ?? {}).length;
+    setMsg(failed ? { ok: false, text: `${failed} template(s) were refused; see the reasons below.` } : { ok: true, text: "Submitted. Meta usually reviews them within minutes to a few hours." });
+    router.refresh();
+  }
 
+  const approved = templates.filter((t) => t.status === "APPROVED").length;
   return (
     <div className="space-y-3 rounded-2xl border border-line bg-panel p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="font-semibold">Automatic sending</h3>
         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ready ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-line text-muted"}`}>{ready ? "Connected" : "Not connected"}</span>
+        {ready && <span className="text-xs text-muted">{approved} of {templates.length} templates approved</span>}
       </div>
       <p className="text-sm text-muted">
-        Without this, every message waits on the WhatsApp page for staff to send from the office phone. Connected, the system sends them itself and riders can sign in with a WhatsApp code.
+        Without this, every message waits on the WhatsApp page for staff to send from the office phone. Connected, the system sends them itself and riders can sign in with a WhatsApp code. Each kind of message only goes out automatically once Meta has approved its template.
       </p>
-      {isOwner ? (ready ? (
-        <button type="button" onClick={disconnect} className="text-sm font-semibold text-red-600">Disconnect WhatsApp</button>
-      ) : (
+      {isOwner && !ready && (
         <>
           <details className="text-sm">
-            <summary className="cursor-pointer font-medium">How to connect (about 30 minutes, once)</summary>
+            <summary className="cursor-pointer font-medium">How to connect</summary>
             <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-muted">
-              <li>At business.facebook.com, create a Meta Business account and verify the business.</li>
-              <li>In developers.facebook.com, create an app, add WhatsApp, and add your business number. Use a number that isn&apos;t already on the WhatsApp app.</li>
-              <li>In WhatsApp Manager, create three message templates in English:
-                <ul className="mt-1 list-disc space-y-1 pl-5">
-                  <li><b>rm_rider_update</b>, category Utility: <i>Rent a Motor: {"{{1}}"} Message us in the app if you need anything.</i></li>
-                  <li><b>rm_staff_alert</b>, category Utility: <i>Rent a Motor office: {"{{1}}"} Open the admin console for details.</i></li>
-                  <li><b>rm_login_code</b>, category Authentication, with a Copy code button.</li>
-                </ul></li>
-              <li>Create a System User with a permanent token that has whatsapp_business_messaging permission, then paste its token and the Phone number ID below.</li>
+              <li>In developers.facebook.com, open your app, then WhatsApp, then API Setup. Copy the Phone number ID and the WhatsApp Business account ID.</li>
+              <li>For testing, click Generate token there (it lasts 24 hours). For real use, create a System User in business.facebook.com with a permanent token that has whatsapp_business_messaging and whatsapp_business_management.</li>
+              <li>Paste all three below, press Connect, then press Submit templates to Meta.</li>
             </ol>
           </details>
-          <form onSubmit={connect} className="grid gap-3 sm:grid-cols-[1fr_2fr_auto] sm:items-end">
+          <form onSubmit={connect} className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1"><span className="text-xs font-medium text-muted">Phone number ID</span>
               <input className={field} inputMode="numeric" value={id} onChange={(e) => setId(e.target.value.trim())} /></label>
-            <label className="space-y-1"><span className="text-xs font-medium text-muted">Permanent access token</span>
+            <label className="space-y-1"><span className="text-xs font-medium text-muted">WhatsApp Business account ID</span>
+              <input className={field} inputMode="numeric" value={waba} onChange={(e) => setWaba(e.target.value.trim())} /></label>
+            <label className="space-y-1 sm:col-span-2"><span className="text-xs font-medium text-muted">Access token</span>
               <input className={field} type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} /></label>
-            <button className={btn} disabled={!id || token.length < 20}>Connect</button>
+            <button className={`${btn} sm:col-span-2 sm:justify-self-start`} disabled={!id || !waba || token.length < 20}>Connect</button>
           </form>
         </>
-      )) : <p className="text-sm text-muted">Only the owner can connect WhatsApp.</p>}
+      )}
+      {ready && (
+        <>
+          {isOwner && (
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" className={btn} disabled={busy} onClick={submitTemplates}>{busy ? "Submitting…" : "Submit templates to Meta"}</button>
+              <button type="button" onClick={disconnect} className="text-sm font-semibold text-red-600">Disconnect WhatsApp</button>
+            </div>
+          )}
+          <details className="text-sm">
+            <summary className="cursor-pointer font-medium">Templates</summary>
+            <ul className="mt-2 divide-y divide-line">
+              {templates.map((t) => (
+                <li key={t.name} className="space-y-1 py-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <code className="text-xs">{t.name}</code>
+                    <span className="text-xs text-muted">{t.audience === "staff" ? "office alert" : t.audience === "code" ? "sign-in code" : "rider"}</span>
+                    <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${TONE[t.status ?? ""] ?? "bg-line text-muted"}`}>{t.status?.toLowerCase().replace(/_/g, " ") ?? "not submitted"}</span>
+                  </div>
+                  <p className="text-muted">{t.body}</p>
+                  {t.rejected_reason && t.rejected_reason !== "NONE" && <p className="text-xs text-red-600">{t.rejected_reason}</p>}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </>
+      )}
+      {!isOwner && !ready && <p className="text-sm text-muted">Only the owner can connect WhatsApp.</p>}
       {msg && <p role="status" className={`text-sm ${msg.ok ? "text-emerald-600" : "text-red-600"}`}>{msg.text}</p>}
     </div>
   );

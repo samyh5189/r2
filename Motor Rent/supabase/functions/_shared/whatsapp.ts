@@ -2,32 +2,36 @@
 // Message content, codes, queueing and who-gets-what all live in our own database.
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type WaConfig = { phone_number_id: string; token: string };
+export type WaConfig = { phone_number_id: string; token: string; waba_id?: string };
 
-/** Template names the owner creates in WhatsApp Manager (see admin Settings → WhatsApp). */
-export const TEMPLATES = { rider: "rm_rider_update", staff: "rm_staff_alert", code: "rm_login_code" } as const;
+export const GRAPH = "https://graph.facebook.com/v21.0";
+/** The login-code template (category AUTHENTICATION, copy-code button). Message templates live in public.whatsapp_templates. */
+export const CODE_TEMPLATE = "rm_login_code";
 
 export async function waConfig(db: SupabaseClient): Promise<WaConfig | null> {
   const { data } = await db.rpc("whatsapp_config");
   return data && (data as WaConfig).token ? (data as WaConfig) : null;
 }
 
-/** Template parameters may not contain new lines, tabs or 4+ spaces in a row. */
-const clean = (s: string) => s.replace(/[\n\t]+/g, " ").replace(/ {4,}/g, "   ").slice(0, 900);
-
-export async function sendTemplate(cfg: WaConfig, to: string, template: string, text: string, codeButton = false) {
-  const components: unknown[] = [{ type: "body", parameters: [{ type: "text", text: clean(text) }] }];
-  if (codeButton) components.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text }] });
-  const res = await fetch(`https://graph.facebook.com/v21.0/${cfg.phone_number_id}/messages`, {
-    method: "POST",
+export async function graph(cfg: WaConfig, path: string, init?: { method?: string; body?: unknown }) {
+  const res = await fetch(`${GRAPH}/${path}`, {
+    method: init?.method ?? "GET",
     headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      messaging_product: "whatsapp", to: to.replace(/^\+/, ""), type: "template",
-      template: { name: template, language: { code: "en" }, components },
-    }),
+    body: init?.body ? JSON.stringify(init.body) : undefined,
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body?.error?.message ?? `WhatsApp error ${res.status}`);
+  if (!res.ok) throw new Error(body?.error?.error_user_msg ?? body?.error?.message ?? `WhatsApp error ${res.status}`);
+  return body;
+}
+
+/** Send an approved template. `params` fill {{1}}, {{2}} … in order; a code template also fills its copy-code button. */
+export async function sendTemplate(cfg: WaConfig, to: string, template: string, params: string[], codeButton = false) {
+  const components: unknown[] = params.length ? [{ type: "body", parameters: params.map((text) => ({ type: "text", text })) }] : [];
+  if (codeButton) components.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: params[0] }] });
+  const body = await graph(cfg, `${cfg.phone_number_id}/messages`, {
+    method: "POST",
+    body: { messaging_product: "whatsapp", to: to.replace(/^\+/, ""), type: "template", template: { name: template, language: { code: "en" }, components } },
+  });
   return body?.messages?.[0]?.id as string | undefined;
 }
 
