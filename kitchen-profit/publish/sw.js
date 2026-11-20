@@ -1,7 +1,7 @@
 // Kitchen Profit service worker.
 // Network-first for the page so updates always show when online;
 // cache-first for static assets; offline fallback from cache.
-const CACHE = 'kp-v3';
+const CACHE = 'kp-v4';
 const SHELL = ['./', './index.html', './manifest.webmanifest',
   './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
