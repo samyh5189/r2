@@ -9,6 +9,7 @@ import { Image } from 'expo-image';
 import { StockPhotos, vehiclePhotos, type VehicleKind } from '@/components/photo';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Plate } from '@/components/plate';
 import { TransferPayment } from '@/components/transfer-payment';
 import { useWebPullToRefresh } from '@/components/pull-to-refresh';
 import { Button, Card, ErrorText, Pill, PressableScale } from '@/components/ui';
@@ -70,7 +71,7 @@ export default function BookingsScreen() {
           contentContainerStyle={styles.list}
           refreshControl={Platform.OS !== 'web' ? <RefreshControl refreshing={loading} onRefresh={load} /> : undefined}
           ListHeaderComponent={
-            <Animated.View entering={FadeInDown.duration(400)} style={{ gap: Spacing.one }}>
+            <Animated.View style={{ gap: Spacing.one }}>
               <ThemedText type="subtitle">My rentals</ThemedText>
               <ErrorText>{error}</ErrorText>
             </Animated.View>
@@ -102,7 +103,7 @@ function RentalCard({ row, index, onChanged }: { row: Row; index: number; onChan
   const msgs = row.booking_messages?.[0]?.count ?? 0;
   const live = row.status === 'active' || row.status === 'overdue' || row.status === 'confirmed';
   return (
-    <Animated.View entering={FadeInDown.delay(index * 70).duration(450).springify()}>
+    <Animated.View>
       <PressableScale onPress={() => router.push({ pathname: '/booking/[id]', params: { id: row.id } })} scaleTo={0.98}
         accessibilityRole="button" accessibilityLabel={`Open rental ${row.reference}: history and messages`}>
       <Card>
@@ -118,12 +119,14 @@ function RentalCard({ row, index, onChanged }: { row: Row; index: number; onChan
         )}
         {r && live && <RideProgress start={r.start} end={r.end} color={row.status === 'overdue' ? t.danger : t.accent} />}
         <View style={[styles.line, styles.footer, { borderColor: t.border }]}>
-          <ThemedText type="small" themeColor="textSecondary" selectable>Ref {row.reference} · {row.vehicles?.plate}</ThemedText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.two }}>
+            <Plate size="sm" label="Booking reference">{row.reference}</Plate>
+            <ThemedText type="small" themeColor="textSecondary">{row.vehicles?.plate}</ThemedText>
+          </View>
           <ThemedText type="smallBold">{money(row.total, row.currency)}</ThemedText>
         </View>
         <View style={styles.line}>
-          <ThemedText type="small" themeColor="textSecondary">{msgs ? `${msgs} message${msgs === 1 ? '' : 's'} · ` : ''}History &amp; messages</ThemedText>
-          <ThemedText type="smallBold" style={{ color: t.accent }}>Open ›</ThemedText>
+          <ThemedText type="smallBold" style={{ color: t.accent }}>{msgs ? `History and ${msgs} message${msgs === 1 ? '' : 's'}` : 'History and messages'}</ThemedText>
         </View>
       </Card>
       </PressableScale>
@@ -167,7 +170,7 @@ function RideProgress({ start, end, color }: { start: Date; end: Date; color: st
 function EmptyState({ title, body, action, onPress, inline }: { title: string; body: string; action: string; onPress: () => void; inline?: boolean }) {
   const t = useTheme();
   const content = (
-    <Animated.View entering={FadeInDown.duration(500)} style={styles.empty}>
+    <Animated.View style={styles.empty}>
       <View style={[styles.emptyArt, { borderColor: t.border }]}>
         <Image source={StockPhotos.hero} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={{ top: '55%', left: '50%' }} transition={400} />
       </View>

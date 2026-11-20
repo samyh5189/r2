@@ -104,7 +104,7 @@ async function Rider({ params }: { params: Promise<{ id: string }> }) {
               const r = parseRange(b.period);
               return (
                 <li key={b.id}><Link href={`/bookings/${b.id}`} className="flex items-center gap-3 px-4 py-2 hover:bg-line/40">
-                  <span className="font-mono">{b.reference}</span><span className="text-muted">{b.vehicles?.plate}</span>
+                  <span className="plate text-xs">{b.reference}</span><span className="text-muted">{b.vehicles?.plate}</span>
                   <span className="text-muted tabular-nums">{r ? dt(r.start) : ""}</span><span className="ml-auto"><StatusBadge status={b.status} /></span>
                 </Link></li>
               );

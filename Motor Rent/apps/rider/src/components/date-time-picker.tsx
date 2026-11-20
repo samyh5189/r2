@@ -38,7 +38,7 @@ export function firstSlot(min: Date): Date {
 
 /** Day chips (scrollable) + 30-minute time chips within opening hours. */
 export function DateTimePicker({ value, onChange, min, days = 30, label }: {
-  value: Date; onChange: (d: Date) => void; min: Date; days?: number; label: string;
+  value: Date; onChange: (d: Date) => void; min: Date; days?: number; label?: string;
 }) {
   const t = useTheme();
   const dayList = useMemo(() => {
@@ -51,7 +51,7 @@ export function DateTimePicker({ value, onChange, min, days = 30, label }: {
   const selectedIdx = times.findIndex((s) => s.getTime() === value.getTime());
 
   useEffect(() => {
-    if (selectedIdx > 2) timeScroll.current?.scrollTo({ x: (selectedIdx - 2) * 84, animated: true });
+    if (selectedIdx > 2) timeScroll.current?.scrollTo({ x: (selectedIdx - 2) * 70, animated: true });
   }, [selectedIdx]);
 
   function pickDay(d: Date) {
@@ -68,7 +68,7 @@ export function DateTimePicker({ value, onChange, min, days = 30, label }: {
 
   return (
     <View style={{ gap: Spacing.two }}>
-      <ThemedText type="smallBold">{label}</ThemedText>
+      {label && <ThemedText type="smallBold">{label}</ThemedText>}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {dayList.map((d) => {
           const sel = sameDay(d, value);
@@ -76,9 +76,8 @@ export function DateTimePicker({ value, onChange, min, days = 30, label }: {
             <PressableScale key={d.toDateString()} onPress={() => pickDay(d)} accessibilityRole="radio" accessibilityState={{ selected: sel }}
               accessibilityLabel={d.toDateString()} scaleTo={0.93} lift={false}
               style={[styles.day, { borderColor: sel ? t.accent : t.border, backgroundColor: sel ? t.accent : t.backgroundElement }]}>
-              <ThemedText type="small" style={{ color: sel ? t.accentText : t.textSecondary, fontSize: 12 }}>{dayName(d)}</ThemedText>
-              <ThemedText type="heading" style={{ color: sel ? t.accentText : t.text, fontSize: 20, lineHeight: 24 }}>{d.getDate()}</ThemedText>
-              <ThemedText type="small" style={{ color: sel ? t.accentText : t.textSecondary, fontSize: 11 }}>{d.toLocaleDateString(undefined, { month: 'short' })}</ThemedText>
+              <ThemedText type="small" style={{ color: sel ? t.accentText : t.textSecondary, fontSize: 11, lineHeight: 14 }}>{dayName(d)}</ThemedText>
+              <ThemedText type="heading" style={{ color: sel ? t.accentText : t.text, fontSize: 17, lineHeight: 20 }}>{d.getDate()} {d.toLocaleDateString(undefined, { month: 'short' })}</ThemedText>
             </PressableScale>
           );
         })}
@@ -103,6 +102,6 @@ export function DateTimePicker({ value, onChange, min, days = 30, label }: {
 
 const styles = StyleSheet.create({
   row: { gap: Spacing.two, paddingVertical: 2, paddingRight: Spacing.three },
-  day: { width: 66, borderWidth: 1.5, borderRadius: Radius.md, paddingVertical: Spacing.two, alignItems: 'center', gap: 0 },
-  time: { width: 76, minHeight: 44, borderWidth: 1.5, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center' },
+  day: { minWidth: 72, borderWidth: 1.5, borderRadius: Radius.sm, paddingVertical: 6, paddingHorizontal: Spacing.two, alignItems: 'center' },
+  time: { width: 62, minHeight: 40, borderWidth: 1.5, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' },
 });

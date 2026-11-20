@@ -1,8 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Figtree:wght@400..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Overpass:wght@500..900&family=Instrument+Sans:wght@400..700&display=swap');
 
 :root {
-  --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-  --font-body: Figtree, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji;
+  --font-display: Overpass, ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji;
   --font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
   --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
@@ -11,7 +11,7 @@
 
 html,
 body {
-  background: #fff7ee;
+  background: #f3f5f2;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -19,10 +19,13 @@ body {
 @media (prefers-color-scheme: dark) {
   html,
   body {
-    background: #0b1020;
+    background: #08171c;
   }
 }
 
 * {
   -webkit-tap-highlight-color: transparent;
 }
+
+:focus-visible { outline: 2px solid #0b7a75; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }

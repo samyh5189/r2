@@ -2,12 +2,13 @@ import { Link } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Platform, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useWebPullToRefresh } from '@/components/pull-to-refresh';
-import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 
 import { KenBurns, StockPhotos, vehiclePhotos, ZoomPhoto, type VehicleKind } from '@/components/photo';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Card, ErrorText, Pill, PressableScale } from '@/components/ui';
+import { Plate } from '@/components/plate';
+import { Card, ErrorText, PressableScale } from '@/components/ui';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing, TopNavInset } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/lib/format';
@@ -20,6 +21,7 @@ type Bike = {
   make: string;
   model: string;
   engine_cc: number | null;
+  plate: string;
   photos: string[];
   branches: { name: string } | null;
   price_plans: { hourly: number; daily: number; currency: 'MVR' | 'USD' } | null;
@@ -40,10 +42,10 @@ export default function BikesScreen() {
     setLoading(true);
     const { data, error } = await supabase
       .from('vehicles')
-      .select('id, kind, make, model, engine_cc, photos, branches(name), price_plans(hourly, daily, currency)')
+      .select('id, kind, make, model, engine_cc, plate, photos, branches(name), price_plans(hourly, daily, currency)')
       .eq('status', 'active')
       .order('make');
-    setError(error ? 'Could not load vehicles. Pull to retry.' : null);
+    setError(error ? 'Vehicles didn’t load. Pull down to try again.' : null);
     setBikes((data as unknown as Bike[]) ?? []);
     setLoading(false);
   }, []);
@@ -74,9 +76,9 @@ export default function BikesScreen() {
           <View style={{ gap: Spacing.three, marginBottom: Spacing.one }}>
             <Hero count={bikes.length} from={cheapest} wide={wide} />
             <View style={styles.sectionHead}>
-              <ThemedText type="heading">Ready to ride</ThemedText>
+              <ThemedText type="subtitle">Free to ride now</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {loading ? 'Loading…' : `${shown.length} available`}
+                {loading ? 'Checking the yard…' : `${shown.length} of ${bikes.length}`}
               </ThemedText>
             </View>
             {kinds.length > 1 && (
@@ -91,7 +93,7 @@ export default function BikesScreen() {
         }
         ListEmptyComponent={loading ? <Skeletons wide={wide} /> : !error ? (
           <Card style={{ alignItems: 'center', paddingVertical: Spacing.five }}>
-            <ThemedText themeColor="textSecondary">Everything is out on the road. Check back soon.</ThemedText>
+            <ThemedText themeColor="textSecondary">Every vehicle is out on the road right now. Pull down to check again.</ThemedText>
           </Card>
         ) : undefined}
         renderItem={({ item, index }) => <BikeCard bike={item} index={index} wide={wide} />}
@@ -101,47 +103,29 @@ export default function BikesScreen() {
 }
 
 function Hero({ count, from, wide }: { count: number; from: number | null; wide: boolean }) {
-  const height = (wide ? 460 : 420) + TopNavInset;
+  const t = useTheme();
+  const height = (wide ? 480 : 440) + TopNavInset;
   const site = useSiteSettings();
   const custom = site?.hero_image_url;
   // Default photo is CC BY-SA 4.0 and must be credited.
-  const credit = custom ? site?.hero_credit : 'Sinamalé Bridge · Photo: Panda 51, CC BY-SA 4.0';
+  const credit = custom ? site?.hero_credit : 'Sinamalé Bridge, photo by Panda 51 (CC BY-SA 4.0)';
+  const line = count
+    ? `${count} ${count === 1 ? 'vehicle' : 'vehicles'} in the yard${from != null ? `, from ${money(from)} an hour` : ''}.`
+    : 'Scooters, motorbikes and cars, by the hour or the day.';
   return (
     <View style={styles.heroWrap}>
-      <KenBurns source={custom ? { uri: custom } : StockPhotos.hero} height={height} focus={{ top: custom ? '50%' : '55%', left: '50%' }} scrimTop={0.7} scrimBottom={0.35}>
-        <View style={[styles.heroText, { paddingTop: TopNavInset + (wide ? Spacing.five : Spacing.four) }]}>
-          <Animated.View entering={FadeInUp.duration(700)}>
-            <ThemedText type="eyebrow" style={styles.onPhotoMuted}>Rent a Motor · Kulhudhuffushi</ThemedText>
-          </Animated.View>
-          <Animated.View entering={FadeInUp.delay(120).duration(700)}>
-            <ThemedText type="title" style={[styles.onPhoto, { fontSize: wide ? 58 : 36, lineHeight: wide ? 60 : 40 }]}>
+      <KenBurns source={custom ? { uri: custom } : StockPhotos.hero} height={height} focus={{ top: custom ? '50%' : '55%', left: '50%' }} scrimTop={0.15} scrimBottom={0.85}>
+        <View style={[styles.heroText, { paddingBottom: wide ? Spacing.five : Spacing.four }]}>
+          <Animated.View entering={FadeInUp.duration(800)} style={styles.heroInner}>
+            <ThemedText type="title" style={[styles.onPhoto, { fontSize: wide ? 76 : 48, lineHeight: wide ? 72 : 46, maxWidth: 620 }]}>
               Ride Kulhudhuffushi.
             </ThemedText>
-          </Animated.View>
-          <Animated.View entering={FadeInUp.delay(220).duration(700)}>
-            <ThemedText style={[styles.onPhotoMuted, { maxWidth: 440 }]}>
-              Kulhudhuffushi Motor Rentals — scooters, motorbikes and cars. Pick one, choose your time, collect the keys.
-            </ThemedText>
-          </Animated.View>
-          <Animated.View entering={FadeInUp.delay(320).duration(700)} style={styles.heroStats}>
-            <Stat label="ready now" value={count ? String(count) : '—'} />
-            <Stat label="from / hour" value={from != null ? money(from) : '—'} />
-            <Stat label="to book" value="2 min" />
+            <View style={[styles.roadLine, { backgroundColor: t.cta }]} />
+            <ThemedText style={[styles.onPhotoMuted, { fontSize: 17, lineHeight: 25, maxWidth: 420 }]}>{line} Pick one, choose your times, collect the keys.</ThemedText>
           </Animated.View>
         </View>
-        {!!credit && (
-          <ThemedText type="small" style={styles.credit} numberOfLines={1}>{credit}</ThemedText>
-        )}
+        {!!credit && <ThemedText type="small" style={styles.credit} numberOfLines={1}>{credit}</ThemedText>}
       </KenBurns>
-    </View>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.stat}>
-      <ThemedText type="heading" style={[styles.onPhoto, { fontSize: 18, lineHeight: 22 }]}>{value}</ThemedText>
-      <ThemedText type="small" style={[styles.onPhotoMuted, { fontSize: 12, lineHeight: 16 }]}>{label}</ThemedText>
     </View>
   );
 }
@@ -156,62 +140,37 @@ function FilterChip({ label, selected, onPress }: { label: string; selected: boo
   );
 }
 
-function BikeCard({ bike, index, wide }: { bike: Bike; index: number; wide: boolean }) {
+function BikeCard({ bike, wide }: { bike: Bike; index: number; wide: boolean }) {
   const t = useTheme();
   const [active, setActive] = useState(false);
   const plan = bike.price_plans;
   const photo = vehiclePhotos(bike)[0];
   const stock = !bike.photos?.length;
+  const spec = [KIND_LABEL[bike.kind], bike.engine_cc != null ? `${bike.engine_cc} cc` : null, bike.branches?.name].filter(Boolean).join(', ');
   return (
-    <Animated.View entering={FadeInDown.delay(80 + index * 90).duration(550)} style={wide ? styles.flex : undefined}>
+    <View style={wide ? styles.half : undefined}>
       <Link href={{ pathname: '/bike/[id]', params: { id: bike.id } }} asChild>
-        <PressableScale
-          accessibilityRole="button"
-          accessibilityLabel={`${bike.make} ${bike.model}`}
-          onHoverIn={() => setActive(true)}
-          onHoverOut={() => setActive(false)}>
-          <Card style={styles.bikeCard}>
-            <View>
-              <ZoomPhoto source={photo} active={active} style={styles.photo} />
-              <View style={styles.badges}>
-                <View style={styles.glassBadge}>
-                  <ThemedText type="smallBold" style={styles.badgeText}>{KIND_LABEL[bike.kind]}</ThemedText>
-                </View>
-                {bike.engine_cc != null && (
-                  <View style={styles.glassBadge}>
-                    <ThemedText type="smallBold" style={styles.badgeText}>{bike.engine_cc} cc</ThemedText>
-                  </View>
-                )}
+        <PressableScale accessibilityRole="button" accessibilityLabel={`${bike.make} ${bike.model}, ${bike.plate}`} scaleTo={0.985} lift={false}
+          onHoverIn={() => setActive(true)} onHoverOut={() => setActive(false)}>
+          <Card style={[styles.bikeCard, active && { borderColor: t.text }]}>
+            <ZoomPhoto source={photo} active={active} style={styles.photo} />
+            <View style={styles.cardBody}>
+              <View style={styles.nameRow}>
+                <ThemedText type="heading" style={styles.flex} numberOfLines={1}>{bike.make} {bike.model}</ThemedText>
+                <Plate size="sm" label="Plate">{bike.plate}</Plate>
               </View>
-              {stock && (
-                <View style={styles.stockNote}>
-                  <ThemedText type="small" style={[styles.badgeText, { fontWeight: 500 }]}>Representative photo</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">{spec}{stock ? '. Photo shows the model, not this vehicle.' : ''}</ThemedText>
+              {plan && (
+                <View style={styles.priceRow}>
+                  <ThemedText type="heading" style={{ fontSize: 22 }}>{money(plan.hourly, plan.currency)}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">an hour, {money(plan.daily, plan.currency)} a day</ThemedText>
                 </View>
               )}
             </View>
-            <View style={styles.cardBody}>
-              <View style={styles.flex}>
-                <ThemedText type="heading">{bike.make} {bike.model}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">{bike.branches?.name ?? 'Main branch'}</ThemedText>
-              </View>
-              <Pill label="Available" tone="success" />
-            </View>
-            {plan && (
-              <View style={styles.priceRow}>
-                <View style={styles.price}>
-                  <ThemedText type="heading" style={{ color: t.accent }}>{money(plan.hourly, plan.currency)}</ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">/hour</ThemedText>
-                </View>
-                <ThemedText type="small" themeColor="textSecondary">{money(plan.daily, plan.currency)} / day</ThemedText>
-                <View style={[styles.go, { backgroundColor: active ? t.accent : t.backgroundSelected }]}>
-                  <ThemedText type="smallBold" style={{ color: active ? t.accentText : t.text }}>→</ThemedText>
-                </View>
-              </View>
-            )}
           </Card>
         </PressableScale>
       </Link>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -222,7 +181,7 @@ function Skeletons({ wide }: { wide: boolean }) {
   return (
     <View style={[styles.skeletons, wide && { flexDirection: 'row' }]}>
       {[0, 1].map((i) => (
-        <Animated.View key={i} entering={FadeInDown.delay(i * 80)} style={styles.flex}>
+        <View key={i} style={styles.flex}>
           <Card style={[styles.bikeCard, styles.pulse]}>
             <View style={[styles.photo, { backgroundColor: t.backgroundSelected }]} />
             <View style={{ padding: Spacing.three, gap: Spacing.two }}>
@@ -230,7 +189,7 @@ function Skeletons({ wide }: { wide: boolean }) {
               <View style={[block, { height: 14, width: '30%' }]} />
             </View>
           </Card>
-        </Animated.View>
+        </View>
       ))}
     </View>
   );
@@ -238,6 +197,7 @@ function Skeletons({ wide }: { wide: boolean }) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  half: { flex: 1, maxWidth: (MaxContentWidth - Spacing.three) / 2 },
   list: {
     paddingHorizontal: Spacing.three,
     paddingTop: 0,
@@ -247,41 +207,22 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  heroWrap: {
-    marginHorizontal: -Spacing.three,
-    borderBottomLeftRadius: Radius.lg + 10,
-    borderBottomRightRadius: Radius.lg + 10,
-    overflow: 'hidden',
-  },
-  heroText: { position: 'absolute', left: 0, right: 0, top: 0, paddingHorizontal: Spacing.four, gap: Spacing.two },
+  // Full-bleed on web: break out of the centred list column.
+  heroWrap: Platform.select({ web: { width: '100vw', marginLeft: 'calc(50% - 50vw)', overflow: 'hidden' } as object, default: { marginHorizontal: -Spacing.three, overflow: 'hidden' } })!,
+  heroText: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: Spacing.three, alignItems: 'center' },
+  heroInner: { gap: Spacing.three, width: '100%', maxWidth: MaxContentWidth },
+  roadLine: { width: 72, height: 6, borderRadius: 1 },
   onPhoto: { color: '#FFFFFF' },
-  credit: { position: 'absolute', right: Spacing.three, bottom: Spacing.four + 4, fontSize: 10, lineHeight: 13, color: 'rgba(255,255,255,0.75)' },
-  onPhotoMuted: { color: 'rgba(255,255,255,0.85)' },
-  heroStats: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginTop: Spacing.two },
-  stat: {
-    borderRadius: Radius.md, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, minWidth: 96,
-    backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)',
-    backdropFilter: 'blur(10px)',
-  } as object,
-  sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: Spacing.two },
+  credit: { position: 'absolute', right: Spacing.three, top: TopNavInset + Spacing.two, fontSize: 10, lineHeight: 13, color: 'rgba(255,255,255,0.7)' },
+  onPhotoMuted: { color: 'rgba(255,255,255,0.88)' },
+  sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: Spacing.four },
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  filter: { borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
+  filter: { borderWidth: 1, borderRadius: Radius.sm, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
   bikeCard: { padding: 0, overflow: 'hidden', gap: 0 },
-  photo: { height: 210, width: '100%' },
-  badges: { position: 'absolute', top: Spacing.two, left: Spacing.two, flexDirection: 'row', gap: 6 },
-  glassBadge: {
-    borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 4,
-    backgroundColor: 'rgba(11,16,32,0.55)', backdropFilter: 'blur(8px)',
-  } as object,
-  badgeText: { color: '#FFFFFF', fontSize: 12, lineHeight: 16 },
-  stockNote: {
-    position: 'absolute', bottom: Spacing.two, right: Spacing.two, borderRadius: Radius.pill,
-    paddingHorizontal: 8, paddingVertical: 2, backgroundColor: 'rgba(11,16,32,0.45)',
-  },
-  cardBody: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two, padding: Spacing.three, paddingBottom: Spacing.two },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingHorizontal: Spacing.three, paddingBottom: Spacing.three },
-  price: { flexDirection: 'row', alignItems: 'baseline', gap: 2, marginRight: 'auto' },
-  go: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  photo: { height: 200, width: '100%' },
+  cardBody: { padding: Spacing.three, gap: 4 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: Spacing.two, flexWrap: 'wrap' },
   skeletons: { gap: Spacing.three },
   pulse: { opacity: 0.7 },
 });

@@ -59,7 +59,7 @@ async function Vehicle({ params }: { params: Promise<{ id: string }> }) {
         <Link href="/fleet" className="text-sm text-muted hover:underline">← Fleet</Link>
         <div className="space-y-3 rounded-2xl border border-line bg-panel p-5">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold">{v.plate}</h1><StatusBadge status={v.status} />
+            <h1 className="plate text-2xl">{v.plate}</h1><StatusBadge status={v.status} />
           </div>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted">Vehicle</dt><dd>{v.make} {v.model} · {v.kind}</dd>

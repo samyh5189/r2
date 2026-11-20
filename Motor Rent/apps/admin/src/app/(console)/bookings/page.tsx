@@ -43,7 +43,7 @@ async function BookingsTable() {
             return (
               <tr key={r.id}>
                 <td className="px-3 py-2">
-                  <Link href={`/bookings/${r.id}`} className="font-mono font-semibold text-accent hover:underline">{r.reference}</Link>
+                  <Link href={`/bookings/${r.id}`} className="plate text-xs hover:opacity-80">{r.reference}</Link>
                   {r.booking_messages?.[0] && !r.booking_messages[0].from_staff && <div className="mt-0.5 w-fit rounded bg-sky-500/15 px-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300">New message</div>}
                 </td>
                 <td className="px-3 py-2"><Link href={`/riders/${r.rider_id}`} className="hover:underline">{r.profiles?.full_name ?? "—"}</Link><div className="text-muted">{r.profiles?.phone}</div></td>

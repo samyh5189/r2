@@ -1,7 +1,7 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Image } from 'expo-image';
-import { ScrollView, StyleSheet, Switch, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition, ZoomIn } from 'react-native-reanimated';
 
 import { KenBurns, Scrim, vehiclePhotos, type VehicleKind } from '@/components/photo';
@@ -129,7 +129,7 @@ export default function BikeScreen() {
     <ThemedView style={styles.flex}>
       <Stack.Screen options={{ title }} />
       <ScrollView contentContainerStyle={styles.body}>
-        <Animated.View entering={FadeIn.duration(400)}>
+        <Animated.View>
           <Gallery photos={photos} stock={!bike?.photos?.length} />
           <View style={styles.showroomTop}>
             <Pill label="Available" tone="success" />
@@ -138,7 +138,7 @@ export default function BikeScreen() {
           </View>
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(80).duration(450)} style={styles.titleRow}>
+        <Animated.View style={styles.titleRow}>
           <View style={styles.flex}>
             <ThemedText type="subtitle">{title}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">Pick up at {bike?.branches?.name ?? 'Main branch'}</ThemedText>
@@ -151,33 +151,18 @@ export default function BikeScreen() {
           )}
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(140).duration(450)}>
-          <DateTimePicker label="Pickup — day & time" value={start} onChange={setStart} min={earliest} days={MAX_RENTAL_DAYS} />
-        </Animated.View>
-        <Section label="Quick length" delay={200}>
-          {DURATIONS.map((d) => <Chip key={d.label} label={d.label} selected={d.hours === hours}
-            onPress={() => setEnd(new Date(start.getTime() + d.hours * 3_600_000))} />)}
-        </Section>
-        <Animated.View entering={FadeInDown.delay(230).duration(450)}>
-          <DateTimePicker label="Return — day & time" value={end} onChange={setEnd} min={minEnd} days={MAX_RENTAL_DAYS + 1} />
-        </Animated.View>
+        <TripPlanner start={start} end={end} earliest={earliest} minEnd={minEnd} hours={hours}
+          onStart={setStart} onEnd={setEnd} onLength={(h) => setEnd(new Date(start.getTime() + h * 3_600_000))} />
         <Section label="Extra helmets" delay={260}>
           {[0, 1, 2].map((n) => <Chip key={n} label={n === 0 ? 'None' : `+${n}`} selected={n === helmets} onPress={() => setHelmets(n)} />)}
         </Section>
 
-        <Animated.View entering={FadeInDown.delay(320).duration(450)} layout={LinearTransition}>
-          <Card style={styles.trip}>
-            <TripPoint label="Pickup" value={dateTime(start)} color={t.success} />
-            <View style={[styles.tripLine, { borderColor: t.border }]} />
-            <TripPoint label={`Return by · ${hours < 24 ? `${hours} h` : `${Math.floor(hours / 24)} day${hours >= 48 ? 's' : ''}${hours % 24 ? ` ${hours % 24} h` : ''}`}`} value={dateTime(end)} color={t.accent} />
-          </Card>
-        </Animated.View>
 
         {quote && (
-          <Animated.View entering={FadeInDown.springify()} layout={LinearTransition}>
+          <Animated.View layout={LinearTransition}>
             <Card>
               {quote.lines.map((l, i) => (
-                <Animated.View key={l.code} entering={FadeIn.delay(100 + i * 80)} style={styles.line}>
+                <Animated.View key={l.code} style={styles.line}>
                   <ThemedText type="small">{l.label}</ThemedText>
                   <ThemedText type="small">{money(l.amount, quote.currency)}</ThemedText>
                 </Animated.View>
@@ -229,7 +214,7 @@ export default function BikeScreen() {
 
 function Section({ label, delay, children }: { label: string; delay: number; children: React.ReactNode }) {
   return (
-    <Animated.View entering={FadeInDown.delay(delay).duration(450)} style={{ gap: Spacing.two }}>
+    <Animated.View style={{ gap: Spacing.two }}>
       <ThemedText type="smallBold">{label}</ThemedText>
       <View style={styles.chips}>{children}</View>
     </Animated.View>
@@ -249,15 +234,48 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
   );
 }
 
-function TripPoint({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <View style={styles.tripPoint}>
-      <View style={[styles.tripDot, { borderColor: color }]} />
-      <View>
-        <ThemedText type="eyebrow" themeColor="textSecondary">{label}</ThemedText>
-        <ThemedText type="smallBold" style={{ fontSize: 16 }}>{value}</ThemedText>
+const lengthLabel = (h: number) =>
+  h < 24 ? `${h} h` : `${Math.floor(h / 24)} day${h >= 48 ? 's' : ''}${h % 24 ? ` ${h % 24} h` : ''}`;
+
+/** Pickup and return on one card. Each opens its own day/time picker; length buttons set the return in one tap. */
+function TripPlanner({ start, end, earliest, minEnd, hours, onStart, onEnd, onLength }: {
+  start: Date; end: Date; earliest: Date; minEnd: Date; hours: number;
+  onStart: (d: Date) => void; onEnd: (d: Date) => void; onLength: (h: number) => void;
+}) {
+  const t = useTheme();
+  const [open, setOpen] = useState<'start' | 'end' | null>(null);
+  const toggle = (k: 'start' | 'end') => setOpen((o) => (o === k ? null : k));
+  const row = (k: 'start' | 'end', label: string, value: Date, dot: string) => (
+    <Pressable onPress={() => toggle(k)} accessibilityRole="button" accessibilityState={{ expanded: open === k }}
+      accessibilityLabel={`${label}: ${dateTime(value)}. ${open === k ? 'Close' : 'Change'}`} style={styles.tripRow}>
+      <View style={[styles.tripDot, { backgroundColor: dot }]} />
+      <View style={styles.flex}>
+        <ThemedText type="small" themeColor="textSecondary">{label}</ThemedText>
+        <ThemedText type="smallBold" style={{ fontSize: 17, lineHeight: 22 }}>{dateTime(value)}</ThemedText>
       </View>
-    </View>
+      <ThemedText type="smallBold" style={{ color: t.accent }}>{open === k ? 'Done' : 'Change'}</ThemedText>
+    </Pressable>
+  );
+  return (
+    <Card style={{ gap: Spacing.two }}>
+      {row('start', 'Pickup', start, t.success)}
+      {open === 'start' && <DateTimePicker value={start} onChange={onStart} min={earliest} days={MAX_RENTAL_DAYS} />}
+      <View style={[styles.lengthRow, { borderColor: t.border }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+          {DURATIONS.map((d) => {
+            const sel = d.hours === hours;
+            return (
+              <Pressable key={d.label} onPress={() => onLength(d.hours)} accessibilityRole="radio" accessibilityState={{ selected: sel }}
+                style={[styles.lengthChip, { borderColor: sel ? t.accent : t.border, backgroundColor: sel ? t.accent : 'transparent' }]}>
+                <ThemedText type="smallBold" style={{ color: sel ? t.accentText : t.text, fontSize: 13 }}>{d.label}</ThemedText>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+      {row('end', `Return by, ${lengthLabel(hours)} rental`, end, t.accent)}
+      {open === 'end' && <DateTimePicker value={end} onChange={onEnd} min={minEnd} days={MAX_RENTAL_DAYS + 1} />}
+    </Card>
   );
 }
 
@@ -317,11 +335,11 @@ function Reserved({ booking, bankTransfer, photo, title }: {
         <Animated.View entering={ZoomIn.delay(250).springify()} style={[styles.check, { backgroundColor: t.success, borderColor: t.background }]}>
           <ThemedText style={{ color: '#fff', fontSize: 30, lineHeight: 34, fontWeight: 800 }}>✓</ThemedText>
         </Animated.View>
-        <Animated.View entering={FadeInDown.delay(400)} style={{ alignItems: 'center', gap: Spacing.one }}>
+        <Animated.View style={{ alignItems: 'center', gap: Spacing.one }}>
           <ThemedText type="subtitle" style={{ textAlign: 'center' }}>Reserved!</ThemedText>
           <ThemedText themeColor="textSecondary" style={{ textAlign: 'center' }}>{bankTransfer ? 'Pay by bank transfer and upload the slip to confirm.' : 'Complete payment within 15 minutes to confirm.'}</ThemedText>
         </Animated.View>
-        <Animated.View entering={FadeInDown.delay(550)}>
+        <Animated.View>
           <Card style={{ alignItems: 'center' }}>
             <ThemedText type="eyebrow" themeColor="textSecondary">Booking reference</ThemedText>
             <ThemedText type="subtitle" selectable style={{ letterSpacing: 2 }}>{reference}</ThemedText>
@@ -331,7 +349,7 @@ function Reserved({ booking, bankTransfer, photo, title }: {
           </Card>
         </Animated.View>
         {bankTransfer && <TransferPayment booking={booking} />}
-        <Animated.View entering={FadeInDown.delay(700)}>
+        <Animated.View>
           <Button variant={bankTransfer ? 'secondary' : 'primary'} title="View my rentals" onPress={() => router.replace('/bookings')} />
         </Animated.View>
       </ScrollView>
@@ -352,8 +370,11 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   chip: { borderWidth: 1.5, borderRadius: Radius.pill, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, minHeight: 44, justifyContent: 'center' },
   trip: { gap: 0 },
+  tripRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, minHeight: 48 },
+  lengthRow: { borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: Spacing.two, marginLeft: 22 },
+  lengthChip: { borderWidth: 1.5, borderRadius: Radius.sm, paddingHorizontal: 12, paddingVertical: 6 },
   tripPoint: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
-  tripDot: { width: 16, height: 16, borderRadius: 8, borderWidth: 4 },
+  tripDot: { width: 10, height: 10, borderRadius: 5 },
   tripLine: { marginLeft: 7, height: 22, borderLeftWidth: 2, borderStyle: 'dashed' },
   line: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.two },
   totalLine: { borderTopWidth: 1, paddingTop: Spacing.two, marginTop: Spacing.one },

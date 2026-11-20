@@ -115,7 +115,7 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
         <Link href="/bookings" className="text-sm text-muted hover:underline">← Bookings</Link>
         <div className="space-y-3 rounded-2xl border border-line bg-panel p-5">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-mono text-2xl font-semibold tracking-wider">{b.reference}</h1>
+            <h1 className="plate text-2xl">{b.reference}</h1>
             <StatusBadge status={b.status} />
           </div>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">

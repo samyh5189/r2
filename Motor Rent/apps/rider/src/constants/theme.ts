@@ -1,5 +1,5 @@
 /**
- * "Island ride" palette: warm sand + sunset orange by day, night road + neon by night.
+ * Island road palette: coral-sand white, lagoon ink and teal, road-marking yellow for the one main action.
  * Every screen reads colors through useTheme(), so both schemes stay in sync.
  */
 
@@ -9,58 +9,62 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#1B1A2E',
-    background: '#FFF7EE',
+    text: '#0C2B33',            // lagoon ink
+    background: '#F3F5F2',      // coral-sand white
     backgroundElement: '#FFFFFF',
-    backgroundSelected: '#FFE6D3',
-    textSecondary: '#6B6577',
-    accent: '#FF5A1F',
-    accentSoft: '#FFE1D1',
+    backgroundSelected: '#E3ECE9',
+    textSecondary: '#55706F',
+    accent: '#0B7A75',          // lagoon teal: selection, links, progress
+    accentSoft: '#D7EDEA',
     accentText: '#FFFFFF',
-    ocean: '#0E8A96',
-    highlight: '#FFC24B',
-    road: '#2B2D42',
-    roadLine: '#FFE9A8',
-    border: '#EFE2D4',
-    shadow: 'rgba(120, 60, 20, 0.12)',
-    success: '#13A57A',
-    successSoft: '#D5F5E9',
-    warning: '#C77700',
-    warningSoft: '#FFF0CC',
-    danger: '#D93636',
-    dangerSoft: '#FDE0E0',
-    skyTop: '#FF9A62',
-    skyBottom: '#FFE3C2',
-    sun: '#FFF1C9',
-    sea: '#2BB3C0',
-    palm: '#1F4E4A',
+    cta: '#FFC629',             // road-marking yellow: the main action on a screen
+    ctaText: '#0C2B33',
+    ocean: '#0B7A75',
+    highlight: '#FFC629',
+    road: '#0C2B33',
+    roadLine: '#FFC629',
+    border: '#D9E2DF',
+    shadow: 'rgba(12, 43, 51, 0.10)',
+    success: '#1D8A4E',
+    successSoft: '#DDF1E4',
+    warning: '#9A6400',
+    warningSoft: '#FFF1C7',
+    danger: '#C8423A',
+    dangerSoft: '#F9E1DE',
+    skyTop: '#8FD3E0',
+    skyBottom: '#E9F6F4',
+    sun: '#FFF3C4',
+    sea: '#2AA6A0',
+    palm: '#0C2B33',
   },
   dark: {
-    text: '#F5F3FF',
-    background: '#0B1020',
-    backgroundElement: '#151B2E',
-    backgroundSelected: '#262E4A',
-    textSecondary: '#A3A9C2',
-    accent: '#FF7A3D',
-    accentSoft: '#3A2320',
-    accentText: '#FFFFFF',
-    ocean: '#3CC3CF',
-    highlight: '#FFC24B',
-    road: '#1A1F33',
-    roadLine: '#FFD66B',
-    border: '#262E4A',
-    shadow: 'rgba(0, 0, 0, 0.45)',
-    success: '#3DD68C',
-    successSoft: '#123326',
-    warning: '#FFB23F',
-    warningSoft: '#3A2C10',
-    danger: '#FF6369',
-    dangerSoft: '#3B1619',
-    skyTop: '#090D1C',
-    skyBottom: '#3B2A5C',
+    text: '#E8F1EF',
+    background: '#08171C',      // night lagoon
+    backgroundElement: '#0F2229',
+    backgroundSelected: '#173239',
+    textSecondary: '#8DA7A6',
+    accent: '#3CC2B8',
+    accentSoft: '#123A3A',
+    accentText: '#04211F',
+    cta: '#FFC629',
+    ctaText: '#0C2B33',
+    ocean: '#3CC2B8',
+    highlight: '#FFC629',
+    road: '#0F2229',
+    roadLine: '#FFC629',
+    border: '#1C363D',
+    shadow: 'rgba(0, 0, 0, 0.5)',
+    success: '#4CC985',
+    successSoft: '#10301F',
+    warning: '#F2B53A',
+    warningSoft: '#33280C',
+    danger: '#F0776E',
+    dangerSoft: '#3A1714',
+    skyTop: '#06121A',
+    skyBottom: '#0F2E38',
     sun: '#F4F1DE',
-    sea: '#1B4F6B',
-    palm: '#05070F',
+    sea: '#14505A',
+    palm: '#030B0E',
   },
 } as const;
 
@@ -101,7 +105,7 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const Radius = { sm: 10, md: 16, lg: 22, pill: 999 } as const;
+export const Radius = { sm: 6, md: 12, lg: 20, pill: 999 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 /** The web tab bar floats over the top of every tab screen. */

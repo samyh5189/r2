@@ -6,8 +6,8 @@ import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated'
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+import { Plate } from './plate';
 import { ThemedText } from './themed-text';
-import { shadow } from './ui';
 
 export default function AppTabs() {
   return (
@@ -60,21 +60,18 @@ export function NavBar({ children, leading }: { children: React.ReactNode; leadi
     <View
       style={[
         styles.inner,
-        { borderColor: t.border, backgroundColor: t.backgroundElement + 'D9' },
-        shadow(t.shadow, 1, 24),
+        { borderColor: t.border, backgroundColor: t.backgroundElement + 'E6' },
         { backdropFilter: 'blur(14px)' } as object,
       ]}>
       {leading}
       <Pressable onPress={() => router.navigate('/')} accessibilityRole="link" accessibilityLabel="Rent a Motor home"
         style={({ pressed }) => [styles.brand, pressed && { opacity: 0.7 }, { cursor: 'pointer' } as object]}>
         {!(leading && compact) && (
-          <View style={[styles.mark, { backgroundColor: t.accent }]}>
-            <ThemedText type="heading" style={{ color: t.accentText, fontSize: 15, lineHeight: 18 }}>RM</ThemedText>
-          </View>
+          <Plate size="md">RM</Plate>
         )}
         {!compact && (
           <View>
-            <ThemedText type="heading" style={{ fontSize: 17, lineHeight: 20 }}>Rent a Motor</ThemedText>
+            <ThemedText type="heading" style={{ fontSize: 18, lineHeight: 20 }}>Rent a Motor</ThemedText>
             <ThemedText type="small" themeColor="textSecondary" style={{ fontSize: 11, lineHeight: 14 }}>Kulhudhuffushi Motor Rentals</ThemedText>
           </View>
         )}
@@ -102,7 +99,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     paddingLeft: Spacing.three,
     paddingRight: Spacing.two,
-    borderRadius: Radius.pill,
+    borderRadius: Radius.md + 4,
     borderWidth: 1,
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginRight: 'auto' },

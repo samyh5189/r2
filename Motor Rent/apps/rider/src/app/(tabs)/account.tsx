@@ -77,7 +77,7 @@ export default function AccountScreen() {
   if (!session) {
     return (
       <ThemedView style={[styles.flex, styles.center]}>
-        <Animated.View entering={FadeInDown.duration(500)} style={styles.signedOut}>
+        <Animated.View style={styles.signedOut}>
           <View style={[styles.badge, { borderColor: t.border }]}>
             <Image source={StockPhotos.scooter} style={StyleSheet.absoluteFill} contentFit="cover" transition={400} />
           </View>
@@ -136,11 +136,11 @@ export default function AccountScreen() {
         {pull.indicator}
         <ScrollView ref={pull.ref} contentContainerStyle={styles.body}
           refreshControl={Platform.OS !== 'web' ? <RefreshControl refreshing={refreshing} onRefresh={refresh} /> : undefined}>
-          <Animated.View entering={FadeInDown.duration(400)}>
+          <Animated.View>
             <ThemedText type="subtitle">Account</ThemedText>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(80).duration(450)}>
+          <Animated.View>
             <Card style={styles.profile}>
               <PressableScale onPress={photoMenu} disabled={photoBusy || !profile} accessibilityRole="button"
                 accessibilityLabel={profile?.avatar_path ? 'Change profile photo' : 'Add profile photo'} scaleTo={0.94} lift={false}>
@@ -163,7 +163,7 @@ export default function AccountScreen() {
             </Card>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(160).duration(450)}>
+          <Animated.View>
             <Card>
               <View style={styles.row}>
                 <ThemedText type="heading" style={styles.flex}>Identity check</ThemedText>
@@ -175,7 +175,7 @@ export default function AccountScreen() {
             </Card>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(240).duration(450)} style={{ gap: Spacing.two }}>
+          <Animated.View style={{ gap: Spacing.two }}>
             {site?.support_phone && (
               <Button title={`Call us · ${site.support_phone}`} variant="secondary" onPress={() => Linking.openURL(`tel:${site.support_phone!.replace(/\s/g, '')}`)} />
             )}

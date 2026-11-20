@@ -7,6 +7,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Chatter, type ChatterItem } from '@/components/chatter';
 import { vehiclePhotos, type VehicleKind } from '@/components/photo';
 import { useWebPullToRefresh } from '@/components/pull-to-refresh';
+import { Plate } from '@/components/plate';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, ErrorText, Pill } from '@/components/ui';
@@ -125,7 +126,7 @@ export default function BookingDetail() {
         refreshControl={Platform.OS !== 'web' ? <RefreshControl refreshing={loading} onRefresh={load} /> : undefined}>
         <ErrorText>{error}</ErrorText>
         {booking && s && (
-          <Animated.View entering={FadeInDown.duration(400)}>
+          <Animated.View>
             <Card>
               <View style={styles.row}>
                 {booking.vehicles && <Image source={vehiclePhotos(booking.vehicles)[0]} style={styles.thumb} contentFit="cover" transition={300} />}
@@ -141,7 +142,10 @@ export default function BookingDetail() {
                 </View>
               )}
               <View style={[styles.row, styles.footer, { borderColor: t.border }]}>
-                <ThemedText type="small" themeColor="textSecondary" selectable>Ref {booking.reference} · {booking.vehicles?.plate}{booking.branches ? ` · ${booking.branches.name}` : ''}</ThemedText>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexShrink: 1 }}>
+                  <Plate size="md" label="Booking reference">{booking.reference}</Plate>
+                  <ThemedText type="small" themeColor="textSecondary">{booking.vehicles?.plate}{booking.branches ? `, ${booking.branches.name}` : ''}</ThemedText>
+                </View>
                 <ThemedText type="smallBold">{money(booking.total, booking.currency)}</ThemedText>
               </View>
             </Card>
@@ -149,8 +153,8 @@ export default function BookingDetail() {
         )}
 
         {booking && (
-          <Animated.View entering={FadeInDown.delay(100).duration(400)} style={{ gap: Spacing.three }}>
-            <ThemedText type="heading">History &amp; messages</ThemedText>
+          <Animated.View style={{ gap: Spacing.three }}>
+            <ThemedText type="subtitle">History and messages</ThemedText>
             <Chatter items={items} onSend={send} />
           </Animated.View>
         )}

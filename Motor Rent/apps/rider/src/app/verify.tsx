@@ -127,7 +127,7 @@ export default function VerifyScreen() {
     return (
       <ThemedView style={styles.flex}>
         <ScrollView contentContainerStyle={styles.body}>
-          <Animated.View entering={FadeInDown}>
+          <Animated.View>
             <Card style={{ alignItems: 'center', gap: Spacing.two }}>
               <Pill label={verified ? 'Verified' : 'Under review'} tone={verified ? 'success' : 'warning'} />
               <ThemedText type="subtitle" style={{ textAlign: 'center' }}>{verified ? 'You’re verified' : 'Thanks — we’re checking'}</ThemedText>
@@ -147,7 +147,7 @@ export default function VerifyScreen() {
   return (
     <ThemedView style={styles.flex}>
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <Animated.View entering={FadeInDown.duration(400)} style={{ gap: Spacing.one }}>
+        <Animated.View style={{ gap: Spacing.one }}>
           <ThemedText type="subtitle">Verify your identity</ThemedText>
           <ThemedText themeColor="textSecondary">Once, before your first rental. Your documents are private: only our staff can see them.</ThemedText>
         </Animated.View>

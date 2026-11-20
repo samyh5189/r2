@@ -81,7 +81,7 @@ export function SlipReview({ slip, accountNumbers }: { slip: PendingSlip; accoun
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3">
-          <span className="font-mono text-lg font-semibold tracking-widest">{b.reference}</span>
+          <span className="plate text-lg">{b.reference}</span>
           <span>{slip.riderName}</span>
           <span className="ml-auto text-sm text-muted">sent {dt(new Date(slip.createdAt))}</span>
         </div>

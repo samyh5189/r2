@@ -106,7 +106,7 @@ function Entry({ it }: { it: ChatterItem }) {
   const t = useTheme();
   const name = it.who.me ? 'You' : it.who.name;
   return (
-    <Animated.View entering={FadeInDown.duration(300)} layout={LinearTransition} style={styles.entry}>
+    <Animated.View layout={LinearTransition} style={styles.entry}>
       <Avatar path={it.who.avatar} name={it.who.name} mark={it.who.mark} size={36} color={it.who.staff ? t.text : undefined} />
       <View style={{ flex: 1, gap: 4 }}>
         <View style={styles.head}>

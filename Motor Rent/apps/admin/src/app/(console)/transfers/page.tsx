@@ -71,7 +71,7 @@ async function Transfers() {
             {done.map((r) => (
               <li key={r.id}><Link href={r.bookings ? `/bookings/${r.bookings.id}` : "#"} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm hover:bg-line/40">
                 <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.status === "approved" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-red-500/15 text-red-700 dark:text-red-400"}`}>{r.status}</span>
-                <span className="font-mono">{r.bookings?.reference}</span>
+                <span className="plate text-xs">{r.bookings?.reference}</span>
                 <span>{r.rider?.full_name ?? "Rider"}</span>
                 <span className="tabular-nums">{r.amount != null ? money(r.amount, r.bookings?.currency) : r.bookings ? money(r.bookings.total, r.bookings.currency) : ""}</span>
                 {r.reject_reason && <span className="text-muted">“{r.reject_reason}”</span>}

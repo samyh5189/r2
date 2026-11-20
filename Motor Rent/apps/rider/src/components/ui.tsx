@@ -38,8 +38,8 @@ export function Button({
 }: { title: string; onPress: () => void; disabled?: boolean; loading?: boolean; variant?: 'primary' | 'secondary' | 'ghost'; icon?: ReactNode }) {
   const t = useTheme();
   const inactive = disabled || loading;
-  const bg = variant === 'primary' ? t.accent : variant === 'secondary' ? t.backgroundElement : 'transparent';
-  const fg = variant === 'primary' ? t.accentText : t.text;
+  const bg = variant === 'primary' ? t.cta : variant === 'secondary' ? t.backgroundElement : 'transparent';
+  const fg = variant === 'primary' ? t.ctaText : t.text;
   return (
     <PressableScale
       accessibilityRole="button"
@@ -51,14 +51,14 @@ export function Button({
         styles.button,
         { backgroundColor: bg, opacity: inactive ? 0.5 : 1 },
         variant === 'secondary' && { borderWidth: 1, borderColor: t.border },
-        variant === 'primary' && !inactive && shadow(t.accent, 0.35, 14),
+        variant === 'primary' && { borderWidth: 1.5, borderColor: t.text },
       ]}>
       {loading ? (
         <ActivityIndicator color={fg} />
       ) : (
         <View style={styles.buttonRow}>
           {icon}
-          <ThemedText type="smallBold" style={{ color: fg, fontSize: 16 }}>{title}</ThemedText>
+          <ThemedText type="smallBold" style={{ color: fg, fontSize: 16, fontWeight: 700 }}>{title}</ThemedText>
         </View>
       )}
     </PressableScale>
@@ -79,7 +79,7 @@ export function Field({ label, hint, ...props }: TextInputProps & { label: strin
         style={[
           styles.input,
           { color: t.text, borderColor: focused ? t.accent : t.border, backgroundColor: t.backgroundElement },
-          focused && shadow(t.accent, 0.18, 10),
+          
           Platform.OS === 'web' && ({ outlineStyle: 'none' } as object),
           props.style,
         ]}
@@ -91,7 +91,7 @@ export function Field({ label, hint, ...props }: TextInputProps & { label: strin
 
 export function Card({ style, ...rest }: ViewProps) {
   const t = useTheme();
-  return <View style={[styles.card, { backgroundColor: t.backgroundElement, borderColor: t.border }, shadow(t.shadow, 1, 18), style]} {...rest} />;
+  return <View style={[styles.card, { backgroundColor: t.backgroundElement, borderColor: t.border }, style]} {...rest} />;
 }
 
 export function Pill({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger' }) {
@@ -106,7 +106,6 @@ export function Pill({ label, tone = 'neutral' }: { label: string; tone?: 'neutr
   const [bg, fg] = map[tone];
   return (
     <View style={[styles.pill, { backgroundColor: bg }]}>
-      <View style={[styles.dot, { backgroundColor: fg }]} />
       <ThemedText type="smallBold" style={{ color: fg, fontSize: 12, lineHeight: 16 }}>{label}</ThemedText>
     </View>
   );
@@ -134,11 +133,11 @@ function hexToRgba(hex: string, a: number) {
 }
 
 const styles = StyleSheet.create({
-  button: { minHeight: 54, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.four },
+  button: { minHeight: 52, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.four },
   buttonRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   input: { minHeight: 54, borderWidth: 1.5, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 17 },
-  card: { borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.two, borderWidth: 1 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: Radius.pill, alignSelf: 'flex-start' },
+  card: { borderRadius: Radius.md, padding: Spacing.three, gap: Spacing.two, borderWidth: 1 },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 3, borderRadius: Radius.sm, alignSelf: 'flex-start' },
   dot: { width: 6, height: 6, borderRadius: 3 },
   error: { borderRadius: Radius.sm, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
 });

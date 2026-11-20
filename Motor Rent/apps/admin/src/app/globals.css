@@ -1,12 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fff7ee;
-  --foreground: #1b1a2e;
-  --muted: #6b6577;
-  --line: #efe2d4;
+  --background: #f3f5f2;
+  --foreground: #0c2b33;
+  --muted: #55706f;
+  --line: #d9e2df;
   --panel: #ffffff;
-  --accent: #ff5a1f;
+  --accent: #0b7a75;
+  --cta: #ffc629;
 }
 
 @theme inline {
@@ -16,24 +17,36 @@
   --color-line: var(--line);
   --color-panel: var(--panel);
   --color-accent: var(--accent);
-  --font-sans: var(--font-geist-sans);
+  --color-cta: var(--cta);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b1020;
-    --foreground: #f5f3ff;
-    --muted: #a3a9c2;
-    --line: #262e4a;
-    --panel: #151b2e;
-    --accent: #ff7a3d;
+    --background: #08171c;
+    --foreground: #e8f1ef;
+    --muted: #8da7a6;
+    --line: #1c363d;
+    --panel: #0f2229;
+    --accent: #3cc2b8;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+}
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
+h1 { font-weight: 900; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Registration-plate style for booking references and vehicle plates. */
+.plate {
+  display: inline-block; background: #ffc629; color: #0c2b33; border: 1.5px solid #0c2b33; border-radius: 6px;
+  padding: 1px 6px; font-family: var(--font-display); font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase;
+  box-shadow: inset 0 0 0 2px #ffc629, inset 0 0 0 3px rgba(12, 43, 51, 0.3);
 }
 
 /* ---- Motion ---- */
