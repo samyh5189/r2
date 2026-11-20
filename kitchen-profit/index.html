@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#f97316">
+<title>Kulhudhuffushi Kitchen</title>
+
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Kitchen">
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root{
+    --bg:#fbf7f2; --surface:#ffffff; --surface-2:#f5efe8; --line:#ece2d5;
+    --text:#241d19; --muted:#8a7e71; --faint:#b6a797;
+    --accent:#f97316; --accent-2:#fb9a3c; --accent-ink:#ffffff; --accent-soft:#fdeede;
+    --green:#15803d; --green-soft:#e7f4ec; --red:#c2410c; --red-text:#b91c1c; --red-soft:#fbeae2;
+    --shadow:0 1px 2px rgba(80,50,20,.05), 0 10px 30px rgba(80,50,20,.07);
+    --shadow-sm:0 1px 2px rgba(80,50,20,.06);
+    --r:22px; --r-sm:14px;
+    font-synthesis-weight:none;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#15110d; --surface:#211a14; --surface-2:#2a221a; --line:#352b21;
+      --text:#f3ece3; --muted:#a89a8b; --faint:#7d7063;
+      --accent:#fb923c; --accent-2:#fcae63; --accent-ink:#1a1206; --accent-soft:#2a1d10;
+      --green:#4ade80; --green-soft:#16301f; --red:#fb7a4b; --red-text:#f87171; --red-soft:#331a11;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 32px rgba(0,0,0,.4);
+      --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+    }
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg); color:var(--text);
+    -webkit-font-smoothing:antialiased; font-size:16px; line-height:1.4;
+  }
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+  main{max-width:520px;margin:0 auto;
+    padding:0 16px calc(104px + env(safe-area-inset-bottom));}
+
+  /* app bar */
+  .appbar{position:sticky;top:0;z-index:20;max-width:520px;margin:0 auto;
+    display:flex;align-items:center;gap:10px;
+    padding:max(10px,env(safe-area-inset-top)) 16px 10px;
+    background:linear-gradient(var(--bg) 70%, transparent);}
+  .appbar img{width:30px;height:30px;border-radius:9px;box-shadow:var(--shadow-sm)}
+  .appbar .bn{font-weight:800;font-size:1rem;letter-spacing:-.01em}
+  .appbar .bn small{display:block;font-weight:600;font-size:.72rem;color:var(--muted);letter-spacing:.01em}
+
+  h1{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;margin:8px 2px 2px}
+  .sub{color:var(--muted);font-size:.9rem;margin:0 2px 18px}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+    box-shadow:var(--shadow);padding:18px;margin-bottom:16px}
+
+  label{display:block;font-size:.8rem;font-weight:700;color:var(--muted);margin:0 0 7px;letter-spacing:.01em}
+  .lblrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+  .lblrow label{margin:0}
+  input,select,textarea{
+    width:100%;font-size:1.05rem;font-family:inherit;color:var(--text);
+    background:var(--surface-2);border:1.5px solid transparent;border-radius:var(--r-sm);
+    padding:14px;outline:none;transition:border-color .15s, background .15s;}
+  input::placeholder{color:var(--faint)}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent);background:var(--surface)}
+  input[type=number]{appearance:none}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .field{margin-bottom:16px}
+  .field:last-child{margin-bottom:0}
+
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+  .chip{background:var(--accent-soft);border:1px solid transparent;color:var(--accent);
+    border-radius:999px;padding:8px 14px;font-size:.85rem;font-weight:700;cursor:pointer}
+  .chip:active{transform:scale(.96)}
+  .linkbtn{background:none;border:none;color:var(--accent);font-weight:700;font-size:.82rem;
+    cursor:pointer;padding:4px 2px;display:flex;align-items:center;gap:4px}
+
+  /* ingredients */
+  .ingrow{display:grid;grid-template-columns:1fr 96px 34px;gap:8px;margin-bottom:8px;align-items:center}
+  .ingrow input{padding:12px;font-size:1rem}
+  .ing-del{background:none;border:none;color:var(--faint);font-size:1.4rem;cursor:pointer;padding:4px;line-height:1}
+  .ing-del:active{color:var(--red-text)}
+  .addline{background:transparent;border:1.5px dashed var(--line);color:var(--accent);
+    border-radius:var(--r-sm);padding:12px;font-weight:700;font-size:.9rem;width:100%;cursor:pointer}
+  .addline:active{background:var(--accent-soft)}
+  .costtotal{display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;
+    padding-top:14px;border-top:1px solid var(--line);font-weight:700;color:var(--muted);font-size:.9rem}
+  .costtotal b{font-size:1.2rem;color:var(--text)}
+
+  /* live result */
+  .result{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px;margin:16px 0 4px;
+    background:var(--surface-2);border-radius:var(--r-sm);padding:16px 14px}
+  .result .k{font-size:.68rem;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+  .result .v{font-size:1.25rem;font-weight:800;margin-top:4px;letter-spacing:-.02em}
+  .result .v.sm{font-size:1.1rem}
+  .pos{color:var(--green)} .neg{color:var(--red-text)}
+
+  button.primary{width:100%;background:var(--accent);color:var(--accent-ink);border:none;
+    border-radius:var(--r-sm);padding:16px;font-size:1.05rem;font-weight:800;cursor:pointer;
+    box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 8px 20px rgba(249,115,22,.28);margin-top:16px}
+  button.primary:active{transform:translateY(1px)}
+  button.primary:disabled{opacity:.55;box-shadow:none}
+
+  /* records hero */
+  .hero{background:linear-gradient(135deg,var(--accent) 0%,var(--accent-2) 100%);
+    color:#fff;border-radius:var(--r);padding:20px;box-shadow:0 12px 30px rgba(249,115,22,.3);margin-bottom:14px}
+  .hero .cap{font-size:.75rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;opacity:.85}
+  .hero .big{font-size:2.6rem;font-weight:800;letter-spacing:-.03em;margin:4px 0 2px;line-height:1}
+  .hero .sub2{display:flex;gap:16px;font-size:.85rem;opacity:.95;margin-top:10px;flex-wrap:wrap}
+  .hero .sub2 b{font-weight:800}
+  .hero .mbadge{display:inline-block;background:rgba(255,255,255,.22);border-radius:999px;
+    padding:3px 11px;font-weight:800;font-size:.8rem}
+
+  .seg{display:flex;background:var(--surface-2);border-radius:var(--r-sm);padding:4px;gap:4px;margin-bottom:14px}
+  .seg button{flex:1;border:none;background:transparent;color:var(--muted);font-weight:700;
+    font-size:.84rem;padding:9px 4px;border-radius:10px;cursor:pointer}
+  .seg button.on{background:var(--surface);color:var(--text);box-shadow:var(--shadow-sm)}
+
+  .toolbar{display:flex;justify-content:flex-end;margin-bottom:10px}
+  .pdfbtn{background:var(--surface);border:1px solid var(--line);color:var(--text);border-radius:999px;
+    padding:9px 16px;font-size:.84rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;box-shadow:var(--shadow-sm)}
+  .pdfbtn:active{transform:scale(.97)}
+  .pdfbtn svg{width:15px;height:15px}
+
+  /* chart */
+  .barwrap{display:flex;align-items:flex-end;gap:6px;height:116px;margin:2px}
+  .bar{flex:1 0 12px;min-width:12px;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end}
+  .bar .col{width:70%;border-radius:6px 6px 0 0;background:linear-gradient(var(--accent-2),var(--accent));min-height:4px;transition:height .3s}
+  .bar .col.neg{background:var(--red-soft);border:1px solid var(--red)}
+  .bar .lbl{font-size:.6rem;color:var(--faint);font-weight:600}
+  .ctitle{font-size:.72rem;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px}
+
+  /* day groups */
+  .day h3{font-size:.85rem;margin:20px 4px 10px;color:var(--muted);font-weight:700;
+    display:flex;justify-content:space-between;align-items:baseline}
+  .day h3 .dp{font-weight:800;font-size:.95rem}
+  .item{display:flex;align-items:flex-start;gap:12px;padding:15px;background:var(--surface);
+    border:1px solid var(--line);border-radius:var(--r-sm);margin-bottom:9px;box-shadow:var(--shadow-sm)}
+  .item .name{font-weight:700;font-size:1.02rem}
+  .item .meta{font-size:.82rem;color:var(--muted);margin-top:3px}
+  .item .ingline{font-size:.76rem;color:var(--faint);margin-top:4px;line-height:1.4}
+  .item .amt{margin-left:auto;text-align:right;white-space:nowrap}
+  .item .amt .p{font-weight:800;font-size:1.05rem}
+  .item .amt .m{font-size:.76rem;color:var(--muted);margin-top:2px}
+  .del{background:none;border:none;color:var(--faint);font-size:1.3rem;padding:2px 0 2px 8px;cursor:pointer;line-height:1;align-self:center}
+  .del:active{color:var(--red-text)}
+
+  .empty{text-align:center;color:var(--muted);padding:44px 16px}
+  .empty .em{font-size:2.6rem;display:block;margin-bottom:10px}
+  .empty b{color:var(--text);font-weight:800;display:block;margin-bottom:4px;font-size:1.05rem}
+
+  /* bottom nav */
+  .tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;
+    padding:8px 16px calc(10px + env(safe-area-inset-bottom));
+    background:color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line)}
+  .tabs .wrap{display:flex;gap:8px;max-width:520px;margin:0 auto}
+  .tabs button{flex:1;background:none;border:none;color:var(--muted);font-weight:700;font-size:.72rem;
+    padding:7px;border-radius:14px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+  .tabs button .ic{width:22px;height:22px;display:block}
+  .tabs button.on{color:var(--accent)}
+
+  .hidden{display:none}
+  .toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(16px);
+    background:var(--text);color:var(--bg);padding:12px 20px;border-radius:999px;font-weight:700;font-size:.9rem;
+    opacity:0;transition:.25s;pointer-events:none;z-index:60;box-shadow:var(--shadow)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* success peak */
+  .success{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;
+    background:rgba(20,12,6,.28);opacity:0;pointer-events:none;transition:opacity .2s;backdrop-filter:blur(2px)}
+  .success.show{opacity:1}
+  .success .ring{width:96px;height:96px;border-radius:50%;background:var(--surface);
+    display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);transform:scale(.6);transition:transform .35s cubic-bezier(.2,1.4,.5,1)}
+  .success.show .ring{transform:scale(1)}
+  .success svg{width:52px;height:52px;stroke:var(--green);stroke-width:3.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .success .chk{stroke-dasharray:40;stroke-dashoffset:40;animation:draw .4s .12s forwards}
+  @keyframes draw{to{stroke-dashoffset:0}}
+  @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <img src="icon-192.png" alt="">
+  <div class="bn">Kitchen Profit<small>Kulhudhuffushi Runners</small></div>
+</header>
+
+<main>
+<!-- ADD -->
+<section id="view-add">
+  <h1>Add today's dish</h1>
+  <p class="sub">What you cooked, what it cost, what it sells for.</p>
+  <div class="card">
+    <div class="field">
+      <div class="lblrow">
+        <label for="item">Item</label>
+        <button class="linkbtn" id="repeatBtn" type="button">↩︎ Repeat last</button>
+      </div>
+      <div class="chips" id="chips"></div>
+      <input id="item" placeholder="e.g. Lunch Biriyani" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="date">Date</label>
+      <input id="date" type="date">
+    </div>
+    <div class="row field">
+      <div>
+        <label for="qty">Plates sold</label>
+        <input id="qty" class="num" type="number" inputmode="decimal" placeholder="0" min="0">
+      </div>
+      <div>
+        <label for="price">Price / plate (<span class="cur">MVR</span>)</label>
+        <input id="price" class="num" type="number" inputmode="decimal" placeholder="0" min="0">
+      </div>
+    </div>
+    <div class="field">
+      <label>Ingredients &amp; costs (<span class="cur">MVR</span>)</label>
+      <div id="ings"></div>
+      <button class="addline" id="addIng" type="button">+ Add ingredient / cost</button>
+      <div class="costtotal">Total cost <b class="num" id="costTotal">MVR 0</b></div>
+    </div>
+    <div class="result">
+      <div><div class="k">Sales</div><div class="v sm num" id="pvSales">—</div></div>
+      <div><div class="k">Profit</div><div class="v num" id="pvProfit">—</div></div>
+      <div><div class="k">Margin</div><div class="v sm num" id="pvMargin">—</div></div>
+    </div>
+    <button class="primary" id="saveBtn">Save dish</button>
+  </div>
+</section>
+
+<!-- RECORDS -->
+<section id="view-history" class="hidden">
+  <h1>Records</h1>
+  <p class="sub">Your profit, day by day.</p>
+  <div class="seg" id="range">
+    <button data-r="today" class="on">Today</button>
+    <button data-r="week">7 days</button>
+    <button data-r="month">Month</button>
+    <button data-r="all">All</button>
+  </div>
+  <div class="hero">
+    <div class="cap">Profit · <span id="hLabel">Today</span></div>
+    <div class="big num" id="hProfit">—</div>
+    <div class="sub2">
+      <span>Sales <b class="num" id="hSales">—</b></span>
+      <span>Cost <b class="num" id="hCost">—</b></span>
+      <span class="mbadge num" id="hMargin">—</span>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="pdfbtn" id="pdfBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 21h14"/></svg>
+      Export PDF
+    </button>
+  </div>
+  <div id="chart" class="card hidden"></div>
+  <div id="list"></div>
+</section>
+</main>
+
+<nav class="tabs"><div class="wrap">
+  <button data-v="add" class="on">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    Add
+  </button>
+  <button data-v="history">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5m5 14V9m5 10V7m5 12V12"/></svg>
+    Records
+  </button>
+</div></nav>
+
+<div class="toast" id="toast"></div>
+<div class="success" id="success"><div class="ring">
+  <svg viewBox="0 0 52 52"><path class="chk" d="M14 27l8 8 16-17"/></svg>
+</div></div>
+
+<script>
+const SB_URL = 'https://yqhbuagckpwqzsmrikuq.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlxaGJ1YWdja3B3cXpzbXJpa3VxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ5OTk5MTIsImV4cCI6MjExMDU3NTkxMn0.AjE3cTlheVKC9JOa-Vk3iRuyBXz2NBRS5v483zOuM10';
+const CUR = 'MVR';
+const $ = s => document.querySelector(s), $$ = s => document.querySelectorAll(s);
+let sb = null, cache = [], RANGE = 'today';
+
+const money = n => CUR + ' ' + (Math.round((+n||0)*100)/100).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2});
+const pct = n => isFinite(n) ? (Math.round(n*10)/10)+'%' : '—';
+const today = () => new Date().toLocaleDateString('en-CA');
+const esc = s => (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const prettyDate = d => new Date(d).toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'});
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1800);}
+function celebrate(){const s=$('#success');s.classList.add('show');setTimeout(()=>s.classList.remove('show'),900);}
+$$('.cur').forEach(e=>e.textContent=CUR);
+
+// ---------- ingredients ----------
+function ingRow(name='',cost=''){
+  const d=document.createElement('div'); d.className='ingrow';
+  d.innerHTML=`<input class="ing-name" placeholder="e.g. Rice, Gas…" autocomplete="off">
+    <input class="ing-cost num" type="number" inputmode="decimal" placeholder="0" min="0">
+    <button class="ing-del" type="button" aria-label="Remove">×</button>`;
+  d.querySelector('.ing-name').value=name;
+  d.querySelector('.ing-cost').value=cost;
+  d.querySelector('.ing-del').onclick=()=>{ d.remove(); if(!$('#ings').children.length) ingRow(); calc(); };
+  d.querySelectorAll('input').forEach(i=>i.addEventListener('input',calc));
+  $('#ings').appendChild(d); return d;
+}
+const getIngredients=()=>[...$$('#ings .ingrow')].map(r=>({
+  name:r.querySelector('.ing-name').value.trim(), cost:+r.querySelector('.ing-cost').value||0
+})).filter(x=>x.name||x.cost);
+const ingTotal=()=>getIngredients().reduce((a,b)=>a+b.cost,0);
+const resetIngs=()=>{ $('#ings').innerHTML=''; ingRow(); };
+$('#addIng').onclick=()=>ingRow();
+
+function calc(){
+  const qty=+$('#qty').value||0, price=+$('#price').value||0, cost=ingTotal();
+  $('#costTotal').textContent=money(cost);
+  const sales=qty*price, profit=sales-cost, margin=sales?profit/sales*100:NaN;
+  $('#pvSales').textContent = sales?money(sales):'—';
+  const pp=$('#pvProfit'); pp.textContent=(qty||cost)?money(profit):'—'; pp.className='v num '+(profit>=0?'pos':'neg');
+  const pm=$('#pvMargin'); pm.textContent=sales?pct(margin):'—'; pm.className='v sm num '+(profit>=0?'pos':'neg');
+}
+['qty','price'].forEach(id=>$('#'+id).addEventListener('input',calc));
+
+// ---------- save ----------
+$('#saveBtn').onclick=async()=>{
+  const ings=getIngredients();
+  const rec={ entry_date:$('#date').value||today(), item_name:$('#item').value.trim(),
+    qty:+$('#qty').value||0, unit_price:+$('#price').value||0,
+    total_cost:ings.reduce((a,b)=>a+b.cost,0), ingredients:ings, notes:null };
+  if(!rec.item_name){ toast('Add an item name'); $('#item').focus(); return; }
+  $('#saveBtn').disabled=true;
+  let {error}=await sb.from('entries').insert(rec);
+  if(error && /ingredients/i.test(error.message)){ const {ingredients,...rest}=rec; ({error}=await sb.from('entries').insert(rest)); }
+  $('#saveBtn').disabled=false;
+  if(error){ toast('Error: '+error.message); return; }
+  ['item','qty','price'].forEach(id=>$('#'+id).value='');
+  resetIngs(); calc(); celebrate();
+  await load(); setTimeout(()=>show('history'),650);
+};
+
+// ---------- load + render ----------
+async function load(){
+  const {data,error}=await sb.from('entries').select('*')
+    .order('entry_date',{ascending:false}).order('created_at',{ascending:false}).limit(1000);
+  if(error){ toast('Load error'); return; }
+  cache=data||[]; renderChips(); render();
+}
+function renderChips(){
+  const out=[]; for(const e of cache){ if(!out.includes(e.item_name)) out.push(e.item_name); if(out.length>=4) break; }
+  $('#chips').innerHTML=out.map(n=>`<button class="chip" type="button">${esc(n)}</button>`).join('');
+  $$('#chips .chip').forEach(c=>c.onclick=()=>{$('#item').value=c.textContent; $('#qty').focus();});
+}
+$$('#range button').forEach(b=>b.onclick=()=>{$$('#range button').forEach(x=>x.classList.remove('on'));b.classList.add('on');RANGE=b.dataset.r;render();});
+const RLABEL={today:'Today',week:'Last 7 days',month:'This month',all:'All time'};
+function inRange(d){
+  const t=today();
+  if(RANGE==='today') return d===t;
+  if(RANGE==='all') return true;
+  if(RANGE==='week'){const diff=(new Date(t)-new Date(d))/864e5; return diff>=0&&diff<7;}
+  if(RANGE==='month') return d.slice(0,7)===t.slice(0,7);
+  return true;
+}
+function grouped(){
+  const rows=cache.filter(e=>inRange(e.entry_date)); let S=0,C=0; const byDay={};
+  for(const e of rows){ const sales=(+e.qty)*(+e.unit_price),cost=+e.total_cost; S+=sales;C+=cost;
+    (byDay[e.entry_date]||=[]).push({...e,sales,cost,profit:sales-cost}); }
+  return {byDay,S,C,P:S-C};
+}
+function render(){
+  const {byDay,S,C,P}=grouped();
+  $('#hLabel').textContent=RLABEL[RANGE];
+  const hp=$('#hProfit'); hp.textContent=money(P);
+  $('#hSales').textContent=money(S); $('#hCost').textContent=money(C);
+  $('#hMargin').textContent=S?pct(P/S*100):'—';
+  renderChart(byDay);
+  const days=Object.keys(byDay).sort().reverse();
+  if(!days.length){ $('#list').innerHTML=`<div class="empty"><span class="em">🍛</span><b>No records for ${RLABEL[RANGE].toLowerCase()}</b>Add a dish on the Add tab to see profit here.</div>`; return; }
+  $('#list').innerHTML=days.map(d=>{
+    const items=byDay[d], dp=items.reduce((a,b)=>a+b.profit,0);
+    return `<div class="day"><h3>${prettyDate(d)}<span class="dp num ${dp>=0?'pos':'neg'}">${money(dp)}</span></h3>${
+      items.map(e=>{
+        const m=e.sales?e.profit/e.sales*100:NaN;
+        const ing=(e.ingredients&&e.ingredients.length)?e.ingredients.map(i=>esc(i.name||'?')+' '+money(i.cost)).join(' · '):'';
+        return `<div class="item"><div style="min-width:0">
+          <div class="name">${esc(e.item_name)}</div>
+          <div class="meta num">${(+e.qty)||0}× @ ${money(e.unit_price)} · cost ${money(e.cost)}</div>
+          ${ing?`<div class="ingline">${ing}</div>`:''}
+        </div>
+        <div class="amt"><div class="p num ${e.profit>=0?'pos':'neg'}">${money(e.profit)}</div><div class="m num">${pct(m)} margin</div></div>
+        <button class="del" data-id="${e.id}" aria-label="Delete">×</button></div>`;
+      }).join('')
+    }</div>`;
+  }).join('');
+  $$('.del').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Delete this entry?'))return;
+    const {error}=await sb.from('entries').delete().eq('id',b.dataset.id);
+    if(error){toast('Delete failed');return;} toast('Deleted'); await load();
+  });
+}
+function renderChart(byDay){
+  const el=$('#chart'), days=Object.keys(byDay).sort().slice(-14);
+  if(days.length<2){ el.classList.add('hidden'); el.innerHTML=''; return; }
+  el.classList.remove('hidden');
+  const prof=days.map(d=>byDay[d].reduce((a,b)=>a+b.profit,0)), max=Math.max(1,...prof.map(Math.abs));
+  el.innerHTML=`<div class="ctitle">Daily profit · last ${days.length} days</div><div class="barwrap">${
+    days.map((d,i)=>{const p=prof[i],h=Math.max(4,Math.abs(p)/max*90);
+      return `<div class="bar" title="${prettyDate(d)}: ${money(p)}"><div class="col ${p<0?'neg':''}" style="height:${h}px"></div><div class="lbl">${new Date(d).getDate()}</div></div>`;
+    }).join('')}</div>`;
+}
+
+// ---------- repeat ----------
+$('#repeatBtn').onclick=()=>{
+  if(!cache.length){ toast('No past entries yet'); return; }
+  const last=cache[0];
+  $('#item').value=last.item_name; $('#price').value=last.unit_price||''; $('#qty').value=last.qty||'';
+  $('#ings').innerHTML='';
+  const ings=(last.ingredients&&last.ingredients.length)?last.ingredients:[{name:'',cost:last.total_cost||''}];
+  ings.forEach(i=>ingRow(i.name||'',i.cost||'')); if(!$('#ings').children.length) ingRow();
+  $('#date').value=today(); calc(); $('#qty').focus(); toast('Filled from "'+last.item_name+'"');
+};
+
+// ---------- PDF export ----------
+$('#pdfBtn').onclick=()=>{
+  const {byDay,S,C,P}=grouped();
+  const days=Object.keys(byDay).sort().reverse();
+  if(!days.length){ toast('Nothing to export'); return; }
+  if(!(window.jspdf&&window.jspdf.jsPDF)){ toast('PDF still loading, try again'); return; }
+  const { jsPDF }=window.jspdf;
+  const doc=new jsPDF('p','pt','a4');
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=40;
+  const AC=[249,115,22], INK=[36,29,25], MUT=[138,126,113], GRN=[21,128,61], RED=[185,28,28];
+
+  const header=()=>{
+    doc.setFillColor(...AC); doc.rect(0,0,W,92,'F');
+    doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(18);
+    doc.text('Kulhudhuffushi Kitchen',M,42);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10.5);
+    doc.text('Profit report  ·  '+RLABEL[RANGE],M,62);
+    doc.text('Generated '+new Date().toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}),M,78);
+  };
+  header();
+  let y=116;
+  // summary tiles
+  const tiles=[['SALES',money(S),INK],['COST',money(C),INK],['PROFIT',money(P),P<0?RED:GRN],['MARGIN',S?pct(P/S*100):'—',P<0?RED:GRN]];
+  const tw=(W-2*M-3*10)/4;
+  tiles.forEach((t,i)=>{ const x=M+i*(tw+10);
+    doc.setFillColor(245,239,232); doc.roundedRect(x,y,tw,58,8,8,'F');
+    doc.setTextColor(...MUT); doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.text(t[0],x+10,y+20);
+    doc.setTextColor(...t[2]); doc.setFontSize(12); doc.text(String(t[1]),x+10,y+42);
+  });
+  y+=58+22;
+
+  days.forEach(d=>{
+    const items=byDay[d], dp=items.reduce((a,b)=>a+b.profit,0);
+    if(y>H-120){ doc.addPage(); header(); y=116; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...INK);
+    doc.text(new Date(d).toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short',year:'numeric'}),M,y);
+    doc.setTextColor(...(dp<0?RED:GRN)); doc.text(money(dp),W-M,y,{align:'right'});
+    y+=8;
+    doc.autoTable({
+      startY:y, margin:{left:M,right:M},
+      head:[['Item','Plates','Price','Sales','Cost','Profit','Margin']],
+      body:items.map(e=>[e.item_name,String(+e.qty||0),money(e.unit_price),money(e.sales),money(e.cost),money(e.profit),pct(e.sales?e.profit/e.sales*100:NaN)]),
+      styles:{font:'helvetica',fontSize:9,cellPadding:6,textColor:INK,lineColor:[236,226,213],lineWidth:.5},
+      headStyles:{fillColor:INK,textColor:[255,255,255],fontStyle:'bold',fontSize:8},
+      alternateRowStyles:{fillColor:[250,247,242]},
+      columnStyles:{0:{cellWidth:'auto'},1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right',fontStyle:'bold'},6:{halign:'right'}},
+      didDrawPage:()=>header()
+    });
+    y=doc.lastAutoTable.finalY+22;
+  });
+
+  // footer page numbers
+  const n=doc.internal.getNumberOfPages();
+  for(let i=1;i<=n;i++){ doc.setPage(i);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...MUT);
+    doc.text('Kitchen Profit',M,H-20);
+    doc.text(`Page ${i} of ${n}`,W-M,H-20,{align:'right'});
+  }
+  doc.save(`Kitchen-profit-${RANGE}-${today()}.pdf`);
+  toast('PDF ready');
+};
+
+// ---------- nav + init ----------
+function show(v){
+  ['add','history'].forEach(x=>$('#view-'+x).classList.toggle('hidden',x!==v));
+  $$('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  window.scrollTo(0,0);
+  if(v==='history') render();
+}
+$$('.tabs button').forEach(b=>b.onclick=()=>show(b.dataset.v));
+
+(function init(){
+  $('#date').value=today();
+  sb=window.supabase.createClient(SB_URL,SB_KEY);
+  resetIngs(); calc(); load();
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+})();
+</script>
+</body>
+</html>
