@@ -5,6 +5,8 @@ import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 type Method = "email" | "phone";
+/** Phone (SMS) sign-in needs an SMS provider in Supabase; hidden until NEXT_PUBLIC_PHONE_AUTH=1. */
+const PHONE_AUTH = process.env.NEXT_PUBLIC_PHONE_AUTH === "1";
 
 function friendly(message: string) {
   const m = message.toLowerCase();
@@ -82,7 +84,7 @@ export function LoginForm() {
   async function forgot() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) return setError("Enter your email first.");
     setError(null);
-    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo: window.location.origin + "/login" });
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo: `${window.location.origin}/auth/callback?next=/reset-password` });
     if (error) setError(friendly(error.message));
     else setInfo("If that email has an account, a reset link is on its way.");
   }
@@ -116,7 +118,7 @@ export function LoginForm() {
       </button>
       <div className="flex items-center gap-3 text-sm text-muted"><span className="h-px flex-1 bg-line" />or use email<span className="h-px flex-1 bg-line" /></div>
 
-      <div role="tablist" className="grid grid-cols-2 rounded-xl bg-line/60 p-1">
+      {PHONE_AUTH && <div role="tablist" className="grid grid-cols-2 rounded-xl bg-line/60 p-1">
         {(["email", "phone"] as const).map((m) => (
           <button key={m} type="button" role="tab" aria-selected={method === m}
             onClick={() => { setMethod(m); setError(null); setInfo(null); }}
@@ -124,7 +126,7 @@ export function LoginForm() {
             {m === "email" ? "Email" : "Phone"}
           </button>
         ))}
-      </div>
+      </div>}
 
       <div key={method} className="rise space-y-4">
         {method === "email" ? (

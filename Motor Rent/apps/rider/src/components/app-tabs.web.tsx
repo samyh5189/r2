@@ -44,30 +44,40 @@ export function TabButton({ children, isFocused, ref: _ref, ...props }: TabTrigg
 }
 
 export function CustomTabList(props: TabListProps) {
+  return (
+    <View {...props} style={styles.outer}>
+      <NavBar>{props.children}</NavBar>
+    </View>
+  );
+}
+
+/** The glass brand bar. Used by the tab layout (floating) and by stack screens on web (see web-header). */
+export function NavBar({ children, leading }: { children: React.ReactNode; leading?: React.ReactNode }) {
   const t = useTheme();
   const compact = useWindowDimensions().width < 520;
   return (
-    <View {...props} style={styles.outer}>
-      <View
-        style={[
-          styles.inner,
-          { borderColor: t.border, backgroundColor: t.backgroundElement + 'D9' },
-          shadow(t.shadow, 1, 24),
-          { backdropFilter: 'blur(14px)' } as object,
-        ]}>
-        <View style={styles.brand}>
+    <View
+      style={[
+        styles.inner,
+        { borderColor: t.border, backgroundColor: t.backgroundElement + 'D9' },
+        shadow(t.shadow, 1, 24),
+        { backdropFilter: 'blur(14px)' } as object,
+      ]}>
+      {leading}
+      <View style={styles.brand}>
+        {!(leading && compact) && (
           <View style={[styles.mark, { backgroundColor: t.accent }]}>
             <ThemedText type="heading" style={{ color: t.accentText, fontSize: 15, lineHeight: 18 }}>RM</ThemedText>
           </View>
-          {!compact && (
-            <View>
-              <ThemedText type="heading" style={{ fontSize: 17, lineHeight: 20 }}>Rent a Motor</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary" style={{ fontSize: 11, lineHeight: 14 }}>Kulhudhuffushi Motor Rentals</ThemedText>
-            </View>
-          )}
-        </View>
-        <View style={styles.tabs}>{props.children}</View>
+        )}
+        {!compact && (
+          <View>
+            <ThemedText type="heading" style={{ fontSize: 17, lineHeight: 20 }}>Rent a Motor</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={{ fontSize: 11, lineHeight: 14 }}>Kulhudhuffushi Motor Rentals</ThemedText>
+          </View>
+        )}
       </View>
+      <View style={styles.tabs}>{children}</View>
     </View>
   );
 }

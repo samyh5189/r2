@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { requireStaff } from "@/lib/auth";
 import { dt, money, parseRange } from "@/lib/format";
 import { StatusBadge } from "../status-badge";
+import { CancelBooking } from "./cancel-booking";
 
 export const metadata = { title: "Bookings" };
 
@@ -31,7 +32,7 @@ async function BookingsTable() {
     <div className="overflow-x-auto rounded-xl border border-line">
       <table className="w-full text-left text-sm">
         <thead className="bg-panel text-muted">
-          <tr>{["Ref", "Rider", "Bike", "Period", "Total", "Status"].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
+          <tr>{["Ref", "Rider", "Bike", "Period", "Total", "Status", ""].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-line">
           {rows.map((r) => {
@@ -44,6 +45,7 @@ async function BookingsTable() {
                 <td className="whitespace-nowrap px-3 py-2 tabular-nums">{p ? `${dt(p.start)} → ${dt(p.end)}` : "—"}</td>
                 <td className="px-3 py-2 tabular-nums">{money(r.total, r.currency)}</td>
                 <td className="px-3 py-2"><StatusBadge status={r.status} /></td>
+                <td className="px-3 py-2">{(r.status === "held" || r.status === "confirmed") && <CancelBooking id={r.id} reference={r.reference} paid={r.status === "confirmed"} />}</td>
               </tr>
             );
           })}

@@ -29,6 +29,9 @@ function friendly(message: string) {
   return message;
 }
 
+/** Phone (SMS) sign-in needs an SMS provider in Supabase; hidden until EXPO_PUBLIC_PHONE_AUTH=1. */
+const PHONE_AUTH = process.env.EXPO_PUBLIC_PHONE_AUTH === '1';
+
 export default function SignInScreen() {
   const t = useTheme();
   const [method, setMethod] = useState<Method>('email');
@@ -50,7 +53,7 @@ export default function SignInScreen() {
 
             <SocialButtons onSignedIn={done} onBusy={setBusy} />
 
-            <View style={[styles.segment, { backgroundColor: t.backgroundSelected }]} accessibilityRole="tablist">
+            {PHONE_AUTH && <View style={[styles.segment, { backgroundColor: t.backgroundSelected }]} accessibilityRole="tablist">
               {(['email', 'phone'] as const).map((m) => (
                 <Pressable key={m} accessibilityRole="tab" accessibilityState={{ selected: method === m }} onPress={() => setMethod(m)}
                   style={[styles.segmentBtn, method === m && { backgroundColor: t.backgroundElement }]}>
@@ -59,7 +62,7 @@ export default function SignInScreen() {
                   </ThemedText>
                 </Pressable>
               ))}
-            </View>
+            </View>}
 
             <Animated.View key={method} entering={FadeIn.duration(250)} exiting={FadeOut.duration(150)} layout={LinearTransition} style={styles.form}>
               {method === 'email' ? <EmailForm onBusy={setBusy} /> : <PhoneForm onBusy={setBusy} />}
@@ -109,7 +112,8 @@ function EmailForm({ onBusy }: { onBusy: (b: boolean) => void }) {
   async function forgot() {
     if (!EMAIL_RE.test(cleanEmail)) return setError('Enter your email first.');
     setError(null);
-    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail);
+    const redirectTo = Platform.OS === 'web' ? `${window.location.origin}/reset-password` : 'motorrent://reset-password';
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo });
     setInfo(error ? null : 'If that email has an account, a reset link is on its way.');
     if (error) setError(friendly(error.message));
   }

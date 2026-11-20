@@ -3,6 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { webHeaderOption } from '@/components/web-header';
 import { Colors, Fonts } from '@/constants/theme';
 import { supabaseConfigured } from '@/lib/supabase';
 import { SessionProvider } from '@/lib/session';
@@ -37,8 +38,10 @@ export default function RootLayout() {
           animation: 'slide_from_right',
         }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="bike/[id]" options={{ title: 'Book a bike', headerBackTitle: 'Bikes' }} />
-          <Stack.Screen name="sign-in" options={{ title: 'Sign in', presentation: 'modal' }} />
+          <Stack.Screen name="bike/[id]" options={{ title: 'Book a bike', headerBackTitle: 'Bikes', ...webHeaderOption }} />
+          <Stack.Screen name="sign-in" options={{ title: 'Sign in', presentation: 'modal', ...webHeaderOption }} />
+          <Stack.Screen name="verify" options={{ title: 'Verify your identity', ...webHeaderOption }} />
+          <Stack.Screen name="reset-password" options={{ title: 'New password', ...webHeaderOption }} />
         </Stack>
       </ThemeProvider>
     </SessionProvider>

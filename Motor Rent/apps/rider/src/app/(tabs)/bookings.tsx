@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { FlatList, Platform, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, Easing } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -84,15 +84,25 @@ export default function BookingsScreen() {
           ListEmptyComponent={!loading ? (
             <EmptyState inline title="No rides yet" body="Your first ride is one tap away." action="Find a bike" onPress={() => router.navigate('/')} />
           ) : undefined}
-          renderItem={({ item, index }) => <RentalCard row={item} index={index} />}
+          renderItem={({ item, index }) => <RentalCard row={item} index={index} onChanged={load} />}
         />
       </SafeAreaView>
     </ThemedView>
   );
 }
 
-function RentalCard({ row, index }: { row: Row; index: number }) {
+function RentalCard({ row, index, onChanged }: { row: Row; index: number; onChanged: () => void }) {
   const t = useTheme();
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  async function cancel() {
+    if (Platform.OS === 'web' && !window.confirm(`Cancel reservation ${row.reference}?`)) return;
+    setCancelling(true); setCancelError(null);
+    const { error } = await supabase.rpc('cancel_my_booking', { b: row.id });
+    setCancelling(false);
+    if (error) return setCancelError(error.message.replace(/^.*?ERROR:\s*/i, ''));
+    onChanged();
+  }
   const r = parseRange(row.period);
   const s = STATUS[row.status] ?? { label: row.status, tone: 'neutral' as Tone };
   const live = row.status === 'active' || row.status === 'overdue' || row.status === 'confirmed';
@@ -115,7 +125,13 @@ function RentalCard({ row, index }: { row: Row; index: number }) {
           <ThemedText type="smallBold">{money(row.total, row.currency)}</ThemedText>
         </View>
       </Card>
-      {row.status === 'held' && <View style={{ marginTop: Spacing.two }}><TransferPayment booking={row} /></View>}
+      {row.status === 'held' && (
+        <View style={{ marginTop: Spacing.two, gap: Spacing.two }}>
+          <TransferPayment booking={row} onChange={onChanged} />
+          <Button variant="ghost" title={cancelling ? 'Cancelling…' : 'Cancel reservation'} onPress={cancel} disabled={cancelling} />
+          <ErrorText>{cancelError}</ErrorText>
+        </View>
+      )}
     </Animated.View>
   );
 }

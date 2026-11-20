@@ -62,6 +62,19 @@ export default function BikeScreen() {
   const [busy, setBusy] = useState<'quote' | 'book' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CreateBookingResponse | null>(null);
+  const [kyc, setKyc] = useState<'verified' | 'pending' | 'none' | null>(null);
+
+  // Tell riders up front if they still need to verify, instead of only after "Book".
+  useEffect(() => {
+    if (!session) return setKyc(null);
+    Promise.all([
+      supabase.from('profiles').select('kyc_status, licence_expires_on').eq('id', session.user.id).single(),
+      supabase.from('kyc_submissions').select('status').eq('profile_id', session.user.id).eq('status', 'pending').limit(1),
+    ]).then(([p, s]) => {
+      const ok = p.data?.kyc_status === 'approved' && p.data.licence_expires_on && new Date(p.data.licence_expires_on) > new Date();
+      setKyc(ok ? 'verified' : s.data?.length ? 'pending' : 'none');
+    });
+  }, [session]);
 
   useEffect(() => {
     if (!id) return;
@@ -99,7 +112,10 @@ export default function BikeScreen() {
       // TODO: present Stripe PaymentSheet with res.payment.clientSecret (@stripe/stripe-react-native).
       // The booking is confirmed by the server webhook, not by this screen.
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'KYC_REQUIRED') { setError(e.message); return router.push('/account'); }
+      if (e instanceof ApiError && (e.code === 'KYC_REQUIRED' || e.code === 'LICENCE_EXPIRES')) {
+        setError(e.message);
+        return router.push({ pathname: '/verify', params: { next: `/bike/${id}` } });
+      }
       if (e instanceof ApiError && (e.code === 'QUOTE_EXPIRED' || e.code === 'JUST_TAKEN')) setQuote(null);
       setError(e instanceof ApiError ? e.message : 'Booking failed. You have not been charged.');
     } finally { setBusy(null); }
@@ -183,6 +199,18 @@ export default function BikeScreen() {
               </View>
             </Card>
           </Animated.View>
+        )}
+
+        {kyc && kyc !== 'verified' && (
+          <Card style={{ borderColor: t.warning, gap: Spacing.two }}>
+            <Pill label={kyc === 'pending' ? 'Verification under review' : 'Verification needed'} tone="warning" />
+            <ThemedText type="small">
+              {kyc === 'pending'
+                ? 'We’re checking your documents. You can book as soon as you’re verified (usually within an hour).'
+                : 'Before your first rental, upload your driving licence, ID and a selfie. It takes about 2 minutes.'}
+            </ThemedText>
+            {kyc === 'none' && <Button variant="secondary" title="Verify my identity" onPress={() => router.push({ pathname: '/verify', params: { next: `/bike/${id}` } })} />}
+          </Card>
         )}
 
         <ErrorText>{error}</ErrorText>

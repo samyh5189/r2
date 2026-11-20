@@ -3,6 +3,7 @@ import { lateFee } from "@shared/pricing.ts";
 import { InspectionSubmit } from "@shared/schemas.ts";
 import { handler, HttpError, json } from "../_shared/http.ts";
 import { parseTstzRange } from "../_shared/range.ts";
+import { stripeClient } from "../_shared/stripe.ts";
 import { adminClient, parseJson, requireUser } from "../_shared/supabase.ts";
 
 const EARLY_PICKUP_MINUTES = 30;
@@ -79,7 +80,7 @@ Deno.serve(handler(async (req) => {
   await db.from("bookings").update({ status: "returned", returned_at: now.toISOString() }).eq("id", b.id).in("status", ["active", "overdue"]);
   if (fee > 0) {
     await db.from("payments").upsert({
-      booking_id: b.id, kind: "charge", provider: "stripe", idempotency_key: `${b.id}:late-fee`,
+      booking_id: b.id, kind: "charge", provider: stripeClient() ? "stripe" : "manual", idempotency_key: `${b.id}:late-fee`,
       amount: fee, currency: b.currency, status: "pending", recorded_by: user.id,
     }, { onConflict: "idempotency_key", ignoreDuplicates: true });
     // TODO: charge off-session (or capture from deposit) and notify the rider with the breakdown.

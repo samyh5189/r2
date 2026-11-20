@@ -1,4 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
+import { router } from 'expo-router';
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 
 import { supabase } from './supabase';
@@ -14,7 +15,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
       setSession(data.session);
       setLoading(false);
     });
-    const { data } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s);
+      if (event === 'PASSWORD_RECOVERY') setTimeout(() => router.push('/reset-password'), 0);
+    });
     return () => data.subscription.unsubscribe();
   }, []);
 

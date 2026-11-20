@@ -6,6 +6,7 @@ import { SignOutButton } from "./sign-out";
 const NAV = [
   { href: "/", label: "Today" },
   { href: "/bookings", label: "Bookings" },
+  { href: "/verifications", label: "Verifications" },
   { href: "/transfers", label: "Transfers" },
   { href: "/fleet", label: "Fleet" },
   { href: "/blocklist", label: "Blocklist" },

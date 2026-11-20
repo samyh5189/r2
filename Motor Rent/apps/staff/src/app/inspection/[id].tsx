@@ -2,7 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { SignaturePad } from '@/components/signature-pad';
 import { ThemedText } from '@/components/themed-text';
@@ -71,11 +71,15 @@ export default function InspectionScreen() {
       const [riderSignaturePath, staffSignaturePath] = await Promise.all([
         uploadSignature('rider', riderSig!), uploadSignature('staff', staffSig!),
       ]);
-      await callFunction('submit-inspection', {
+      const res = await callFunction<{ status: string; lateFee?: number }>('submit-inspection', {
         bookingId: id, phase, photoPaths, fuelLevel: fuel, odometerKm: odoNum, notes: notes || undefined,
         engineHours: noMeter ? null : Math.round(hrsNum * 10) / 10,
         riderSignaturePath, staffSignaturePath,
       });
+      if (res.lateFee && res.lateFee > 0) {
+        const msg = `Returned late. Collect a late fee of Rf ${(res.lateFee / 100).toFixed(2)} before closing.`;
+        if (Platform.OS === 'web') window.alert(msg); else Alert.alert('Late return', msg);
+      }
       router.back();
     } catch (e) {
       setError(e instanceof ApiError || e instanceof Error ? e.message : 'Submit failed.');
