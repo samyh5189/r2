@@ -33,6 +33,6 @@ export type QuoteResponse = {
 };
 
 export type CreateBookingResponse = {
-  booking: { id: string; reference: string; status: string; held_until: string | null };
-  payment: { provider: 'stripe'; clientSecret: string; heldUntil: string } | { provider: 'none'; note: string };
+  booking: { id: string; reference: string; status: string; held_until: string | null; total: number; currency: string };
+  payment: { provider: 'stripe'; clientSecret: string; heldUntil: string } | { provider: 'bank_transfer'; heldUntil: string };
 };

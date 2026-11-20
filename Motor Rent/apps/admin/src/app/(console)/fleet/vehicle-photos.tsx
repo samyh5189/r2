@@ -2,32 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { ImageCropper } from "@/components/image-cropper";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 export type Kind = "scooter" | "motorbike" | "car";
 const KINDS: Kind[] = ["scooter", "motorbike", "car"];
 const MAX_PHOTOS = 8;
-const MAX_EDGE = 1600;
 const BUCKET = "vehicle-photos";
-
-/**
- * Resize to ≤1600px and re-encode as JPEG in the browser. Re-encoding also strips EXIF
- * (GPS location, device serials) from phone photos before they become public.
- */
-async function prepare(file: File): Promise<Blob> {
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error(`${file.name}: use a JPEG, PNG or WebP image.`);
-  if (file.size > 25 * 1024 * 1024) throw new Error(`${file.name}: file is larger than 25 MB.`);
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.82));
-  if (!blob) throw new Error(`${file.name}: could not process this image.`);
-  return blob;
-}
 
 /** Storage path (`<vehicle>/<file>`) from a public URL in our bucket. */
 function pathOf(url: string) {
@@ -44,15 +25,18 @@ export function VehiclePhotos({
   const input = useRef<HTMLInputElement>(null);
   const [kind, setKind] = useState<Kind>(initialKind);
   const [photos, setPhotos] = useState<string[]>(initialPhotos);
+  const photosRef = useRef(initialPhotos);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [queue, setQueue] = useState<File[]>([]);
 
   async function save(nextKind: Kind, nextPhotos: string[]) {
     const { error } = await supabase.rpc("update_vehicle_listing", { v: vehicleId, p_kind: nextKind, p_photos: nextPhotos });
     if (error) throw new Error(error.message);
     setKind(nextKind);
     setPhotos(nextPhotos);
+    photosRef.current = nextPhotos;
     router.refresh();
   }
 
@@ -62,25 +46,27 @@ export function VehiclePhotos({
     try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : "Something went wrong."); } finally { setBusy(null); }
   }
 
+  /** Files go through the cropper one at a time; each confirmed crop is uploaded and published. */
   function upload(files: FileList | File[]) {
-    const list = Array.from(files);
-    if (!list.length) return;
+    const list = Array.from(files).filter((f) => {
+      const ok = /^image\/(jpeg|png|webp)$/.test(f.type) && f.size <= 25 * 1024 * 1024;
+      if (!ok) setError(`${f.name}: use a JPEG, PNG or WebP image under 25 MB.`);
+      return ok;
+    });
+    if (photos.length + list.length > MAX_PHOTOS) return setError(`A vehicle can have at most ${MAX_PHOTOS} photos.`);
+    setQueue((q) => [...q, ...list]);
+  }
+
+  function uploadCropped(blob: Blob) {
+    setQueue((q) => q.slice(1));
     run("Uploading…", async () => {
-      if (photos.length + list.length > MAX_PHOTOS) throw new Error(`A vehicle can have at most ${MAX_PHOTOS} photos.`);
-      const uploaded: string[] = [];
+      const path = `${vehicleId}/${crypto.randomUUID()}.jpg`;
+      const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: "image/jpeg", cacheControl: "31536000" });
+      if (error) throw new Error(error.message);
       try {
-        for (const file of list) {
-          const blob = await prepare(file);
-          const path = `${vehicleId}/${crypto.randomUUID()}.jpg`;
-          const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: "image/jpeg", cacheControl: "31536000" });
-          if (error) throw new Error(error.message);
-          uploaded.push(path);
-        }
-        const urls = uploaded.map((p) => supabase.storage.from(BUCKET).getPublicUrl(p).data.publicUrl);
-        await save(kind, [...photos, ...urls]);
+        await save(kind, [...photosRef.current, supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl]);
       } catch (e) {
-        // Publishing failed: don't leave orphaned files behind.
-        if (uploaded.length) await supabase.storage.from(BUCKET).remove(uploaded);
+        await supabase.storage.from(BUCKET).remove([path]); // don't leave orphaned files
         throw e;
       }
     });
@@ -104,6 +90,11 @@ export function VehiclePhotos({
 
   return (
     <div className="space-y-3">
+      {queue[0] && !busy && (
+        <ImageCropper key={`${queue[0].name}-${queue.length}`} file={queue[0]} aspect={4 / 3} outWidth={1600}
+          title={`Crop photo${queue.length > 1 ? ` (${queue.length} left)` : ""}`}
+          onDone={uploadCropped} onCancel={() => setQueue((q) => q.slice(1))} />
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm">
           <span className="text-muted">Type</span>

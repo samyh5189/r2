@@ -1,0 +1,37 @@
+import { Suspense } from "react";
+import { requireStaff } from "@/lib/auth";
+import { BankAccounts, type BankAccount } from "./bank-accounts";
+import { HeroSettings } from "./hero-settings";
+
+export const metadata = { title: "Settings" };
+
+export default function SettingsPage() {
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-semibold">Settings</h1>
+        <p className="text-sm text-muted">The home page photo and the bank accounts riders pay into.</p>
+      </div>
+      <Suspense fallback={<p className="animate-pulse text-muted">Loading…</p>}>
+        <Settings />
+      </Suspense>
+    </div>
+  );
+}
+
+async function Settings() {
+  const { db, user } = await requireStaff();
+  const canEdit = user.role === "manager" || user.role === "owner";
+  const [settings, accounts] = await Promise.all([
+    db.from("site_settings").select("hero_image_url, hero_credit, bank_transfer_note").single(),
+    db.from("bank_accounts").select("id, bank_name, account_name, account_number, currency, swift, note, active, sort").order("sort").order("created_at"),
+  ]);
+  if (settings.error || accounts.error) return <p role="alert" className="text-red-600">Could not load settings.</p>;
+  return (
+    <>
+      <HeroSettings url={settings.data.hero_image_url} credit={settings.data.hero_credit} note={settings.data.bank_transfer_note} canEdit={canEdit} />
+      <BankAccounts accounts={(accounts.data ?? []) as BankAccount[]} note={settings.data.bank_transfer_note}
+        hero={{ url: settings.data.hero_image_url, credit: settings.data.hero_credit }} canEdit={canEdit} />
+    </>
+  );
+}

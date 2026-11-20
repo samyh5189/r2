@@ -10,6 +10,7 @@ import { Card, ErrorText, Pill, PressableScale } from '@/components/ui';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing, TopNavInset } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/lib/format';
+import { useSiteSettings } from '@/lib/site';
 import { supabase } from '@/lib/supabase';
 
 type Bike = {
@@ -97,9 +98,13 @@ export default function BikesScreen() {
 
 function Hero({ count, from, wide }: { count: number; from: number | null; wide: boolean }) {
   const height = (wide ? 460 : 420) + TopNavInset;
+  const site = useSiteSettings();
+  const custom = site?.hero_image_url;
+  // Default photo is CC BY-SA 4.0 and must be credited.
+  const credit = custom ? site?.hero_credit : 'Sinamalé Bridge · Photo: Panda 51, CC BY-SA 4.0';
   return (
     <View style={styles.heroWrap}>
-      <KenBurns source={StockPhotos.hero} height={height} focus={{ top: '62%', left: '50%' }} scrimTop={0.7} scrimBottom={0.35}>
+      <KenBurns source={custom ? { uri: custom } : StockPhotos.hero} height={height} focus={{ top: custom ? '50%' : '55%', left: '50%' }} scrimTop={0.7} scrimBottom={0.35}>
         <View style={[styles.heroText, { paddingTop: TopNavInset + (wide ? Spacing.five : Spacing.four) }]}>
           <Animated.View entering={FadeInUp.duration(700)}>
             <ThemedText type="eyebrow" style={styles.onPhotoMuted}>Rent a Motor · Kulhudhuffushi</ThemedText>
@@ -120,6 +125,9 @@ function Hero({ count, from, wide }: { count: number; from: number | null; wide:
             <Stat label="to book" value="2 min" />
           </Animated.View>
         </View>
+        {!!credit && (
+          <ThemedText type="small" style={styles.credit} numberOfLines={1}>{credit}</ThemedText>
+        )}
       </KenBurns>
     </View>
   );
@@ -243,6 +251,7 @@ const styles = StyleSheet.create({
   },
   heroText: { position: 'absolute', left: 0, right: 0, top: 0, paddingHorizontal: Spacing.four, gap: Spacing.two },
   onPhoto: { color: '#FFFFFF' },
+  credit: { position: 'absolute', right: Spacing.three, bottom: Spacing.four + 4, fontSize: 10, lineHeight: 13, color: 'rgba(255,255,255,0.75)' },
   onPhotoMuted: { color: 'rgba(255,255,255,0.85)' },
   heroStats: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginTop: Spacing.two },
   stat: {

@@ -6,6 +6,7 @@ import Animated, { FadeIn, FadeInDown, LinearTransition, ZoomIn } from 'react-na
 
 import { KenBurns, Scrim, vehiclePhotos, type VehicleKind } from '@/components/photo';
 import { ThemedText } from '@/components/themed-text';
+import { TransferPayment } from '@/components/transfer-payment';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, ErrorText, Pill, PressableScale } from '@/components/ui';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
@@ -108,7 +109,7 @@ export default function BikeScreen() {
 
   const photos = bike ? vehiclePhotos(bike) : [];
 
-  if (result) return <Reserved reference={result.booking.reference} photo={photos[0]} title={title} />;
+  if (result) return <Reserved booking={result.booking} bankTransfer={result.payment.provider === 'bank_transfer'} photo={photos[0]} title={title} />;
 
   const plan = bike?.price_plans;
 
@@ -269,8 +270,11 @@ function Gallery({ photos, stock }: { photos: ReturnType<typeof vehiclePhotos>; 
 }
 
 /** Success: the vehicle photo with a confirmation check popping in. */
-function Reserved({ reference, photo, title }: { reference: string; photo?: ReturnType<typeof vehiclePhotos>[number]; title: string }) {
+function Reserved({ booking, bankTransfer, photo, title }: {
+  booking: CreateBookingResponse['booking']; bankTransfer: boolean; photo?: ReturnType<typeof vehiclePhotos>[number]; title: string;
+}) {
   const t = useTheme();
+  const reference = booking.reference;
   return (
     <ThemedView style={styles.flex}>
       <Stack.Screen options={{ title: 'Reserved' }} />
@@ -287,19 +291,20 @@ function Reserved({ reference, photo, title }: { reference: string; photo?: Retu
         </Animated.View>
         <Animated.View entering={FadeInDown.delay(400)} style={{ alignItems: 'center', gap: Spacing.one }}>
           <ThemedText type="subtitle" style={{ textAlign: 'center' }}>Reserved!</ThemedText>
-          <ThemedText themeColor="textSecondary" style={{ textAlign: 'center' }}>Complete payment within 15 minutes to confirm.</ThemedText>
+          <ThemedText themeColor="textSecondary" style={{ textAlign: 'center' }}>{bankTransfer ? 'Pay by bank transfer and upload the slip to confirm.' : 'Complete payment within 15 minutes to confirm.'}</ThemedText>
         </Animated.View>
         <Animated.View entering={FadeInDown.delay(550)}>
           <Card style={{ alignItems: 'center' }}>
             <ThemedText type="eyebrow" themeColor="textSecondary">Booking reference</ThemedText>
             <ThemedText type="subtitle" selectable style={{ letterSpacing: 2 }}>{reference}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>
-              Show this at the counter. You will get a confirmation by SMS and email.
+              Use it as the transfer remark and show it at the counter.
             </ThemedText>
           </Card>
         </Animated.View>
+        {bankTransfer && <TransferPayment booking={booking} />}
         <Animated.View entering={FadeInDown.delay(700)}>
-          <Button title="View my rentals" onPress={() => router.replace('/bookings')} />
+          <Button variant={bankTransfer ? 'secondary' : 'primary'} title="View my rentals" onPress={() => router.replace('/bookings')} />
         </Animated.View>
       </ScrollView>
     </ThemedView>

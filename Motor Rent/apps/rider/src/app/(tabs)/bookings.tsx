@@ -9,6 +9,7 @@ import { Image } from 'expo-image';
 import { StockPhotos, vehiclePhotos, type VehicleKind } from '@/components/photo';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { TransferPayment } from '@/components/transfer-payment';
 import { Button, Card, ErrorText, Pill } from '@/components/ui';
 import { BottomTabInset, MaxContentWidth, Spacing, TopNavInset } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -17,7 +18,7 @@ import { useSession } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
 
 type Row = {
-  id: string; reference: string; status: string; period: string; total: number; currency: 'MVR' | 'USD';
+  id: string; reference: string; status: string; period: string; total: number; currency: 'MVR' | 'USD'; held_until: string | null;
   vehicles: { make: string; model: string; plate: string; kind: VehicleKind; photos: string[] } | null;
 };
 
@@ -45,7 +46,7 @@ export default function BookingsScreen() {
     setLoading(true);
     const { data, error } = await supabase
       .from('bookings')
-      .select('id, reference, status, period, total, currency, vehicles(make, model, plate, kind, photos)')
+      .select('id, reference, status, period, total, currency, held_until, vehicles(make, model, plate, kind, photos)')
       .order('created_at', { ascending: false })
       .limit(50);
     setError(error ? 'Could not load your rentals.' : null);
@@ -114,6 +115,7 @@ function RentalCard({ row, index }: { row: Row; index: number }) {
           <ThemedText type="smallBold">{money(row.total, row.currency)}</ThemedText>
         </View>
       </Card>
+      {row.status === 'held' && <View style={{ marginTop: Spacing.two }}><TransferPayment booking={row} /></View>}
     </Animated.View>
   );
 }
@@ -149,7 +151,7 @@ function EmptyState({ title, body, action, onPress, inline }: { title: string; b
   const content = (
     <Animated.View entering={FadeInDown.duration(500)} style={styles.empty}>
       <View style={[styles.emptyArt, { borderColor: t.border }]}>
-        <Image source={StockPhotos.hero} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={{ top: '62%', left: '50%' }} transition={400} />
+        <Image source={StockPhotos.hero} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={{ top: '55%', left: '50%' }} transition={400} />
       </View>
       <ThemedText type="heading" style={{ textAlign: 'center' }}>{title}</ThemedText>
       <ThemedText themeColor="textSecondary" style={{ textAlign: 'center' }}>{body}</ThemedText>

@@ -5,7 +5,7 @@ They are fallbacks only: real vehicle photos uploaded in the admin console (Flee
 
 | File | Unsplash photo |
 | --- | --- |
-| hero.jpg | Scooter on a palm-lined road in daylight, Mirissa, Sri Lanka — Zoshua Colah — https://unsplash.com/photos/QnNnPmhhOlY |
+| hero.jpg | Aerial view of the Sinamalé Bridge, Malé, Maldives — Panda 51, Wikimedia Commons — https://commons.wikimedia.org/wiki/File:Aerial_view_of_the_Sinamal%C3%A9_Bridge.jpg — **CC BY-SA 4.0** (https://creativecommons.org/licenses/by-sa/4.0/); resized. Credit is shown on the home screen. |
 | male.jpg | Aerial view of Malé, Maldives — https://unsplash.com/photos/Fcopy8szaoM |
 | scooter.jpg | White scooter parked — https://unsplash.com/photos/2dwHYA4-UwA |
 | motorbike.jpg | Red motorcycle parked — Jusk Squidglysqutch — https://unsplash.com/photos/RgwO__H_XJs |

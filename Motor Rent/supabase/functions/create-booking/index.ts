@@ -6,7 +6,8 @@ import { parseTstzRange } from "../_shared/range.ts";
 import { stripeClient } from "../_shared/stripe.ts";
 import { adminClient, parseJson, requireUser } from "../_shared/supabase.ts";
 
-const HOLD_MINUTES = 15;
+const HOLD_MINUTES_CARD = 15;
+const HOLD_MINUTES_TRANSFER = 60; // time to make a bank transfer and upload the slip; extended on upload
 const MIN_AGE = 18; // TODO: confirm local legal minimum
 
 Deno.serve(handler(async (req) => {
@@ -25,6 +26,10 @@ Deno.serve(handler(async (req) => {
   if (!q || q.rider_id !== user.id) throw new HttpError(404, "QUOTE_NOT_FOUND", "Quote not found.");
   if (q.used_at) throw new HttpError(409, "QUOTE_USED", "This quote was already used.");
   if (new Date(q.expires_at) < new Date()) throw new HttpError(410, "QUOTE_EXPIRED", "Price expired, please refresh.");
+
+  // Staff blocklist (unpaid balances, damage, abuse). The rider only learns that they cannot book.
+  const { data: blocked } = await db.rpc("is_blocked", { u: user.id });
+  if (blocked) throw new HttpError(403, "ACCOUNT_BLOCKED", "This account cannot make bookings. Please contact the rental office.");
 
   // Identity gate: approved KYC, adult, licence valid for the whole rental.
   const { data: profile } = await db.from("profiles")
@@ -54,7 +59,7 @@ Deno.serve(handler(async (req) => {
     deposit: q.deposit,
     currency: q.currency,
     terms_version: input.acceptedTermsVersion,
-    held_until: new Date(Date.now() + HOLD_MINUTES * 60_000).toISOString(),
+    held_until: new Date(Date.now() + (stripeClient() ? HOLD_MINUTES_CARD : HOLD_MINUTES_TRANSFER) * 60_000).toISOString(),
   }).select("*").single();
 
   if (error) {
@@ -68,7 +73,7 @@ Deno.serve(handler(async (req) => {
 // deno-lint-ignore no-explicit-any
 async function withPayment(db: any, booking: any, user: { id: string; email?: string; phone?: string }) {
   const stripe = stripeClient();
-  if (!stripe) return { booking, payment: { provider: "none", note: "STRIPE_SECRET_KEY not set (dev mode)" } };
+  if (!stripe) return { booking, payment: { provider: "bank_transfer", heldUntil: booking.held_until } };
 
   const idempotencyKey = `${booking.id}:charge`;
   const { data: prior } = await db.from("payments").select("provider_ref").eq("idempotency_key", idempotencyKey).maybeSingle();
