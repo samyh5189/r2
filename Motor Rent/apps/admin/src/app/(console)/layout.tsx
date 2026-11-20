@@ -3,21 +3,45 @@ import { Suspense } from "react";
 import { requireStaff } from "@/lib/auth";
 import { SignOutButton } from "./sign-out";
 
-const NAV = [
+const NAV: { href: string; label: string; count?: "messages" | "kyc" | "slips" }[] = [
   { href: "/", label: "Today" },
-  { href: "/bookings", label: "Bookings" },
-  { href: "/verifications", label: "Verifications" },
-  { href: "/transfers", label: "Transfers" },
+  { href: "/bookings", label: "Bookings", count: "messages" },
+  { href: "/verifications", label: "Verifications", count: "kyc" },
+  { href: "/transfers", label: "Transfers", count: "slips" },
   { href: "/fleet", label: "Fleet" },
   { href: "/blocklist", label: "Blocklist" },
   { href: "/settings", label: "Settings" },
 ];
 
+/** Nav with counts of work waiting: unanswered rider messages, documents to check, slips to approve. */
+async function Nav() {
+  const { db } = await requireStaff();
+  const { data } = await db.rpc("staff_inbox_counts");
+  const counts = (data ?? {}) as Partial<Record<"messages" | "kyc" | "slips", number>>;
+  return <NavLinks counts={counts} />;
+}
+
+function NavLinks({ counts }: { counts: Partial<Record<"messages" | "kyc" | "slips", number>> }) {
+  return (
+    <nav className="flex flex-wrap gap-1">
+      {NAV.map((n) => {
+        const c = n.count ? counts[n.count] ?? 0 : 0;
+        return (
+          <Link key={n.href} href={n.href} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm hover:bg-panel">
+            {n.label}
+            {c > 0 && <span className="min-w-5 rounded-full bg-accent px-1.5 text-center text-[11px] font-bold leading-5 text-white" aria-label={`${c} waiting`}>{c}</span>}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 async function CurrentUser() {
   const { user } = await requireStaff();
   return (
     <div className="flex items-center gap-3 text-sm">
-      <span className="text-muted">{user.name ?? "Staff"} · {user.role}</span>
+      <span className="text-muted">{user.name ?? "Staff"} ({user.role})</span>
       <SignOutButton />
     </div>
   );
@@ -27,12 +51,13 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="flex flex-wrap items-center gap-4 border-b border-line px-4 py-3 sm:px-6">
-        <span className="leading-tight"><span className="block font-semibold">Rent a Motor</span><span className="block text-xs text-muted">Kulhudhuffushi Motor Rentals</span></span>
-        <nav className="flex flex-wrap gap-1">
-          {NAV.map((n) => (
-            <Link key={n.href} href={n.href} className="rounded-md px-3 py-1.5 text-sm hover:bg-panel">{n.label}</Link>
-          ))}
-        </nav>
+        <Link href="/" className="flex items-center gap-2 leading-tight">
+          <span className="plate text-sm">RM</span>
+          <span><span className="block font-display font-extrabold">Rent a Motor</span><span className="block text-xs text-muted">Kulhudhuffushi Motor Rentals</span></span>
+        </Link>
+        <Suspense fallback={<NavLinks counts={{}} />}>
+          <Nav />
+        </Suspense>
         <div className="ml-auto">
           <Suspense fallback={<span className="text-sm text-muted">…</span>}>
             <CurrentUser />

@@ -38,8 +38,8 @@ export function Button({
 }: { title: string; onPress: () => void; disabled?: boolean; loading?: boolean; variant?: 'primary' | 'secondary' | 'ghost'; icon?: ReactNode }) {
   const t = useTheme();
   const inactive = disabled || loading;
-  const bg = variant === 'primary' ? t.cta : variant === 'secondary' ? t.backgroundElement : 'transparent';
-  const fg = variant === 'primary' ? t.ctaText : t.text;
+  const bg = variant === 'primary' ? '#000000' : variant === 'secondary' ? t.backgroundElement : 'transparent';
+  const fg = variant === 'primary' ? '#FFFFFF' : t.text;
   return (
     <PressableScale
       accessibilityRole="button"
@@ -51,12 +51,13 @@ export function Button({
         styles.button,
         { backgroundColor: bg, opacity: inactive ? 0.5 : 1 },
         variant === 'secondary' && { borderWidth: 1, borderColor: t.border },
-        variant === 'primary' && { borderWidth: 1.5, borderColor: t.text },
+        variant === 'primary' && { borderWidth: 1.5, borderColor: '#8A9A9B' },
       ]}>
       {loading ? (
         <ActivityIndicator color={fg} />
       ) : (
         <View style={styles.buttonRow}>
+          {variant === 'primary' && <View pointerEvents="none" style={styles.rim} />}
           {icon}
           <ThemedText type="smallBold" style={{ color: fg, fontSize: 16, fontWeight: 700 }}>{title}</ThemedText>
         </View>
@@ -134,7 +135,9 @@ function hexToRgba(hex: string, a: number) {
 
 const styles = StyleSheet.create({
   button: { minHeight: 52, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.four },
-  buttonRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  buttonRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, alignSelf: 'stretch', justifyContent: 'center', minHeight: 48 },
+  // Thin white inner line, like the rim on a Maldivian number plate.
+  rim: { position: 'absolute', top: -0.5, bottom: -0.5, left: -20, right: -20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.65)', borderRadius: Radius.md - 3 },
   input: { minHeight: 54, borderWidth: 1.5, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 17 },
   card: { borderRadius: Radius.md, padding: Spacing.three, gap: Spacing.two, borderWidth: 1 },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 3, borderRadius: Radius.sm, alignSelf: 'flex-start' },

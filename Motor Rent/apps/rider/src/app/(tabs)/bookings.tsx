@@ -23,7 +23,8 @@ import { supabase } from '@/lib/supabase';
 type Row = {
   id: string; reference: string; status: string; period: string; total: number; currency: 'MVR' | 'USD'; held_until: string | null;
   vehicles: { make: string; model: string; plate: string; kind: VehicleKind; photos: string[] } | null;
-  booking_messages: { count: number }[];
+  msgs: { count: number }[];
+  last: { from_staff: boolean }[];
 };
 
 
@@ -38,8 +39,10 @@ export default function BookingsScreen() {
     setLoading(true);
     const { data, error } = await supabase
       .from('bookings')
-      .select('id, reference, status, period, total, currency, held_until, vehicles(make, model, plate, kind, photos), booking_messages(count)')
+      .select('id, reference, status, period, total, currency, held_until, vehicles(make, model, plate, kind, photos), msgs:booking_messages(count), last:booking_messages(from_staff, created_at)')
       .order('created_at', { ascending: false })
+      .order('created_at', { referencedTable: 'last', ascending: false })
+      .limit(1, { referencedTable: 'last' })
       .limit(50);
     setError(error ? 'Could not load your rentals.' : null);
     setRows((data as unknown as Row[]) ?? []);
@@ -100,7 +103,8 @@ function RentalCard({ row, index, onChanged }: { row: Row; index: number; onChan
   }
   const r = parseRange(row.period);
   const s = statusOf(row.status);
-  const msgs = row.booking_messages?.[0]?.count ?? 0;
+  const msgs = row.msgs?.[0]?.count ?? 0;
+  const replied = !!row.last?.[0]?.from_staff; // the office spoke last: worth opening
   const live = row.status === 'active' || row.status === 'overdue' || row.status === 'confirmed';
   return (
     <Animated.View>
@@ -127,6 +131,7 @@ function RentalCard({ row, index, onChanged }: { row: Row; index: number; onChan
         </View>
         <View style={styles.line}>
           <ThemedText type="smallBold" style={{ color: t.accent }}>{msgs ? `History and ${msgs} message${msgs === 1 ? '' : 's'}` : 'History and messages'}</ThemedText>
+          {replied && <Pill label="Office replied" tone="accent" />}
         </View>
       </Card>
       </PressableScale>

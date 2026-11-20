@@ -5,6 +5,9 @@ import { handler, HttpError, json } from "../_shared/http.ts";
 import { adminClient, parseJson, requireUser } from "../_shared/supabase.ts";
 
 const MAX_DAYS = 30;
+const MAX_AHEAD_DAYS = 60;
+const OPEN_HOUR = 7;   // keep in sync with apps/rider/src/components/date-time-picker.tsx
+const CLOSE_HOUR = 22;
 const HOUR = 3_600_000;
 
 Deno.serve(handler(async (req) => {
@@ -17,6 +20,17 @@ Deno.serve(handler(async (req) => {
   if (start.getTime() < Date.now() - 5 * 60_000) throw new HttpError(422, "START_IN_PAST", "Start time is in the past.");
   if (end.getTime() - start.getTime() < HOUR) throw new HttpError(422, "TOO_SHORT", "Minimum rental is 1 hour.");
   if (end.getTime() - start.getTime() > MAX_DAYS * 24 * HOUR) throw new HttpError(422, "TOO_LONG", `Maximum rental is ${MAX_DAYS} days.`);
+  if (start.getTime() > Date.now() + MAX_AHEAD_DAYS * 24 * HOUR) {
+    throw new HttpError(422, "TOO_FAR_AHEAD", `Bookings open ${MAX_AHEAD_DAYS} days ahead.`);
+  }
+  // Pickups and returns happen at the counter: 07:00–22:00 Maldives time (UTC+5, no DST).
+  const mvMinutes = (d: Date) => Math.floor(((d.getTime() + 5 * HOUR) % (24 * HOUR)) / 60_000);
+  for (const [what, d] of [["Pickup", start], ["Return", end]] as const) {
+    const m = mvMinutes(d);
+    if (m < OPEN_HOUR * 60 || m > CLOSE_HOUR * 60) {
+      throw new HttpError(422, "OUTSIDE_HOURS", `${what} must be between ${OPEN_HOUR}:00 and ${CLOSE_HOUR}:00 Maldives time.`);
+    }
+  }
 
   const { data: vehicle } = await db
     .from("vehicles")

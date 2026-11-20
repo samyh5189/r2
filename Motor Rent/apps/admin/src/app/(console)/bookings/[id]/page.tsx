@@ -6,6 +6,7 @@ import { requireStaff } from "@/lib/auth";
 import { dt, money, parseRange } from "@/lib/format";
 import { StatusBadge } from "../../status-badge";
 import { CancelBooking } from "../cancel-booking";
+import { Handover } from "./handover";
 
 export const metadata = { title: "Booking" };
 
@@ -28,7 +29,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 
 type B = {
   id: string; reference: string; status: string; period: string; total: number; deposit: number; currency: string; created_at: string; rider_id: string;
-  vehicles: { id: string; plate: string; make: string; model: string } | null;
+  vehicles: { id: string; plate: string; make: string; model: string; odometer_km: number; engine_hours: number | null } | null;
   branches: { name: string } | null;
   rider: { full_name: string | null; phone: string | null; avatar_path: string | null; kyc_status: string } | null;
 };
@@ -37,7 +38,7 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { db } = await requireStaff();
   const { data: b } = await db.from("bookings")
-    .select("id, reference, status, period, total, deposit, currency, created_at, rider_id, vehicles(id, plate, make, model), branches(name), rider:profiles!bookings_rider_id_fkey(full_name, phone, avatar_path, kyc_status)")
+    .select("id, reference, status, period, total, deposit, currency, created_at, rider_id, vehicles(id, plate, make, model, odometer_km, engine_hours), branches(name), rider:profiles!bookings_rider_id_fkey(full_name, phone, avatar_path, kyc_status)")
     .eq("id", id).maybeSingle<B>();
   if (!b) return <p role="alert" className="text-red-600">Booking not found (or not at your branch).</p>;
 
@@ -136,6 +137,10 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
         </div>
       </section>
       <section className="space-y-4">
+        {(b.status === "confirmed" || b.status === "active" || b.status === "overdue") && (
+          <Handover bookingId={b.id} phase={b.status === "confirmed" ? "pickup" : "return"} currency={b.currency} riderName={riderName}
+            lastOdometer={b.vehicles?.odometer_km ?? null} lastEngineHours={b.vehicles?.engine_hours != null ? Number(b.vehicles.engine_hours) : null} />
+        )}
         <h2 className="text-lg font-semibold">History &amp; messages</h2>
         <MessageComposer bookingId={b.id} />
         <Timeline entries={entries} />

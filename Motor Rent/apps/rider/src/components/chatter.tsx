@@ -5,6 +5,7 @@ import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated'
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { STAGE } from '@/lib/booking-status';
+import { addDays, fmtLongDate, fmtTime, sameMvDay } from '@/lib/mvtime';
 
 import { Avatar } from './avatar';
 import { ThemedText } from './themed-text';
@@ -21,18 +22,17 @@ export type ChatterItem = {
   | { kind: 'log'; text: string; tone?: 'success' | 'danger' | 'neutral'; note?: string | null }
 );
 
-const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
 function dayLabel(d: Date) {
   const now = new Date();
-  if (sameDay(d, now)) return 'Today';
-  if (sameDay(d, new Date(now.getTime() - 86_400_000))) return 'Yesterday';
-  return d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' });
+  if (sameMvDay(d, now)) return 'Today';
+  if (sameMvDay(d, addDays(now, -1))) return 'Yesterday';
+  return fmtLongDate(d);
 }
 function timeLabel(d: Date) {
   const mins = Math.round((Date.now() - d.getTime()) / 60_000);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins} min ago`;
-  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return fmtTime(d);
 }
 
 /**

@@ -3,24 +3,22 @@ import { ScrollView, StyleSheet, View, type ScrollViewInstance } from 'react-nat
 
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { addDays, fmtDayMonth, fmtTime, fmtWeekday, mvDayStart, mvMinutes, sameMvDay } from '@/lib/mvtime';
 
 import { ThemedText } from './themed-text';
 import { PressableScale } from './ui';
 
-/** Counter hours for pickups and returns (local time). */
+/** Counter hours for pickups and returns (Maldives time). Keep in sync with the quote function. */
 export const OPEN_HOUR = 7;
 export const CLOSE_HOUR = 22;
 const SLOT_MINUTES = 30;
 
-const startOfDay = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
-const sameDay = (a: Date, b: Date) => startOfDay(a).getTime() === startOfDay(b).getTime();
 
 /** All bookable slots on `day` at or after `min`. */
 export function slotsFor(day: Date, min: Date): Date[] {
   const out: Date[] = [];
   for (let m = OPEN_HOUR * 60; m <= CLOSE_HOUR * 60; m += SLOT_MINUTES) {
-    const s = startOfDay(day);
-    s.setMinutes(m);
+    const s = new Date(mvDayStart(day).getTime() + m * 60_000);
     if (s >= min) out.push(s);
   }
   return out;
@@ -29,7 +27,7 @@ export function slotsFor(day: Date, min: Date): Date[] {
 /** First bookable slot at or after `min`. */
 export function firstSlot(min: Date): Date {
   for (let i = 0; i < 60; i++) {
-    const day = new Date(startOfDay(min).getTime() + i * 86_400_000);
+    const day = addDays(mvDayStart(min), i);
     const s = slotsFor(day, min)[0];
     if (s) return s;
   }
@@ -42,8 +40,8 @@ export function DateTimePicker({ value, onChange, min, days = 30, label }: {
 }) {
   const t = useTheme();
   const dayList = useMemo(() => {
-    const first = startOfDay(min);
-    return Array.from({ length: days }, (_, i) => new Date(first.getTime() + i * 86_400_000))
+    const first = mvDayStart(min);
+    return Array.from({ length: days }, (_, i) => addDays(first, i))
       .filter((d) => slotsFor(d, min).length > 0);
   }, [min, days]);
   const times = useMemo(() => slotsFor(value, min), [value, min]);
@@ -56,28 +54,27 @@ export function DateTimePicker({ value, onChange, min, days = 30, label }: {
 
   function pickDay(d: Date) {
     // Keep the same clock time on the new day if possible, otherwise the first free slot.
-    const wanted = new Date(d);
-    wanted.setHours(value.getHours(), value.getMinutes(), 0, 0);
+    const wanted = new Date(mvDayStart(d).getTime() + mvMinutes(value) * 60_000);
     const slots = slotsFor(d, min);
     onChange(slots.find((s) => s.getTime() === wanted.getTime()) ?? slots.find((s) => s >= wanted) ?? slots[0]!);
   }
 
   const today = new Date();
-  const tomorrow = new Date(today.getTime() + 86_400_000);
-  const dayName = (d: Date) => sameDay(d, today) ? 'Today' : sameDay(d, tomorrow) ? 'Tomorrow' : d.toLocaleDateString(undefined, { weekday: 'short' });
+  const tomorrow = addDays(today, 1);
+  const dayName = (d: Date) => sameMvDay(d, today) ? 'Today' : sameMvDay(d, tomorrow) ? 'Tomorrow' : fmtWeekday(d);
 
   return (
     <View style={{ gap: Spacing.two }}>
       {label && <ThemedText type="smallBold">{label}</ThemedText>}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {dayList.map((d) => {
-          const sel = sameDay(d, value);
+          const sel = sameMvDay(d, value);
           return (
-            <PressableScale key={d.toDateString()} onPress={() => pickDay(d)} accessibilityRole="radio" accessibilityState={{ selected: sel }}
-              accessibilityLabel={d.toDateString()} scaleTo={0.93} lift={false}
+            <PressableScale key={d.getTime()} onPress={() => pickDay(d)} accessibilityRole="radio" accessibilityState={{ selected: sel }}
+              accessibilityLabel={`${fmtWeekday(d, 'long')} ${fmtDayMonth(d)}`} scaleTo={0.93} lift={false}
               style={[styles.day, { borderColor: sel ? t.accent : t.border, backgroundColor: sel ? t.accent : t.backgroundElement }]}>
               <ThemedText type="small" style={{ color: sel ? t.accentText : t.textSecondary, fontSize: 11, lineHeight: 14 }}>{dayName(d)}</ThemedText>
-              <ThemedText type="heading" style={{ color: sel ? t.accentText : t.text, fontSize: 17, lineHeight: 20 }}>{d.getDate()} {d.toLocaleDateString(undefined, { month: 'short' })}</ThemedText>
+              <ThemedText type="heading" style={{ color: sel ? t.accentText : t.text, fontSize: 17, lineHeight: 20 }}>{fmtDayMonth(d)}</ThemedText>
             </PressableScale>
           );
         })}
@@ -90,7 +87,7 @@ export function DateTimePicker({ value, onChange, min, days = 30, label }: {
               scaleTo={0.93} lift={false}
               style={[styles.time, { borderColor: sel ? t.accent : t.border, backgroundColor: sel ? t.accentSoft : t.backgroundElement }]}>
               <ThemedText type="smallBold" style={{ color: sel ? t.accent : t.text, fontVariant: ['tabular-nums'] }}>
-                {s.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                {fmtTime(s)}
               </ThemedText>
             </PressableScale>
           );
