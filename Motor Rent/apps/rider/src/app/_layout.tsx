@@ -3,6 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { Colors, Fonts } from '@/constants/theme';
 import { supabaseConfigured } from '@/lib/supabase';
 import { SessionProvider } from '@/lib/session';
 
@@ -18,11 +19,23 @@ export default function RootLayout() {
       </View>
     );
   }
+  const dark = colorScheme === 'dark';
+  const c = Colors[dark ? 'dark' : 'light'];
+  const base = dark ? DarkTheme : DefaultTheme;
+  const navTheme = {
+    ...base,
+    colors: { ...base.colors, primary: c.accent, background: c.background, card: c.background, text: c.text, border: c.border },
+  };
   return (
     <SessionProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <ThemeProvider value={navTheme}>
         <AnimatedSplashOverlay />
-        <Stack>
+        <Stack screenOptions={{
+          headerShadowVisible: false,
+          headerTitleStyle: { fontFamily: Fonts?.display, fontWeight: '700' },
+          contentStyle: { backgroundColor: c.background },
+          animation: 'slide_from_right',
+        }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="bike/[id]" options={{ title: 'Book a bike', headerBackTitle: 'Bikes' }} />
           <Stack.Screen name="sign-in" options={{ title: 'Sign in', presentation: 'modal' }} />

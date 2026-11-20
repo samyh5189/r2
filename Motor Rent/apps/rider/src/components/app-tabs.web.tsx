@@ -1,17 +1,12 @@
-import {
-  Tabs,
-  TabList,
-  TabTrigger,
-  TabSlot,
-  TabTriggerSlotProps,
-  TabListProps,
-} from 'expo-router/ui';
-import { Pressable, View, StyleSheet } from 'react-native';
+import { Tabs, TabList, TabTrigger, TabSlot, type TabTriggerSlotProps, type TabListProps } from 'expo-router/ui';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 import { ThemedText } from './themed-text';
-import { ThemedView } from './themed-view';
+import { shadow } from './ui';
 
 export default function AppTabs() {
   return (
@@ -35,69 +30,67 @@ export default function AppTabs() {
 }
 
 export function TabButton({ children, isFocused, ref: _ref, ...props }: TabTriggerSlotProps) {
+  const t = useTheme();
+  const pill = useAnimatedStyle(() => ({
+    opacity: withSpring(isFocused ? 1 : 0, { damping: 18 }),
+    transform: [{ scale: withSpring(isFocused ? 1 : 0.85, { damping: 14 }) }],
+  }));
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
-      <ThemedView
-        type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
-        style={styles.tabButtonView}>
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
-          {children}
-        </ThemedText>
-      </ThemedView>
+    <Pressable {...props} style={({ pressed }) => [styles.tab, pressed && !isFocused && { opacity: 0.75 }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.pill, { backgroundColor: t.accent }, pill]} />
+      <ThemedText type="smallBold" style={{ color: isFocused ? t.accentText : t.text }}>{children}</ThemedText>
     </Pressable>
   );
 }
 
 export function CustomTabList(props: TabListProps) {
+  const t = useTheme();
+  const compact = useWindowDimensions().width < 520;
   return (
-    <View {...props} style={styles.tabListContainer}>
-      <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={styles.brandText}>
-          Motor Rent
-        </ThemedText>
-
-        {props.children}
-
-      </ThemedView>
+    <View {...props} style={styles.outer}>
+      <View
+        style={[
+          styles.inner,
+          { borderColor: t.border, backgroundColor: t.backgroundElement + 'D9' },
+          shadow(t.shadow, 1, 24),
+          { backdropFilter: 'blur(14px)' } as object,
+        ]}>
+        <View style={styles.brand}>
+          <View style={[styles.mark, { backgroundColor: t.accent }]}>
+            <ThemedText type="heading" style={{ color: t.accentText, fontSize: 15, lineHeight: 18 }}>MR</ThemedText>
+          </View>
+          {!compact && <ThemedText type="heading" style={{ fontSize: 18 }}>Motor Rent</ThemedText>}
+        </View>
+        <View style={styles.tabs}>{props.children}</View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tabListContainer: {
+  outer: {
     position: 'absolute',
     width: '100%',
-    padding: Spacing.three,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  innerContainer: {
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.five,
-    borderRadius: Spacing.five,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexGrow: 1,
-    gap: Spacing.two,
-    maxWidth: MaxContentWidth,
-  },
-  brandText: {
-    marginRight: 'auto',
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  tabButtonView: {
-    paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
-  },
-  externalPressable: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    paddingTop: Spacing.three,
     alignItems: 'center',
-    gap: Spacing.one,
-    marginLeft: Spacing.three,
+    zIndex: 10,
   },
+  inner: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.two,
+    paddingLeft: Spacing.three,
+    paddingRight: Spacing.two,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginRight: 'auto' },
+  tabs: { flexDirection: 'row', gap: Spacing.one },
+  mark: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  tab: { paddingVertical: Spacing.two, paddingHorizontal: Spacing.three, borderRadius: Radius.pill, justifyContent: 'center' },
+  pill: { borderRadius: Radius.pill },
 });

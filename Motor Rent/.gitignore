@@ -15,3 +15,6 @@ supabase/.branches/
 
 # empty nested repo, not part of the project
 Untitled/
+
+# local browser-test output
+.playwright-mcp/

@@ -8,19 +8,30 @@ import { Button, ErrorText, Field } from '@/components/ui';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
-/** Phone OTP sign-in. Rate limits and lockout are enforced by Supabase Auth. */
+/** Staff sign-in: email + password, or phone OTP. No sign-up here; rate limits and lockout are enforced by Supabase Auth. */
 export default function SignInScreen() {
   const [phone, setPhone] = useState('+960');
   const [code, setCode] = useState('');
+  const [method, setMethod] = useState<'email' | 'phone'>('email');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const validPhone = /^\+\d{7,15}$/.test(phone.replace(/\s/g, ''));
 
+  async function emailSignIn() {
+    setBusy(true); setError(null);
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+    setBusy(false);
+    if (error) return setError(error.message.toLowerCase().includes('invalid login') ? 'Email or password is wrong.' : error.message);
+    router.replace('/');
+  }
+
   async function sendCode() {
     setBusy(true); setError(null);
-    const { error } = await supabase.auth.signInWithOtp({ phone: phone.replace(/\s/g, '') });
+    const { error } = await supabase.auth.signInWithOtp({ phone: phone.replace(/\s/g, ''), options: { shouldCreateUser: false } });
     setBusy(false);
     if (error) return setError(error.message);
     setStep('code');
@@ -38,13 +49,24 @@ export default function SignInScreen() {
     <ThemedView style={styles.flex}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         <View style={styles.body}>
-          {step === 'phone' ? (
+          {method === 'email' ? (
+            <>
+              <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none"
+                autoComplete="email" textContentType="emailAddress" autoFocus />
+              <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry
+                autoComplete="current-password" textContentType="password" onSubmitEditing={emailSignIn} />
+              <ErrorText>{error}</ErrorText>
+              <Button title="Sign in" onPress={emailSignIn} disabled={!email.trim() || !password} loading={busy} />
+              <Button title="Use phone instead" variant="secondary" onPress={() => { setMethod('phone'); setError(null); }} />
+            </>
+          ) : step === 'phone' ? (
             <>
               <ThemedText>We will text you a 6-digit code.</ThemedText>
               <Field label="Mobile number" value={phone} onChangeText={setPhone} keyboardType="phone-pad"
                 autoComplete="tel" textContentType="telephoneNumber" autoFocus />
               <ErrorText>{error}</ErrorText>
               <Button title="Send code" onPress={sendCode} disabled={!validPhone} loading={busy} />
+              <Button title="Use email instead" variant="secondary" onPress={() => { setMethod('email'); setError(null); }} />
             </>
           ) : (
             <>
