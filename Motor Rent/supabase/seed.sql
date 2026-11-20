@@ -1,6 +1,6 @@
 -- Local development seed data. Money in minor units (laari): 5000 = MVR 50.00
 insert into public.branches (id, name, address, lat, lng) values
-  ('00000000-0000-0000-0000-0000000000b1', 'Main Branch', 'Harbour Road', 4.1755, 73.5093);
+  ('00000000-0000-0000-0000-0000000000b1', 'Kulhudhuffushi', 'Kulhudhuffushi, Haa Dhaalu Atoll', 6.6224, 73.0702);
 
 insert into public.price_plans (id, name, hourly, daily, weekly, deposit, late_fee_per_hour) values
   ('00000000-0000-0000-0000-0000000000a1', 'Scooter 110–125cc', 5000, 30000, 150000, 100000, 7500),

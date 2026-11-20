@@ -23,7 +23,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="flex flex-wrap items-center gap-4 border-b border-line px-4 py-3 sm:px-6">
-        <span className="font-semibold">Motor Rent</span>
+        <span className="leading-tight"><span className="block font-semibold">Rent a Motor</span><span className="block text-xs text-muted">Kulhudhuffushi Motor Rentals</span></span>
         <nav className="flex gap-1">
           {NAV.map((n) => (
             <Link key={n.href} href={n.href} className="rounded-md px-3 py-1.5 text-sm hover:bg-panel">{n.label}</Link>

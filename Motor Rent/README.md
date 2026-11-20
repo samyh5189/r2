@@ -1,4 +1,4 @@
-# Motor Rent
+# Rent a Motor — Kulhudhuffushi Motor Rentals
 
 Scooter & motorbike rental: rider app (iOS, Android, web PWA), staff app (iOS, Android) and admin console (web), on one Supabase backend.
 

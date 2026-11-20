@@ -57,9 +57,14 @@ export function CustomTabList(props: TabListProps) {
         ]}>
         <View style={styles.brand}>
           <View style={[styles.mark, { backgroundColor: t.accent }]}>
-            <ThemedText type="heading" style={{ color: t.accentText, fontSize: 15, lineHeight: 18 }}>MR</ThemedText>
+            <ThemedText type="heading" style={{ color: t.accentText, fontSize: 15, lineHeight: 18 }}>RM</ThemedText>
           </View>
-          {!compact && <ThemedText type="heading" style={{ fontSize: 18 }}>Motor Rent</ThemedText>}
+          {!compact && (
+            <View>
+              <ThemedText type="heading" style={{ fontSize: 17, lineHeight: 20 }}>Rent a Motor</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" style={{ fontSize: 11, lineHeight: 14 }}>Kulhudhuffushi Motor Rentals</ThemedText>
+            </View>
+          )}
         </View>
         <View style={styles.tabs}>{props.children}</View>
       </View>

@@ -102,16 +102,16 @@ function Hero({ count, from, wide }: { count: number; from: number | null; wide:
       <KenBurns source={StockPhotos.hero} height={height} focus={{ top: '58%', left: '50%' }} scrimTop={0.7} scrimBottom={0.35}>
         <View style={[styles.heroText, { paddingTop: TopNavInset + (wide ? Spacing.five : Spacing.four) }]}>
           <Animated.View entering={FadeInUp.duration(700)}>
-            <ThemedText type="eyebrow" style={styles.onPhotoMuted}>Scooters · Motorbikes · Cars</ThemedText>
+            <ThemedText type="eyebrow" style={styles.onPhotoMuted}>Rent a Motor · Kulhudhuffushi</ThemedText>
           </Animated.View>
           <Animated.View entering={FadeInUp.delay(120).duration(700)}>
-            <ThemedText type="title" style={[styles.onPhoto, { fontSize: wide ? 58 : 42, lineHeight: wide ? 60 : 46 }]}>
-              Ride the island.
+            <ThemedText type="title" style={[styles.onPhoto, { fontSize: wide ? 58 : 36, lineHeight: wide ? 60 : 40 }]}>
+              Ride Kulhudhuffushi.
             </ThemedText>
           </Animated.View>
           <Animated.View entering={FadeInUp.delay(220).duration(700)}>
             <ThemedText style={[styles.onPhotoMuted, { maxWidth: 440 }]}>
-              Pick a vehicle, choose your time, collect the keys. Prices are fixed before you book.
+              Kulhudhuffushi Motor Rentals — scooters, motorbikes and cars. Pick one, choose your time, collect the keys.
             </ThemedText>
           </Animated.View>
           <Animated.View entering={FadeInUp.delay(320).duration(700)} style={styles.heroStats}>
