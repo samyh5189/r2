@@ -31,8 +31,33 @@ async function BookingsTable() {
   type Row = { id: string; reference: string; status: string; period: string; total: number; currency: string; rider_id: string; booking_messages: { from_staff: boolean }[]; vehicles: { id: string; plate: string; model: string } | null; profiles: { full_name: string | null; phone: string | null } | null };
   const rows = (data ?? []) as unknown as Row[];
   if (!rows.length) return <p className="text-muted">No bookings yet.</p>;
+  const action = (r: Row) => r.status === "confirmed" ? "Hand over" : r.status === "active" || r.status === "overdue" ? "Collect" : null;
   return (
-    <div className="overflow-x-auto rounded-xl border border-line">
+    <>
+    {/* Phones: one card per booking, whole card opens it. */}
+    <ul className="space-y-2 sm:hidden">
+      {rows.map((r) => {
+        const p = parseRange(r.period);
+        const unread = r.booking_messages?.[0] && !r.booking_messages[0].from_staff;
+        const act = action(r);
+        return (
+          <li key={r.id}>
+            <Link href={`/bookings/${r.id}${act ? "#handover" : ""}`} className="block space-y-1.5 rounded-xl border border-line bg-panel p-3 active:bg-line/40">
+              <div className="flex items-center gap-2">
+                <span className="plate text-xs">{r.reference}</span>
+                <StatusBadge status={r.status} />
+                {unread && <span className="rounded bg-sky-500/15 px-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300">New message</span>}
+                <span className="ml-auto text-sm font-semibold tabular-nums">{money(r.total, r.currency)}</span>
+              </div>
+              <div className="text-sm"><span className="font-medium">{r.profiles?.full_name ?? "—"}</span> <span className="text-muted">{r.vehicles?.plate} {r.vehicles?.model}</span></div>
+              {p && <div className="text-sm tabular-nums text-muted">{dt(p.start)} to {dt(p.end)}</div>}
+              {act && <div className="pt-1 text-sm font-semibold text-accent">{act}</div>}
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+    <div className="hidden overflow-x-auto rounded-xl border border-line sm:block">
       <table className="w-full text-left text-sm">
         <thead className="bg-panel text-muted">
           <tr>{["Ref", "Rider", "Bike", "Period", "Total", "Status", ""].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
@@ -62,5 +87,6 @@ async function BookingsTable() {
         </tbody>
       </table>
     </div>
+    </>
   );
 }

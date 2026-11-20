@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { requireStaff } from "@/lib/auth";
 import { dt, money, parseRange } from "@/lib/format";
@@ -18,8 +19,9 @@ export default function TodayPage() {
 
 async function Today() {
   const { db } = await requireStaff();
-  const now = new Date();
-  const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
+  // "Today" is the Maldives day (UTC+5); the server runs in UTC.
+  const MV = 5 * 3_600_000;
+  const dayStart = new Date(Math.floor((Date.now() + MV) / 86_400_000) * 86_400_000 - MV);
   const dayEnd = new Date(dayStart.getTime() + 86_400_000);
   const today = `[${dayStart.toISOString()},${dayEnd.toISOString()})`;
 
@@ -58,7 +60,7 @@ async function Today() {
           </div>
         ))}
       </div>
-      <BookingList title="Overdue — call these riders" rows={overdue} empty="Nothing overdue." />
+      <BookingList title="Overdue: call these riders" rows={overdue} empty="Nothing overdue." />
       <BookingList title="Pickups" rows={pickups} empty="No pickups scheduled today." />
       <BookingList title="Returns" rows={returns} empty="No returns due today." />
     </>
@@ -74,11 +76,18 @@ async function Today() {
               const p = parseRange(r.period);
               return (
                 <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
-                  <span className="font-mono">{r.reference}</span>
-                  <span>{r.vehicles?.plate} · {r.vehicles?.model}</span>
-                  <span className="text-muted">{r.profiles?.full_name ?? "—"} {r.profiles?.phone}</span>
-                  {p && <span className="tabular-nums text-muted">{dt(p.start)} → {dt(p.end)}</span>}
-                  <span className="ml-auto"><StatusBadge status={r.status} /></span>
+                  <Link href={`/bookings/${r.id}#handover`} className="plate text-xs">{r.reference}</Link>
+                  <span>{r.vehicles?.plate} {r.vehicles?.model}</span>
+                  <span className="text-muted">{r.profiles?.full_name ?? "—"}</span>
+                  {r.profiles?.phone && <a href={`tel:${r.profiles.phone.replace(/\s/g, "")}`} className="font-medium text-accent">{r.profiles.phone}</a>}
+                  {p && <span className="tabular-nums text-muted">{dt(p.start)} to {dt(p.end)}</span>}
+                  <span className="ml-auto flex items-center gap-3">
+                    <StatusBadge status={r.status} />
+                    {(r.status === "confirmed" || r.status === "active" || r.status === "overdue") && (
+                      <Link href={`/bookings/${r.id}#handover`} className="rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-inset ring-white/60">
+                        {r.status === "confirmed" ? "Hand over" : "Collect"}</Link>
+                    )}
+                  </span>
                 </li>
               );
             })}

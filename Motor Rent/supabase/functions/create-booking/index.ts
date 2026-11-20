@@ -64,7 +64,7 @@ Deno.serve(handler(async (req) => {
 
   if (error) {
     // 23P01 = exclusion violation: someone else booked it a moment ago, or maintenance.
-    if (error.code === "23P01") throw new HttpError(409, "JUST_TAKEN", "Sorry, this bike was just booked. Pick another time or bike.");
+    if (error.code === "23P01") throw new HttpError(409, "JUST_TAKEN", "Sorry, this bike was just booked for a time too close to yours. Pick another time or bike.");
     throw error;
   }
   return json(await withPayment(db, booking, user), 201);

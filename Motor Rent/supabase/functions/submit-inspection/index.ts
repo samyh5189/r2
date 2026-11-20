@@ -6,7 +6,7 @@ import { parseTstzRange } from "../_shared/range.ts";
 import { stripeClient } from "../_shared/stripe.ts";
 import { adminClient, parseJson, requireUser } from "../_shared/supabase.ts";
 
-const EARLY_PICKUP_MINUTES = 30;
+const EARLY_PICKUP_MINUTES = 15; // matches the 15-minute turnaround between rentals
 
 Deno.serve(handler(async (req) => {
   const db = adminClient();

@@ -57,3 +57,8 @@ h1 { font-weight: 900; }
 @media (prefers-reduced-motion: reduce) {
   .rise, .kenburns { animation: none !important; }
 }
+
+/* Phones: 16px form text stops iOS from zooming in on focus. */
+@media (max-width: 640px) {
+  input, select, textarea { font-size: 16px !important; }
+}

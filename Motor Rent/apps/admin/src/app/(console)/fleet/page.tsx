@@ -62,13 +62,13 @@ async function Fleet() {
             return (
               <li key={v.id} className={`overflow-hidden rounded-2xl border border-line bg-panel ${v.status === "retired" ? "opacity-60" : ""}`}>
                 <details className="group">
-                  <summary className="flex cursor-pointer list-none items-center gap-4 p-3 hover:bg-background/60 [&::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer list-none items-center gap-3 p-3 sm:gap-4 hover:bg-background/60 [&::-webkit-details-marker]:hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={cover} alt="" className={`h-16 w-24 flex-none rounded-lg object-cover ${v.photos.length ? "" : "opacity-60 grayscale"}`} />
+                    <img src={cover} alt="" className={`h-14 w-20 flex-none rounded-lg object-cover sm:h-16 sm:w-24 ${v.photos.length ? "" : "opacity-60 grayscale"}`} />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-2">
                         <span className="font-semibold">{v.make} {v.model}</span>
-                        <Link href={`/fleet/${v.id}`} className="font-mono text-sm text-muted hover:text-accent hover:underline" title="History">{v.plate} · history ›</Link>
+                        <Link href={`/fleet/${v.id}`} className="plate text-xs" title="Vehicle history">{v.plate}</Link>
                       </div>
                       <div className="text-sm text-muted">
                         <span className="capitalize">{v.kind}</span>
@@ -87,7 +87,7 @@ async function Fleet() {
                     {canEdit && (
                       <>
                         <div className="space-y-2">
-                          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">Details & price</h3>
+                          <h3 className="text-sm font-semibold text-muted">Details and price</h3>
                           <VehicleForm branches={branchOpts} plans={planOpts.length ? planOpts : [{ id: v.price_plan_id, name: v.price_plans?.name ?? "Current plan" }]}
                             initial={{ id: v.id, kind: v.kind, plate: v.plate, make: v.make, model: v.model, engine_cc: v.engine_cc, year: v.year,
                               branch_id: v.branch_id, price_plan_id: v.price_plan_id, status: v.status, odometer_km: v.odometer_km }} />

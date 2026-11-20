@@ -45,7 +45,7 @@ Deno.serve(handler(async (req) => {
 
   const period = `[${start.toISOString()},${end.toISOString()})`;
   const { data: available } = await db.rpc("vehicle_is_available", { v: input.vehicleId, p: period });
-  if (!available) throw new HttpError(409, "NOT_AVAILABLE", "This bike is already booked for that time.");
+  if (!available) throw new HttpError(409, "NOT_AVAILABLE", "This bike is booked around that time. We keep 15 minutes between rentals for cleaning and handover, so try a slightly later pickup or an earlier return.");
 
   const codes = input.extras.map((e) => e.code);
   const { data: extraRows } = codes.length
