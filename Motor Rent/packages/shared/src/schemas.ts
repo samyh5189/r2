@@ -3,7 +3,7 @@ import { z } from "zod";
 /** What a client may send to request a quote. Price is NEVER accepted from a client. */
 export const QuoteRequest = z
   .object({
-    vehicleId: z.uuid(),
+    vehicleId: z.guid(),
     start: z.iso.datetime({ offset: true }),
     end: z.iso.datetime({ offset: true }),
     extras: z
@@ -16,7 +16,7 @@ export const QuoteRequest = z
 export type QuoteRequest = z.infer<typeof QuoteRequest>;
 
 export const CreateBookingRequest = z.object({
-  quoteId: z.uuid(),
+  quoteId: z.guid(),
   acceptedTermsVersion: z.string().min(1),
 });
 export type CreateBookingRequest = z.infer<typeof CreateBookingRequest>;
@@ -24,7 +24,7 @@ export type CreateBookingRequest = z.infer<typeof CreateBookingRequest>;
 export const InspectionPhase = z.enum(["pickup", "return"]);
 
 export const InspectionSubmit = z.object({
-  bookingId: z.uuid(),
+  bookingId: z.guid(),
   phase: InspectionPhase,
   photoPaths: z.array(z.string().min(1)).min(6, "6 photos required (front, back, left, right, dash, damage close-ups)"),
   fuelLevel: z.number().int().min(0).max(8),
