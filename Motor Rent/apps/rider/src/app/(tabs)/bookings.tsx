@@ -10,9 +10,11 @@ import { StockPhotos, vehiclePhotos, type VehicleKind } from '@/components/photo
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { TransferPayment } from '@/components/transfer-payment';
-import { Button, Card, ErrorText, Pill } from '@/components/ui';
+import { useWebPullToRefresh } from '@/components/pull-to-refresh';
+import { Button, Card, ErrorText, Pill, PressableScale } from '@/components/ui';
 import { BottomTabInset, MaxContentWidth, Spacing, TopNavInset } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { statusOf } from '@/lib/booking-status';
 import { dateTime, money, parseRange } from '@/lib/format';
 import { useSession } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
@@ -20,20 +22,9 @@ import { supabase } from '@/lib/supabase';
 type Row = {
   id: string; reference: string; status: string; period: string; total: number; currency: 'MVR' | 'USD'; held_until: string | null;
   vehicles: { make: string; model: string; plate: string; kind: VehicleKind; photos: string[] } | null;
+  booking_messages: { count: number }[];
 };
 
-type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
-const STATUS: Record<string, { label: string; tone: Tone }> = {
-  held: { label: 'Awaiting payment', tone: 'warning' },
-  confirmed: { label: 'Confirmed', tone: 'success' },
-  active: { label: 'On the road', tone: 'accent' },
-  overdue: { label: 'Overdue — please return', tone: 'danger' },
-  returned: { label: 'Returned', tone: 'neutral' },
-  damage_claim: { label: 'Damage review', tone: 'warning' },
-  closed: { label: 'Completed', tone: 'neutral' },
-  expired: { label: 'Expired', tone: 'neutral' },
-  cancelled: { label: 'Cancelled', tone: 'neutral' },
-};
 
 export default function BookingsScreen() {
   const { session } = useSession();
@@ -46,7 +37,7 @@ export default function BookingsScreen() {
     setLoading(true);
     const { data, error } = await supabase
       .from('bookings')
-      .select('id, reference, status, period, total, currency, held_until, vehicles(make, model, plate, kind, photos)')
+      .select('id, reference, status, period, total, currency, held_until, vehicles(make, model, plate, kind, photos), booking_messages(count)')
       .order('created_at', { ascending: false })
       .limit(50);
     setError(error ? 'Could not load your rentals.' : null);
@@ -55,6 +46,7 @@ export default function BookingsScreen() {
   }, [session]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+  const pull = useWebPullToRefresh(load);
 
   if (!session) {
     return (
@@ -69,12 +61,14 @@ export default function BookingsScreen() {
 
   return (
     <ThemedView style={styles.flex}>
+      {pull.indicator}
       <SafeAreaView style={styles.flex} edges={['top']}>
         <FlatList
+          ref={pull.ref}
           data={rows}
           keyExtractor={(r) => r.id}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
+          refreshControl={Platform.OS !== 'web' ? <RefreshControl refreshing={loading} onRefresh={load} /> : undefined}
           ListHeaderComponent={
             <Animated.View entering={FadeInDown.duration(400)} style={{ gap: Spacing.one }}>
               <ThemedText type="subtitle">My rentals</ThemedText>
@@ -104,10 +98,13 @@ function RentalCard({ row, index, onChanged }: { row: Row; index: number; onChan
     onChanged();
   }
   const r = parseRange(row.period);
-  const s = STATUS[row.status] ?? { label: row.status, tone: 'neutral' as Tone };
+  const s = statusOf(row.status);
+  const msgs = row.booking_messages?.[0]?.count ?? 0;
   const live = row.status === 'active' || row.status === 'overdue' || row.status === 'confirmed';
   return (
     <Animated.View entering={FadeInDown.delay(index * 70).duration(450).springify()}>
+      <PressableScale onPress={() => router.push({ pathname: '/booking/[id]', params: { id: row.id } })} scaleTo={0.98}
+        accessibilityRole="button" accessibilityLabel={`Open rental ${row.reference}: history and messages`}>
       <Card>
         <View style={styles.line}>
           {row.vehicles && <Image source={vehiclePhotos(row.vehicles)[0]} style={styles.thumb} contentFit="cover" transition={300} />}
@@ -124,7 +121,12 @@ function RentalCard({ row, index, onChanged }: { row: Row; index: number; onChan
           <ThemedText type="small" themeColor="textSecondary" selectable>Ref {row.reference} · {row.vehicles?.plate}</ThemedText>
           <ThemedText type="smallBold">{money(row.total, row.currency)}</ThemedText>
         </View>
+        <View style={styles.line}>
+          <ThemedText type="small" themeColor="textSecondary">{msgs ? `${msgs} message${msgs === 1 ? '' : 's'} · ` : ''}History &amp; messages</ThemedText>
+          <ThemedText type="smallBold" style={{ color: t.accent }}>Open ›</ThemedText>
+        </View>
       </Card>
+      </PressableScale>
       {row.status === 'held' && (
         <View style={{ marginTop: Spacing.two, gap: Spacing.two }}>
           <TransferPayment booking={row} onChange={onChanged} />

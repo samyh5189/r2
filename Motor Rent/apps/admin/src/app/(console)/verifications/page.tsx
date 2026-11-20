@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { requireStaff } from "@/lib/auth";
 import { dt } from "@/lib/format";
@@ -48,7 +49,8 @@ async function List() {
         {!pending.length && <p className="rounded-2xl border border-dashed border-line p-6 text-center text-muted">Nothing to review.</p>}
         <ul className="space-y-4">
           {pending.map((r) => (
-            <li key={r.id}>
+            <li key={r.id} className="space-y-1">
+              <Link href={`/riders/${r.profile_id}`} className="text-xs font-semibold text-accent hover:underline">Rider history ›</Link>
               <KycReview sub={{
                 id: r.id, fullName: r.full_name, dob: r.date_of_birth, idType: r.id_type, idNumber: r.id_number,
                 licenceNumber: r.licence_number, licenceExpires: r.licence_expires_on, createdAt: r.created_at, phone: r.profile?.phone ?? null,
@@ -63,13 +65,13 @@ async function List() {
           <h2 className="text-lg font-semibold">Recently reviewed</h2>
           <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-panel">
             {done.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+              <li key={r.id}><Link href={`/riders/${r.profile_id}`} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm hover:bg-line/40">
                 <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.status === "approved" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-red-500/15 text-red-700 dark:text-red-400"}`}>{r.status}</span>
                 <span className="font-medium">{r.full_name}</span>
                 <span className="text-muted">licence {r.licence_number} · until {r.licence_expires_on}</span>
                 {r.note && <span className="text-muted">“{r.note}”</span>}
-                <span className="ml-auto text-muted">{r.reviewed_at ? dt(new Date(r.reviewed_at)) : ""}</span>
-              </li>
+                <span className="ml-auto text-muted">{r.reviewed_at ? dt(new Date(r.reviewed_at)) : ""} ›</span>
+              </Link></li>
             ))}
           </ul>
         </section>

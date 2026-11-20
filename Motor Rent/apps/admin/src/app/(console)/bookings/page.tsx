@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { requireStaff } from "@/lib/auth";
 import { dt, money, parseRange } from "@/lib/format";
@@ -21,11 +22,13 @@ async function BookingsTable() {
   const { db } = await requireStaff();
   const { data, error } = await db
     .from("bookings")
-    .select("id, reference, status, period, total, currency, created_at, vehicles(plate, model), profiles(full_name, phone)")
+    .select("id, reference, status, period, total, currency, created_at, rider_id, vehicles(id, plate, model), profiles(full_name, phone), booking_messages(from_staff, created_at)")
     .order("created_at", { ascending: false })
+    .order("created_at", { referencedTable: "booking_messages", ascending: false })
+    .limit(1, { referencedTable: "booking_messages" })
     .limit(200);
   if (error) return <p role="alert" className="text-red-600">Could not load bookings.</p>;
-  type Row = { id: string; reference: string; status: string; period: string; total: number; currency: string; vehicles: { plate: string; model: string } | null; profiles: { full_name: string | null; phone: string | null } | null };
+  type Row = { id: string; reference: string; status: string; period: string; total: number; currency: string; rider_id: string; booking_messages: { from_staff: boolean }[]; vehicles: { id: string; plate: string; model: string } | null; profiles: { full_name: string | null; phone: string | null } | null };
   const rows = (data ?? []) as unknown as Row[];
   if (!rows.length) return <p className="text-muted">No bookings yet.</p>;
   return (
@@ -39,9 +42,12 @@ async function BookingsTable() {
             const p = parseRange(r.period);
             return (
               <tr key={r.id}>
-                <td className="px-3 py-2 font-mono">{r.reference}</td>
-                <td className="px-3 py-2">{r.profiles?.full_name ?? "—"}<div className="text-muted">{r.profiles?.phone}</div></td>
-                <td className="px-3 py-2">{r.vehicles?.plate}<div className="text-muted">{r.vehicles?.model}</div></td>
+                <td className="px-3 py-2">
+                  <Link href={`/bookings/${r.id}`} className="font-mono font-semibold text-accent hover:underline">{r.reference}</Link>
+                  {r.booking_messages?.[0] && !r.booking_messages[0].from_staff && <div className="mt-0.5 w-fit rounded bg-sky-500/15 px-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300">New message</div>}
+                </td>
+                <td className="px-3 py-2"><Link href={`/riders/${r.rider_id}`} className="hover:underline">{r.profiles?.full_name ?? "—"}</Link><div className="text-muted">{r.profiles?.phone}</div></td>
+                <td className="px-3 py-2">{r.vehicles ? <Link href={`/fleet/${r.vehicles.id}`} className="hover:underline">{r.vehicles.plate}</Link> : null}<div className="text-muted">{r.vehicles?.model}</div></td>
                 <td className="whitespace-nowrap px-3 py-2 tabular-nums">{p ? `${dt(p.start)} → ${dt(p.end)}` : "—"}</td>
                 <td className="px-3 py-2 tabular-nums">{money(r.total, r.currency)}</td>
                 <td className="px-3 py-2"><StatusBadge status={r.status} /></td>

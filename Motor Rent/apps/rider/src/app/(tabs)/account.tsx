@@ -1,23 +1,26 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Image } from 'expo-image';
 
+import { Avatar } from '@/components/avatar';
 import { StockPhotos } from '@/components/photo';
+import { useWebPullToRefresh } from '@/components/pull-to-refresh';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Button, Card, Pill } from '@/components/ui';
+import { Button, Card, Pill, PressableScale } from '@/components/ui';
 import { BottomTabInset, MaxContentWidth, Spacing, TopNavInset } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError, callFunction } from '@/lib/api';
+import { changeAvatar, removeAvatar } from '@/lib/avatar';
 import { useSession } from '@/lib/session';
 import { useSiteSettings } from '@/lib/site';
 import { supabase } from '@/lib/supabase';
 
-type Profile = { full_name: string | null; phone: string | null; kyc_status: 'pending' | 'approved' | 'rejected'; licence_expires_on: string | null };
+type Profile = { avatar_path: string | null; full_name: string | null; phone: string | null; kyc_status: 'pending' | 'approved' | 'rejected'; licence_expires_on: string | null };
 
 
 export default function AccountScreen() {
@@ -28,14 +31,48 @@ export default function AccountScreen() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const site = useSiteSettings();
 
-  useFocusEffect(useCallback(() => {
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
     if (!session) return;
-    supabase.from('profiles').select('full_name, phone, kyc_status, licence_expires_on').eq('id', session.user.id).single()
-      .then(({ data }) => setProfile(data as Profile | null));
-    supabase.from('kyc_submissions').select('status, note').eq('profile_id', session.user.id)
-      .order('created_at', { ascending: false }).limit(1).maybeSingle()
-      .then(({ data }) => setSubmission(data as typeof submission));
-  }, [session]));
+    const [p, k] = await Promise.all([
+      supabase.from('profiles').select('avatar_path, full_name, phone, kyc_status, licence_expires_on').eq('id', session.user.id).single(),
+      supabase.from('kyc_submissions').select('status, note').eq('profile_id', session.user.id)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    setProfile(p.data as Profile | null);
+    setSubmission(k.data as typeof submission);
+  }, [session]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+  const pull = useWebPullToRefresh(load);
+  const refresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
+
+  async function photo(action: 'library' | 'camera' | 'remove') {
+    if (!session || !profile) return;
+    setPhotoBusy(true); setPhotoError(null);
+    try {
+      if (action === 'remove') {
+        if (profile.avatar_path) await removeAvatar(session.user.id, profile.avatar_path);
+        setProfile({ ...profile, avatar_path: null });
+      } else {
+        const path = await changeAvatar(session.user.id, profile.avatar_path, action === 'camera');
+        if (path) setProfile({ ...profile, avatar_path: path });
+      }
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : 'Something went wrong.');
+    } finally { setPhotoBusy(false); }
+  }
+  function photoMenu() {
+    if (Platform.OS === 'web') return photo('library');
+    Alert.alert('Profile photo', undefined, [
+      { text: 'Take photo', onPress: () => photo('camera') },
+      { text: 'Choose from library', onPress: () => photo('library') },
+      ...(profile?.avatar_path ? [{ text: 'Remove photo', style: 'destructive' as const, onPress: () => photo('remove') }] : []),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }
 
   if (!session) {
     return (
@@ -96,19 +133,32 @@ export default function AccountScreen() {
   return (
     <ThemedView style={styles.flex}>
       <SafeAreaView style={styles.flex} edges={['top']}>
-        <ScrollView contentContainerStyle={styles.body}>
+        {pull.indicator}
+        <ScrollView ref={pull.ref} contentContainerStyle={styles.body}
+          refreshControl={Platform.OS !== 'web' ? <RefreshControl refreshing={refreshing} onRefresh={refresh} /> : undefined}>
           <Animated.View entering={FadeInDown.duration(400)}>
             <ThemedText type="subtitle">Account</ThemedText>
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(80).duration(450)}>
             <Card style={styles.profile}>
-              <View style={[styles.avatar, { backgroundColor: t.accent }]}>
-                <ThemedText type="heading" style={{ color: t.accentText }}>{initials || 'R'}</ThemedText>
-              </View>
-              <View style={styles.flex}>
+              <PressableScale onPress={photoMenu} disabled={photoBusy || !profile} accessibilityRole="button"
+                accessibilityLabel={profile?.avatar_path ? 'Change profile photo' : 'Add profile photo'} scaleTo={0.94} lift={false}>
+                <Avatar path={profile?.avatar_path} name={name} size={64} />
+                <View style={[styles.camBadge, { backgroundColor: t.accent, borderColor: t.backgroundElement }]}>
+                  {photoBusy ? <ActivityIndicator size="small" color={t.accentText} /> : <ThemedText style={{ color: t.accentText, fontSize: 13, lineHeight: 16, fontWeight: '700' }}>{profile?.avatar_path ? '✎' : '+'}</ThemedText>}
+                </View>
+              </PressableScale>
+              <View style={[styles.flex, { gap: 2 }]}>
                 <ThemedText type="heading">{name}</ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">{contact}</ThemedText>
+                <View style={{ flexDirection: 'row', gap: Spacing.three }}>
+                  <ThemedText type="smallBold" style={{ color: t.accent }} onPress={photoMenu}>{profile?.avatar_path ? 'Change photo' : 'Add a photo'}</ThemedText>
+                  {Platform.OS === 'web' && profile?.avatar_path && (
+                    <ThemedText type="small" themeColor="textSecondary" onPress={() => photo('remove')}>Remove</ThemedText>
+                  )}
+                </View>
+                {photoError && <ThemedText type="small" style={{ color: t.danger }}>{photoError}</ThemedText>}
               </View>
             </Card>
           </Animated.View>
@@ -169,7 +219,7 @@ const styles = StyleSheet.create({
     gap: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center',
   },
   profile: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
-  avatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  camBadge: { position: 'absolute', right: -2, bottom: -2, width: 24, height: 24, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   steps: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginTop: Spacing.one },
   step: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },

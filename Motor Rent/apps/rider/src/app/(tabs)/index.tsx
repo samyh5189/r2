@@ -1,6 +1,7 @@
 import { Link } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { FlatList, Platform, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useWebPullToRefresh } from '@/components/pull-to-refresh';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 
 import { KenBurns, StockPhotos, vehiclePhotos, ZoomPhoto, type VehicleKind } from '@/components/photo';
@@ -48,6 +49,7 @@ export default function BikesScreen() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  const pull = useWebPullToRefresh(load);
 
   const kinds = useMemo(() => [...new Set(bikes.map((b) => b.kind))], [bikes]);
   const shown = filter === 'all' ? bikes : bikes.filter((b) => b.kind === filter);
@@ -58,14 +60,16 @@ export default function BikesScreen() {
 
   return (
     <ThemedView style={styles.flex}>
+      {pull.indicator}
       <FlatList
+        ref={pull.ref}
         data={shown}
         keyExtractor={(b) => b.id}
         numColumns={wide ? 2 : 1}
         key={wide ? 'grid' : 'list'}
         columnWrapperStyle={wide ? { gap: Spacing.three } : undefined}
         contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
+        refreshControl={Platform.OS !== 'web' ? <RefreshControl refreshing={loading} onRefresh={load} /> : undefined}
         ListHeaderComponent={
           <View style={{ gap: Spacing.three, marginBottom: Spacing.one }}>
             <Hero count={bikes.length} from={cheapest} wide={wide} />

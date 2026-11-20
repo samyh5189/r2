@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { Tabs, TabList, TabTrigger, TabSlot, type TabTriggerSlotProps, type TabListProps } from 'expo-router/ui';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
@@ -64,7 +65,8 @@ export function NavBar({ children, leading }: { children: React.ReactNode; leadi
         { backdropFilter: 'blur(14px)' } as object,
       ]}>
       {leading}
-      <View style={styles.brand}>
+      <Pressable onPress={() => router.navigate('/')} accessibilityRole="link" accessibilityLabel="Rent a Motor home"
+        style={({ pressed }) => [styles.brand, pressed && { opacity: 0.7 }, { cursor: 'pointer' } as object]}>
         {!(leading && compact) && (
           <View style={[styles.mark, { backgroundColor: t.accent }]}>
             <ThemedText type="heading" style={{ color: t.accentText, fontSize: 15, lineHeight: 18 }}>RM</ThemedText>
@@ -76,7 +78,7 @@ export function NavBar({ children, leading }: { children: React.ReactNode; leadi
             <ThemedText type="small" themeColor="textSecondary" style={{ fontSize: 11, lineHeight: 14 }}>Kulhudhuffushi Motor Rentals</ThemedText>
           </View>
         )}
-      </View>
+      </Pressable>
       <View style={styles.tabs}>{children}</View>
     </View>
   );

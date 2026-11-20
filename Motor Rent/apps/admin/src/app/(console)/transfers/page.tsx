@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { requireStaff } from "@/lib/auth";
 import { dt, money } from "@/lib/format";
@@ -52,7 +53,8 @@ async function Transfers() {
         {!pending.length && <p className="rounded-2xl border border-dashed border-line p-6 text-center text-muted">No slips waiting. 🎉</p>}
         <ul className="space-y-4">
           {pending.map((r) => r.bookings && (
-            <li key={r.id}>
+            <li key={r.id} className="space-y-1">
+              <Link href={`/bookings/${r.bookings.id}`} className="text-xs font-semibold text-accent hover:underline">Booking history &amp; messages ›</Link>
               <SlipReview accountNumbers={accountNumbers} slip={{
                 id: r.id, imageUrl: urlOf.get(r.path) ?? null, createdAt: r.created_at, riderName: r.rider?.full_name ?? "Rider",
                 riderOcr: r.ocr, booking: r.bookings,
@@ -67,14 +69,14 @@ async function Transfers() {
           <h2 className="text-lg font-semibold">Recently reviewed</h2>
           <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-panel">
             {done.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+              <li key={r.id}><Link href={r.bookings ? `/bookings/${r.bookings.id}` : "#"} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm hover:bg-line/40">
                 <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.status === "approved" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-red-500/15 text-red-700 dark:text-red-400"}`}>{r.status}</span>
                 <span className="font-mono">{r.bookings?.reference}</span>
                 <span>{r.rider?.full_name ?? "Rider"}</span>
                 <span className="tabular-nums">{r.amount != null ? money(r.amount, r.bookings?.currency) : r.bookings ? money(r.bookings.total, r.bookings.currency) : ""}</span>
                 {r.reject_reason && <span className="text-muted">“{r.reject_reason}”</span>}
-                <span className="ml-auto text-muted">{r.reviewed_at ? dt(new Date(r.reviewed_at)) : ""}</span>
-              </li>
+                <span className="ml-auto text-muted">{r.reviewed_at ? dt(new Date(r.reviewed_at)) : ""} ›</span>
+              </Link></li>
             ))}
           </ul>
         </section>

@@ -33,6 +33,9 @@ Deno.serve(handler(async (req) => {
   if (paths.length) await db.storage.from("kyc").remove(paths);
   await db.from("kyc_submissions").delete().eq("profile_id", user.id); // cascades kyc_documents rows of submissions
   await db.from("kyc_documents").delete().eq("profile_id", user.id);
+  // Profile photo
+  const { data: pics } = await db.storage.from("avatars").list(user.id, { limit: 100 });
+  if (pics?.length) await db.storage.from("avatars").remove(pics.map((f) => `${user.id}/${f.name}`));
 
   const { count } = await db.from("bookings").select("id", { count: "exact", head: true }).eq("rider_id", user.id);
   if (!count) {
@@ -41,7 +44,8 @@ Deno.serve(handler(async (req) => {
     return json({ deleted: true });
   }
 
-  await db.from("profiles").update({ full_name: "Deleted rider", phone: null, date_of_birth: null }).eq("id", user.id);
+  await db.from("profiles").update({ full_name: "Deleted rider", phone: null, date_of_birth: null, avatar_path: null }).eq("id", user.id);
+  await db.from("booking_messages").update({ author_name: "Deleted rider", author_avatar: null }).eq("author", user.id);
   const { error } = await db.auth.admin.updateUserById(user.id, {
     email: `deleted-${user.id}@deleted.invalid`, phone: "", user_metadata: {}, ban_duration: "876000h",
   });

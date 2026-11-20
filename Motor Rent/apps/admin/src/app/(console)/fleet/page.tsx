@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { requireStaff } from "@/lib/auth";
 import { money } from "@/lib/format";
@@ -67,7 +68,7 @@ async function Fleet() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-2">
                         <span className="font-semibold">{v.make} {v.model}</span>
-                        <span className="font-mono text-sm text-muted">{v.plate}</span>
+                        <Link href={`/fleet/${v.id}`} className="font-mono text-sm text-muted hover:text-accent hover:underline" title="History">{v.plate} · history ›</Link>
                       </div>
                       <div className="text-sm text-muted">
                         <span className="capitalize">{v.kind}</span>
