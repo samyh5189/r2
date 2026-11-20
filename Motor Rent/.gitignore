@@ -1,0 +1,17 @@
+node_modules/
+.turbo/
+dist/
+.next/
+.expo/
+ios/
+android/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+supabase/.temp/
+supabase/.branches/
+.DS_Store
+
+# empty nested repo, not part of the project
+Untitled/
