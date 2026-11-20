@@ -38,5 +38,6 @@ export const supabase = createClient(url || 'http://localhost:54321', anonKey ||
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: Platform.OS === 'web',
+    flowType: 'pkce', // OAuth returns a one-time code, never tokens in the URL
   },
 });

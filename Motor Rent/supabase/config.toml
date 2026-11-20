@@ -122,7 +122,7 @@ enabled = true
 # in emails.
 site_url = "https://motor-rent-rider.vercel.app"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://motor-rent-admin.vercel.app", "http://localhost:8081", "http://localhost:3000", "motorrent://"]
+additional_redirect_urls = ["https://motor-rent-rider.vercel.app/**", "https://motor-rent-admin.vercel.app/**", "http://localhost:8081/**", "http://localhost:3000/**", "motorrent://**"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).

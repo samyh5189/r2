@@ -9,7 +9,7 @@ export default function LoginPage() {
     <main className="grid flex-1 lg:grid-cols-2">
       <div className="relative hidden overflow-hidden lg:block">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/stock/hero.jpg" alt="" className="kenburns absolute inset-0 h-full w-full object-cover object-[50%_58%]" />
+        <img src="/stock/hero.jpg" alt="" className="kenburns absolute inset-0 h-full w-full object-cover object-[50%_62%]" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0b1020]/85 via-[#0b1020]/10 to-[#0b1020]/30" />
         <div className="rise absolute inset-x-10 bottom-10 text-white">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/80">Kulhudhuffushi Motor Rentals · Console</p>
@@ -20,7 +20,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm space-y-6">
           <div className="relative h-36 overflow-hidden rounded-2xl lg:hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/stock/hero.jpg" alt="" className="kenburns absolute inset-0 h-full w-full object-cover object-[50%_58%]" />
+            <img src="/stock/hero.jpg" alt="" className="kenburns absolute inset-0 h-full w-full object-cover object-[50%_62%]" />
           </div>
           <div className="rise">
             <h1 className="text-3xl font-bold tracking-tight">Rent a Motor</h1>

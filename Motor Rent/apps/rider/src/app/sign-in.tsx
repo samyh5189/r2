@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View
 import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 
 import { KenBurns, StockPhotos } from '@/components/photo';
+import { SocialButtons } from '@/components/social-buttons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, ErrorText, Field } from '@/components/ui';
@@ -33,6 +34,7 @@ export default function SignInScreen() {
   const [method, setMethod] = useState<Method>('email');
   const [, setBusy] = useState(false);
 
+
   return (
     <ThemedView style={styles.flex}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
@@ -45,6 +47,8 @@ export default function SignInScreen() {
               <ThemedText type="subtitle">Let’s get you riding</ThemedText>
               <ThemedText themeColor="textSecondary">Sign in to see prices, book and track your rentals.</ThemedText>
             </Animated.View>
+
+            <SocialButtons onSignedIn={done} onBusy={setBusy} />
 
             <View style={[styles.segment, { backgroundColor: t.backgroundSelected }]} accessibilityRole="tablist">
               {(['email', 'phone'] as const).map((m) => (
@@ -126,7 +130,7 @@ function EmailForm({ onBusy }: { onBusy: (b: boolean) => void }) {
         onSubmitEditing={() => valid && submit()} />
       <ErrorText>{error}</ErrorText>
       {info && <ThemedText type="small" themeColor="success" accessibilityRole="alert">{info}</ThemedText>}
-      <Button title={mode === 'signin' ? 'Sign in' : 'Create account'} onPress={submit} disabled={!valid} loading={busy} />
+      <Button variant="secondary" title={mode === 'signin' ? 'Sign in with email' : 'Create account'} onPress={submit} disabled={!valid} loading={busy} />
       <View style={styles.links}>
         <Button variant="ghost" title={mode === 'signin' ? 'New here? Create an account' : 'Have an account? Sign in'}
           onPress={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(null); setInfo(null); }} />
@@ -167,7 +171,7 @@ function PhoneForm({ onBusy }: { onBusy: (b: boolean) => void }) {
       <Field label="Mobile number" value={phone} onChangeText={setPhone} keyboardType="phone-pad"
         autoComplete="tel" textContentType="telephoneNumber" hint="We will text you a 6-digit code." />
       <ErrorText>{error}</ErrorText>
-      <Button title="Send code" onPress={sendCode} disabled={!validPhone} loading={busy} />
+      <Button variant="secondary" title="Send code" onPress={sendCode} disabled={!validPhone} loading={busy} />
     </>
   ) : (
     <>

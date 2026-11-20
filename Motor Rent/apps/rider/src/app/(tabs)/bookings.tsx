@@ -149,7 +149,7 @@ function EmptyState({ title, body, action, onPress, inline }: { title: string; b
   const content = (
     <Animated.View entering={FadeInDown.duration(500)} style={styles.empty}>
       <View style={[styles.emptyArt, { borderColor: t.border }]}>
-        <Image source={StockPhotos.hero} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={{ top: '58%', left: '50%' }} transition={400} />
+        <Image source={StockPhotos.hero} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={{ top: '62%', left: '50%' }} transition={400} />
       </View>
       <ThemedText type="heading" style={{ textAlign: 'center' }}>{title}</ThemedText>
       <ThemedText themeColor="textSecondary" style={{ textAlign: 'center' }}>{body}</ThemedText>

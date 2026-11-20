@@ -99,7 +99,7 @@ function Hero({ count, from, wide }: { count: number; from: number | null; wide:
   const height = (wide ? 460 : 420) + TopNavInset;
   return (
     <View style={styles.heroWrap}>
-      <KenBurns source={StockPhotos.hero} height={height} focus={{ top: '58%', left: '50%' }} scrimTop={0.7} scrimBottom={0.35}>
+      <KenBurns source={StockPhotos.hero} height={height} focus={{ top: '62%', left: '50%' }} scrimTop={0.7} scrimBottom={0.35}>
         <View style={[styles.heroText, { paddingTop: TopNavInset + (wide ? Spacing.five : Spacing.four) }]}>
           <Animated.View entering={FadeInUp.duration(700)}>
             <ThemedText type="eyebrow" style={styles.onPhotoMuted}>Rent a Motor · Kulhudhuffushi</ThemedText>
