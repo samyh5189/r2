@@ -5,7 +5,7 @@ import { Fonts } from '@/constants/theme';
 import { ThemedText } from './themed-text';
 
 /**
- * A registration plate: yellow, black rim, road-sign lettering. Used for vehicle plates and booking
+ * A Maldivian registration plate: black board, white lettering, thin white rim. Used for vehicle plates and booking
  * references, the two codes riders and staff read out to each other.
  */
 export function Plate({ children, size = 'md', label }: { children: string; size?: 'sm' | 'md' | 'lg'; label?: string }) {
@@ -26,7 +26,7 @@ const SIZES = {
 } as const;
 
 const styles = StyleSheet.create({
-  plate: { backgroundColor: '#FFC629', borderWidth: 1.5, borderColor: '#0C2B33', alignSelf: 'flex-start' },
-  inner: { borderWidth: 1, borderColor: 'rgba(12,43,51,0.35)', paddingVertical: 1 },
-  text: { color: '#0C2B33', fontFamily: Fonts.display, fontWeight: '900', textTransform: 'uppercase' },
+  plate: { backgroundColor: '#000000', borderWidth: 1.5, borderColor: '#8A9A9B', alignSelf: 'flex-start' },
+  inner: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.7)', paddingVertical: 1 },
+  text: { color: '#FFFFFF', fontFamily: Fonts.display, fontWeight: '900', textTransform: 'uppercase' },
 });
