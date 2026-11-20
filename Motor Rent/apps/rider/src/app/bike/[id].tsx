@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, Switch, useWindowDimensions, View, type NativeS
 import Animated, { FadeIn, FadeInDown, LinearTransition, ZoomIn } from 'react-native-reanimated';
 
 import { KenBurns, Scrim, vehiclePhotos, type VehicleKind } from '@/components/photo';
+import { DateTimePicker, firstSlot } from '@/components/date-time-picker';
 import { ThemedText } from '@/components/themed-text';
 import { TransferPayment } from '@/components/transfer-payment';
 import { ThemedView } from '@/components/themed-view';
@@ -24,10 +25,8 @@ const DURATIONS = [
   { label: '3 days', hours: 72 },
   { label: '1 week', hours: 168 },
 ];
-const START_OPTIONS = [
-  { label: 'In 1 hour', offsetHours: 1 },
-  { label: 'Tomorrow 9:00', offsetHours: null },
-];
+const MIN_RENTAL_HOURS = 1;
+const MAX_RENTAL_DAYS = 30;
 
 type BikeInfo = {
   kind: VehicleKind; photos: string[];
@@ -36,17 +35,6 @@ type BikeInfo = {
   price_plans: { hourly: number; daily: number; deposit: number; currency: 'MVR' | 'USD' } | null;
 };
 
-function nextStart(offsetHours: number | null): Date {
-  const d = new Date();
-  if (offsetHours === null) {
-    d.setDate(d.getDate() + 1);
-    d.setHours(9, 0, 0, 0);
-  } else {
-    d.setTime(d.getTime() + offsetHours * 3_600_000);
-    d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0); // round to quarter hour
-  }
-  return d;
-}
 
 export default function BikeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -54,8 +42,18 @@ export default function BikeScreen() {
   const t = useTheme();
 
   const [bike, setBike] = useState<BikeInfo | null>(null);
-  const [startIdx, setStartIdx] = useState(0);
-  const [hours, setHours] = useState(24);
+  // Earliest pickup: 1 hour from now, on a counter slot.
+  const [earliest] = useState(() => firstSlot(new Date(Date.now() + 60 * 60_000)));
+  const [start, setStartRaw] = useState(earliest);
+  const [end, setEnd] = useState(() => new Date(earliest.getTime() + 24 * 3_600_000));
+  const hours = Math.round((end.getTime() - start.getTime()) / 3_600_000);
+  const minEnd = useMemo(() => new Date(start.getTime() + MIN_RENTAL_HOURS * 3_600_000), [start]);
+  /** Moving the pickup keeps the rental length (snapped to a counter slot). */
+  function setStart(d: Date) {
+    const len = end.getTime() - start.getTime();
+    setStartRaw(d);
+    setEnd(firstSlot(new Date(d.getTime() + Math.max(len, MIN_RENTAL_HOURS * 3_600_000))));
+  }
   const [helmets, setHelmets] = useState(0);
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [accepted, setAccepted] = useState(false);
@@ -84,11 +82,9 @@ export default function BikeScreen() {
       .then(({ data }) => setBike(data as unknown as BikeInfo | null));
   }, [id]);
 
-  const start = useMemo(() => nextStart(START_OPTIONS[startIdx]!.offsetHours), [startIdx]);
-  const end = useMemo(() => new Date(start.getTime() + hours * 3_600_000), [start, hours]);
 
   // Any change invalidates the current quote — the price shown is always the server's price for THIS selection.
-  useEffect(() => { setQuote(null); setAccepted(false); }, [start, hours, helmets]);
+  useEffect(() => { setQuote(null); setAccepted(false); }, [start, end, helmets]);
 
   async function getQuote() {
     if (!session) return router.push('/sign-in');
@@ -155,12 +151,16 @@ export default function BikeScreen() {
           )}
         </Animated.View>
 
-        <Section label="When do you start?" delay={140}>
-          {START_OPTIONS.map((o, i) => <Chip key={o.label} label={o.label} selected={i === startIdx} onPress={() => setStartIdx(i)} />)}
+        <Animated.View entering={FadeInDown.delay(140).duration(450)}>
+          <DateTimePicker label="Pickup — day & time" value={start} onChange={setStart} min={earliest} days={MAX_RENTAL_DAYS} />
+        </Animated.View>
+        <Section label="Quick length" delay={200}>
+          {DURATIONS.map((d) => <Chip key={d.label} label={d.label} selected={d.hours === hours}
+            onPress={() => setEnd(new Date(start.getTime() + d.hours * 3_600_000))} />)}
         </Section>
-        <Section label="How long?" delay={200}>
-          {DURATIONS.map((d) => <Chip key={d.label} label={d.label} selected={d.hours === hours} onPress={() => setHours(d.hours)} />)}
-        </Section>
+        <Animated.View entering={FadeInDown.delay(230).duration(450)}>
+          <DateTimePicker label="Return — day & time" value={end} onChange={setEnd} min={minEnd} days={MAX_RENTAL_DAYS + 1} />
+        </Animated.View>
         <Section label="Extra helmets" delay={260}>
           {[0, 1, 2].map((n) => <Chip key={n} label={n === 0 ? 'None' : `+${n}`} selected={n === helmets} onPress={() => setHelmets(n)} />)}
         </Section>
@@ -169,7 +169,7 @@ export default function BikeScreen() {
           <Card style={styles.trip}>
             <TripPoint label="Pickup" value={dateTime(start)} color={t.success} />
             <View style={[styles.tripLine, { borderColor: t.border }]} />
-            <TripPoint label="Return by" value={dateTime(end)} color={t.accent} />
+            <TripPoint label={`Return by · ${hours < 24 ? `${hours} h` : `${Math.floor(hours / 24)} day${hours >= 48 ? 's' : ''}${hours % 24 ? ` ${hours % 24} h` : ''}`}`} value={dateTime(end)} color={t.accent} />
           </Card>
         </Animated.View>
 
