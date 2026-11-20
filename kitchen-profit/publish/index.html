@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
-<meta name="theme-color" content="#f97316">
+<meta name="theme-color" content="#ec4899">
 <title>Kulhudhuffushi Kitchen</title>
 
 <link rel="manifest" href="manifest.webmanifest">
@@ -19,22 +19,22 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
   :root{
-    --bg:#fbf7f2; --surface:#ffffff; --surface-2:#f5efe8; --line:#ece2d5;
-    --text:#241d19; --muted:#8a7e71; --faint:#b6a797;
-    --accent:#f97316; --accent-2:#fb9a3c; --accent-ink:#ffffff; --accent-soft:#fdeede;
-    --green:#15803d; --green-soft:#e7f4ec; --red:#c2410c; --red-text:#b91c1c; --red-soft:#fbeae2;
-    --shadow:0 1px 2px rgba(80,50,20,.05), 0 10px 30px rgba(80,50,20,.07);
-    --shadow-sm:0 1px 2px rgba(80,50,20,.06);
+    --bg:#fff5fa; --surface:#ffffff; --surface-2:#fdeaf3; --line:#fad7e8;
+    --text:#3a1f2d; --muted:#a06b85; --faint:#d0a5bc;
+    --accent:#ec4899; --accent-2:#f9a8d4; --accent-ink:#ffffff; --accent-soft:#fdeaf4;
+    --green:#0f9d6b; --green-soft:#e4f6ee; --red:#e11d48; --red-text:#be123c; --red-soft:#fde7ec;
+    --shadow:0 1px 2px rgba(190,60,130,.06), 0 10px 30px rgba(190,60,130,.10);
+    --shadow-sm:0 1px 2px rgba(190,60,130,.08);
     --r:22px; --r-sm:14px;
     font-synthesis-weight:none;
   }
   @media (prefers-color-scheme: dark){
     :root{
-      --bg:#15110d; --surface:#211a14; --surface-2:#2a221a; --line:#352b21;
-      --text:#f3ece3; --muted:#a89a8b; --faint:#7d7063;
-      --accent:#fb923c; --accent-2:#fcae63; --accent-ink:#1a1206; --accent-soft:#2a1d10;
-      --green:#4ade80; --green-soft:#16301f; --red:#fb7a4b; --red-text:#f87171; --red-soft:#331a11;
-      --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 32px rgba(0,0,0,.4);
+      --bg:#1a0f16; --surface:#271620; --surface-2:#32202c; --line:#3e2735;
+      --text:#f9ecf3; --muted:#cf9fb6; --faint:#946c81;
+      --accent:#f472b6; --accent-2:#f9a8d4; --accent-ink:#2b0f1d; --accent-soft:#3a1b2b;
+      --green:#34d399; --green-soft:#133026; --red:#fb7185; --red-text:#fda4af; --red-soft:#3a1420;
+      --shadow:0 1px 2px rgba(0,0,0,.45), 0 12px 32px rgba(0,0,0,.45);
       --shadow-sm:0 1px 2px rgba(0,0,0,.5);
     }
   }
@@ -86,9 +86,13 @@
     cursor:pointer;padding:4px 2px;display:flex;align-items:center;gap:4px}
 
   /* ingredients */
-  .ingrow{display:grid;grid-template-columns:1fr 96px 34px;gap:8px;margin-bottom:8px;align-items:center}
-  .ingrow input{padding:12px;font-size:1rem}
-  .ing-del{background:none;border:none;color:var(--faint);font-size:1.4rem;cursor:pointer;padding:4px;line-height:1}
+  .ingrow{background:var(--surface-2);border-radius:var(--r-sm);padding:12px;margin-bottom:10px}
+  .ingrow .ing-name{background:var(--surface);margin-bottom:9px;padding:11px 12px;font-size:1rem}
+  .ingline2{display:grid;grid-template-columns:1fr 14px 1fr 14px minmax(68px,auto) 26px;gap:6px;align-items:center}
+  .ingline2 input{background:var(--surface);padding:10px 8px;font-size:.95rem;text-align:center}
+  .ingline2 .op{color:var(--faint);font-weight:800;text-align:center;font-size:.9rem}
+  .ing-total{font-weight:800;font-size:.95rem;text-align:right;white-space:nowrap;color:var(--text)}
+  .ing-del{background:none;border:none;color:var(--faint);font-size:1.35rem;cursor:pointer;padding:0;line-height:1}
   .ing-del:active{color:var(--red-text)}
   .addline{background:transparent;border:1.5px dashed var(--line);color:var(--accent);
     border-radius:var(--r-sm);padding:12px;font-weight:700;font-size:.9rem;width:100%;cursor:pointer}
@@ -107,13 +111,13 @@
 
   button.primary{width:100%;background:var(--accent);color:var(--accent-ink);border:none;
     border-radius:var(--r-sm);padding:16px;font-size:1.05rem;font-weight:800;cursor:pointer;
-    box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 8px 20px rgba(249,115,22,.28);margin-top:16px}
+    box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 8px 20px rgba(236,72,153,.3);margin-top:16px}
   button.primary:active{transform:translateY(1px)}
   button.primary:disabled{opacity:.55;box-shadow:none}
 
   /* records hero */
   .hero{background:linear-gradient(135deg,var(--accent) 0%,var(--accent-2) 100%);
-    color:#fff;border-radius:var(--r);padding:20px;box-shadow:0 12px 30px rgba(249,115,22,.3);margin-bottom:14px}
+    color:#fff;border-radius:var(--r);padding:20px;box-shadow:0 12px 30px rgba(236,72,153,.32);margin-bottom:14px}
   .hero .cap{font-size:.75rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;opacity:.85}
   .hero .big{font-size:2.6rem;font-weight:800;letter-spacing:-.03em;margin:4px 0 2px;line-height:1}
   .hero .sub2{display:flex;gap:16px;font-size:.85rem;opacity:.95;margin-top:10px;flex-wrap:wrap}
@@ -175,6 +179,25 @@
     background:var(--text);color:var(--bg);padding:12px 20px;border-radius:999px;font-weight:700;font-size:.9rem;
     opacity:0;transition:.25s;pointer-events:none;z-index:60;box-shadow:var(--shadow)}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* export sheet */
+  .sheet{position:fixed;inset:0;z-index:65;display:flex;align-items:flex-end;justify-content:center;
+    background:rgba(20,12,6,.38);opacity:0;transition:opacity .2s}
+  .sheet.show{opacity:1}
+  .sheet[hidden]{display:none}
+  .sheet-card{background:var(--surface);width:100%;max-width:520px;border-radius:24px 24px 0 0;
+    padding:18px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:var(--shadow);
+    transform:translateY(24px);transition:transform .25s cubic-bezier(.2,1,.4,1)}
+  .sheet.show .sheet-card{transform:none}
+  .sheet-title{font-weight:800;font-size:1.1rem;margin:2px 4px 16px}
+  .sheet-title span{color:var(--muted);font-weight:600}
+  .sheet-opt{display:flex;align-items:center;gap:13px;width:100%;text-align:left;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:var(--r-sm);padding:14px;margin-bottom:10px;cursor:pointer}
+  .sheet-opt:active{border-color:var(--accent);background:var(--accent-soft)}
+  .sheet-opt .emo{font-size:1.4rem;flex:0 0 auto}
+  .sheet-opt .tx b{display:block;font-size:1rem;font-weight:800;color:var(--text)}
+  .sheet-opt .tx span{display:block;font-size:.82rem;color:var(--muted);margin-top:2px}
+  .sheet-cancel{width:100%;background:none;border:none;color:var(--muted);font-weight:700;padding:12px;cursor:pointer;font-size:.95rem;margin-top:2px}
 
   /* success peak */
   .success{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;
@@ -280,6 +303,15 @@
   </button>
 </div></nav>
 
+<div class="sheet" id="sheet" hidden><div class="sheet-card">
+  <div class="sheet-title">Export PDF <span id="sheetRange"></span></div>
+  <button class="sheet-opt" data-t="profit"><span class="emo">📈</span><span class="tx"><b>Overall profit report</b><span>Summary + profit per dish &amp; day</span></span></button>
+  <button class="sheet-opt" data-t="sales"><span class="emo">💰</span><span class="tx"><b>Sales report — detailed</b><span>Plates, price and sales per dish</span></span></button>
+  <button class="sheet-opt" data-t="cost"><span class="emo">🧾</span><span class="tx"><b>Cost report — detailed</b><span>Ingredient breakdown per dish</span></span></button>
+  <button class="sheet-opt" data-t="full"><span class="emo">📊</span><span class="tx"><b>Full report — all details</b><span>Profit, sales and ingredient costs</span></span></button>
+  <button class="sheet-cancel" id="sheetCancel">Cancel</button>
+</div></div>
+
 <div class="toast" id="toast"></div>
 <div class="success" id="success"><div class="ring">
   <svg viewBox="0 0 52 52"><path class="chk" d="M14 27l8 8 16-17"/></svg>
@@ -302,20 +334,31 @@ function celebrate(){const s=$('#success');s.classList.add('show');setTimeout(()
 $$('.cur').forEach(e=>e.textContent=CUR);
 
 // ---------- ingredients ----------
-function ingRow(name='',cost=''){
+function ingRow(name='',qty='',price=''){
   const d=document.createElement('div'); d.className='ingrow';
-  d.innerHTML=`<input class="ing-name" placeholder="e.g. Rice, Gas…" autocomplete="off">
-    <input class="ing-cost num" type="number" inputmode="decimal" placeholder="0" min="0">
-    <button class="ing-del" type="button" aria-label="Remove">×</button>`;
+  d.innerHTML=`<input class="ing-name" placeholder="Ingredient (e.g. Rice, Gas…)" autocomplete="off">
+    <div class="ingline2">
+      <input class="ing-qty num" type="number" inputmode="decimal" placeholder="Qty" min="0">
+      <span class="op">×</span>
+      <input class="ing-price num" type="number" inputmode="decimal" placeholder="Price" min="0">
+      <span class="op">=</span>
+      <span class="ing-total num">${money(0)}</span>
+      <button class="ing-del" type="button" aria-label="Remove">×</button>
+    </div>`;
   d.querySelector('.ing-name').value=name;
-  d.querySelector('.ing-cost').value=cost;
+  d.querySelector('.ing-qty').value=qty;
+  d.querySelector('.ing-price').value=price;
+  const upd=()=>{ const t=(+d.querySelector('.ing-qty').value||0)*(+d.querySelector('.ing-price').value||0);
+    d.querySelector('.ing-total').textContent=money(t); calc(); };
   d.querySelector('.ing-del').onclick=()=>{ d.remove(); if(!$('#ings').children.length) ingRow(); calc(); };
-  d.querySelectorAll('input').forEach(i=>i.addEventListener('input',calc));
-  $('#ings').appendChild(d); return d;
+  d.querySelectorAll('input').forEach(i=>i.addEventListener('input',upd));
+  $('#ings').appendChild(d); upd(); return d;
 }
-const getIngredients=()=>[...$$('#ings .ingrow')].map(r=>({
-  name:r.querySelector('.ing-name').value.trim(), cost:+r.querySelector('.ing-cost').value||0
-})).filter(x=>x.name||x.cost);
+const getIngredients=()=>[...$$('#ings .ingrow')].map(r=>{
+  const name=r.querySelector('.ing-name').value.trim();
+  const qty=+r.querySelector('.ing-qty').value||0, price=+r.querySelector('.ing-price').value||0;
+  return {name, qty, price, cost:qty*price};
+}).filter(x=>x.name||x.cost);
 const ingTotal=()=>getIngredients().reduce((a,b)=>a+b.cost,0);
 const resetIngs=()=>{ $('#ings').innerHTML=''; ingRow(); };
 $('#addIng').onclick=()=>ingRow();
@@ -389,7 +432,9 @@ function render(){
     return `<div class="day"><h3>${prettyDate(d)}<span class="dp num ${dp>=0?'pos':'neg'}">${money(dp)}</span></h3>${
       items.map(e=>{
         const m=e.sales?e.profit/e.sales*100:NaN;
-        const ing=(e.ingredients&&e.ingredients.length)?e.ingredients.map(i=>esc(i.name||'?')+' '+money(i.cost)).join(' · '):'';
+        const ing=(e.ingredients&&e.ingredients.length)?e.ingredients.map(i=>
+          esc(i.name||'?')+((i.qty!=null&&i.price!=null)?` ${i.qty}×${money(i.price)}`:' '+money(i.cost))
+        ).join(' · '):'';
         return `<div class="item"><div style="min-width:0">
           <div class="name">${esc(e.item_name)}</div>
           <div class="meta num">${(+e.qty)||0}× @ ${money(e.unit_price)} · cost ${money(e.cost)}</div>
@@ -423,13 +468,30 @@ $('#repeatBtn').onclick=()=>{
   const last=cache[0];
   $('#item').value=last.item_name; $('#price').value=last.unit_price||''; $('#qty').value=last.qty||'';
   $('#ings').innerHTML='';
-  const ings=(last.ingredients&&last.ingredients.length)?last.ingredients:[{name:'',cost:last.total_cost||''}];
-  ings.forEach(i=>ingRow(i.name||'',i.cost||'')); if(!$('#ings').children.length) ingRow();
+  const ings=(last.ingredients&&last.ingredients.length)?last.ingredients:[{name:'',qty:1,price:last.total_cost||''}];
+  ings.forEach(i=>{
+    if(i.qty!=null||i.price!=null) ingRow(i.name||'', i.qty??'', i.price??'');
+    else ingRow(i.name||'', 1, i.cost||''); // legacy {name,cost}
+  });
+  if(!$('#ings').children.length) ingRow();
   $('#date').value=today(); calc(); $('#qty').focus(); toast('Filled from "'+last.item_name+'"');
 };
 
 // ---------- PDF export ----------
 $('#pdfBtn').onclick=()=>{
+  if(!Object.keys(grouped().byDay).length){ toast('Nothing to export'); return; }
+  $('#sheetRange').textContent='· '+RLABEL[RANGE];
+  const s=$('#sheet'); s.hidden=false; requestAnimationFrame(()=>s.classList.add('show'));
+};
+function closeSheet(){ const s=$('#sheet'); s.classList.remove('show'); setTimeout(()=>{s.hidden=true;},220); }
+$('#sheetCancel').onclick=closeSheet;
+$('#sheet').onclick=e=>{ if(e.target.id==='sheet') closeSheet(); };
+$$('.sheet-opt').forEach(b=>b.onclick=()=>{ closeSheet(); setTimeout(()=>buildPDF(b.dataset.t),140); });
+
+const lineTotal=i => i.cost!=null ? i.cost : ((+i.qty||0)*(+i.price||0));
+const allItems=g => Object.values(g).flat();
+
+function buildPDF(type){
   const {byDay,S,C,P}=grouped();
   const days=Object.keys(byDay).sort().reverse();
   if(!days.length){ toast('Nothing to export'); return; }
@@ -437,20 +499,27 @@ $('#pdfBtn').onclick=()=>{
   const { jsPDF }=window.jspdf;
   const doc=new jsPDF('p','pt','a4');
   const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=40;
-  const AC=[249,115,22], INK=[36,29,25], MUT=[138,126,113], GRN=[21,128,61], RED=[185,28,28];
+  const AC=[236,72,153], INK=[36,29,25], SUB=[90,78,66], MUT=[138,126,113], GRN=[21,128,61], RED=[185,28,28];
+  const TITLES={profit:'Profit report',sales:'Sales report — detailed',cost:'Cost report — detailed',full:'Full report — all details'};
+  const title=TITLES[type]||'Report';
 
   const header=()=>{
     doc.setFillColor(...AC); doc.rect(0,0,W,92,'F');
     doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(18);
     doc.text('Kulhudhuffushi Kitchen',M,42);
     doc.setFont('helvetica','normal'); doc.setFontSize(10.5);
-    doc.text('Profit report  ·  '+RLABEL[RANGE],M,62);
+    doc.text(title+'  ·  '+RLABEL[RANGE],M,62);
     doc.text('Generated '+new Date().toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}),M,78);
   };
   header();
   let y=116;
-  // summary tiles
-  const tiles=[['SALES',money(S),INK],['COST',money(C),INK],['PROFIT',money(P),P<0?RED:GRN],['MARGIN',S?pct(P/S*100):'—',P<0?RED:GRN]];
+
+  // summary tiles (per report type)
+  const plates=allItems(byDay).reduce((a,b)=>a+(+b.qty||0),0);
+  let tiles;
+  if(type==='sales') tiles=[['SALES',money(S),INK],['PLATES',String(plates),INK],['AVG / PLATE',money(plates?S/plates:0),INK],['DAYS',String(days.length),INK]];
+  else if(type==='cost') tiles=[['TOTAL COST',money(C),INK],['SALES',money(S),INK],['COST % OF SALES',S?pct(C/S*100):'—',INK],['DAYS',String(days.length),INK]];
+  else tiles=[['SALES',money(S),INK],['COST',money(C),INK],['PROFIT',money(P),P<0?RED:GRN],['MARGIN',S?pct(P/S*100):'—',P<0?RED:GRN]];
   const tw=(W-2*M-3*10)/4;
   tiles.forEach((t,i)=>{ const x=M+i*(tw+10);
     doc.setFillColor(245,239,232); doc.roundedRect(x,y,tw,58,8,8,'F');
@@ -459,36 +528,78 @@ $('#pdfBtn').onclick=()=>{
   });
   y+=58+22;
 
-  days.forEach(d=>{
-    const items=byDay[d], dp=items.reduce((a,b)=>a+b.profit,0);
-    if(y>H-120){ doc.addPage(); header(); y=116; }
+  const base={ margin:{left:M,right:M},
+    styles:{font:'helvetica',fontSize:9,cellPadding:6,textColor:INK,lineColor:[236,226,213],lineWidth:.5},
+    headStyles:{fillColor:INK,textColor:[255,255,255],fontStyle:'bold',fontSize:8},
+    alternateRowStyles:{fillColor:[250,247,242]}, didDrawPage:()=>header() };
+  const subTbl={ styles:{font:'helvetica',fontSize:8,cellPadding:4,textColor:INK,lineColor:[236,226,213],lineWidth:.5},
+    headStyles:{fillColor:SUB,textColor:[255,255,255],fontStyle:'bold',fontSize:7}, didDrawPage:()=>header() };
+  const ensure=need=>{ if(y>H-need){ doc.addPage(); header(); y=116; } };
+  const dayHead=(d,amt,col)=>{ ensure(96);
     doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...INK);
     doc.text(new Date(d).toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short',year:'numeric'}),M,y);
-    doc.setTextColor(...(dp<0?RED:GRN)); doc.text(money(dp),W-M,y,{align:'right'});
-    y+=8;
-    doc.autoTable({
-      startY:y, margin:{left:M,right:M},
-      head:[['Item','Plates','Price','Sales','Cost','Profit','Margin']],
-      body:items.map(e=>[e.item_name,String(+e.qty||0),money(e.unit_price),money(e.sales),money(e.cost),money(e.profit),pct(e.sales?e.profit/e.sales*100:NaN)]),
-      styles:{font:'helvetica',fontSize:9,cellPadding:6,textColor:INK,lineColor:[236,226,213],lineWidth:.5},
-      headStyles:{fillColor:INK,textColor:[255,255,255],fontStyle:'bold',fontSize:8},
-      alternateRowStyles:{fillColor:[250,247,242]},
-      columnStyles:{0:{cellWidth:'auto'},1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right',fontStyle:'bold'},6:{halign:'right'}},
-      didDrawPage:()=>header()
-    });
-    y=doc.lastAutoTable.finalY+22;
+    if(amt!=null){ doc.setTextColor(...col); doc.text(amt,W-M,y,{align:'right'}); } y+=8; };
+  const ingBody=items=>items; // placeholder
+  const ingTable=e=>{
+    const rows=(e.ingredients&&e.ingredients.length)
+      ? e.ingredients.map(i=>[i.name||'—', i.qty!=null?String(i.qty):'', i.price!=null?money(i.price):'', money(lineTotal(i))])
+      : [['(no breakdown entered)','','',money(e.cost)]];
+    doc.autoTable({...subTbl, startY:y, head:[['Ingredient','Qty','Unit price','Line total']], body:rows,
+      columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right',fontStyle:'bold'}}});
+    y=doc.lastAutoTable.finalY;
+  };
+
+  days.forEach(d=>{
+    const items=byDay[d];
+    if(type==='sales'){
+      dayHead(d, money(items.reduce((a,b)=>a+b.sales,0)), GRN);
+      doc.autoTable({...base, startY:y, head:[['Item','Plates','Price / plate','Sales']],
+        body:items.map(e=>[e.item_name,String(+e.qty||0),money(e.unit_price),money(e.sales)]),
+        columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right',fontStyle:'bold'}}});
+      y=doc.lastAutoTable.finalY+20;
+    } else if(type==='cost'){
+      dayHead(d, money(items.reduce((a,b)=>a+b.cost,0)), RED);
+      items.forEach(e=>{ ensure(84);
+        doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(...INK); doc.text(e.item_name,M,y);
+        doc.setFont('helvetica','normal'); doc.setTextColor(...MUT); doc.text('total cost '+money(e.cost),W-M,y,{align:'right'}); y+=6;
+        ingTable(e); y+=14;
+      }); y+=6;
+    } else if(type==='full'){
+      dayHead(d, money(items.reduce((a,b)=>a+b.profit,0)), items.reduce((a,b)=>a+b.profit,0)<0?RED:GRN);
+      doc.autoTable({...base, startY:y, head:[['Item','Plates','Price','Sales','Cost','Profit','Margin']],
+        body:items.map(e=>[e.item_name,String(+e.qty||0),money(e.unit_price),money(e.sales),money(e.cost),money(e.profit),pct(e.sales?e.profit/e.sales*100:NaN)]),
+        columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right',fontStyle:'bold'},6:{halign:'right'}}});
+      y=doc.lastAutoTable.finalY+10;
+      items.forEach(e=>{ if(!(e.ingredients&&e.ingredients.length)) return; ensure(72);
+        doc.setFont('helvetica','italic'); doc.setFontSize(8.5); doc.setTextColor(...MUT); doc.text('Ingredients — '+e.item_name,M,y); y+=4;
+        ingTable(e); y+=12;
+      }); y+=8;
+    } else { // profit
+      dayHead(d, money(items.reduce((a,b)=>a+b.profit,0)), items.reduce((a,b)=>a+b.profit,0)<0?RED:GRN);
+      doc.autoTable({...base, startY:y, head:[['Item','Plates','Price','Sales','Cost','Profit','Margin']],
+        body:items.map(e=>[e.item_name,String(+e.qty||0),money(e.unit_price),money(e.sales),money(e.cost),money(e.profit),pct(e.sales?e.profit/e.sales*100:NaN)]),
+        columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right',fontStyle:'bold'},6:{halign:'right'}}});
+      y=doc.lastAutoTable.finalY+20;
+    }
   });
 
-  // footer page numbers
+  // grand totals
+  ensure(70);
+  doc.setDrawColor(...AC); doc.setLineWidth(1); doc.line(M,y,W-M,y); y+=18;
+  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(...INK);
+  let gt;
+  if(type==='sales') gt='Total sales: '+money(S)+'    ·    '+plates+' plates';
+  else if(type==='cost') gt='Total cost: '+money(C);
+  else gt='Totals —  Sales '+money(S)+'    Cost '+money(C)+'    Profit '+money(P)+'    Margin '+(S?pct(P/S*100):'—');
+  doc.text(gt,M,y);
+
   const n=doc.internal.getNumberOfPages();
   for(let i=1;i<=n;i++){ doc.setPage(i);
     doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...MUT);
-    doc.text('Kitchen Profit',M,H-20);
-    doc.text(`Page ${i} of ${n}`,W-M,H-20,{align:'right'});
-  }
-  doc.save(`Kitchen-profit-${RANGE}-${today()}.pdf`);
+    doc.text('Kitchen Profit',M,H-20); doc.text(`Page ${i} of ${n}`,W-M,H-20,{align:'right'}); }
+  doc.save(`Kitchen-${type}-${RANGE}-${today()}.pdf`);
   toast('PDF ready');
-};
+}
 
 // ---------- nav + init ----------
 function show(v){
