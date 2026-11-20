@@ -29,8 +29,10 @@ export const InspectionSubmit = z.object({
   photoPaths: z.array(z.string().min(1)).min(6, "6 photos required (front, back, left, right, dash, damage close-ups)"),
   fuelLevel: z.number().int().min(0).max(8),
   odometerKm: z.number().int().min(0),
-  riderSignaturePath: z.string().min(1),
-  staffSignaturePath: z.string().min(1),
+  /** Engine hour meter reading, one decimal; null = vehicle has no hour meter. */
+  engineHours: z.number().min(0).max(100000).nullable(),
+  riderSignaturePath: z.string().regex(/\/rider-signature-\d+\.svg$/, "Rider signature required"),
+  staffSignaturePath: z.string().regex(/\/staff-signature-\d+\.svg$/, "Staff signature required"),
   notes: z.string().max(2000).optional(),
 });
 export type InspectionSubmit = z.infer<typeof InspectionSubmit>;

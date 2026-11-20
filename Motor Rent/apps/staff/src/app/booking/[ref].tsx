@@ -19,7 +19,7 @@ export default function BookingScreen() {
 
   useFocusEffect(useCallback(() => {
     supabase.from('bookings')
-      .select('id, reference, status, period, total, deposit, currency, vehicles(make, model, plate, odometer_km), profiles(full_name, phone, kyc_status, licence_expires_on)')
+      .select('id, reference, status, period, total, deposit, currency, vehicles(make, model, plate, odometer_km, engine_hours), profiles(full_name, phone, kyc_status, licence_expires_on)')
       .eq('reference', ref).single()
       .then(({ data, error }) => { setB(data as unknown as StaffBooking); setError(error ? 'Could not load booking.' : null); });
   }, [ref]));
@@ -51,11 +51,11 @@ export default function BookingScreen() {
         <View style={{ gap: Spacing.two }}>
           {b.status === 'confirmed' && (
             <Button title="Start pickup inspection" disabled={!canPickup}
-              onPress={() => router.push({ pathname: '/inspection/[id]', params: { id: b.id, phase: 'pickup', odo: String(b.vehicles?.odometer_km ?? 0) } })} />
+              onPress={() => router.push({ pathname: '/inspection/[id]', params: { id: b.id, phase: 'pickup', odo: String(b.vehicles?.odometer_km ?? 0), hrs: String(b.vehicles?.engine_hours ?? '') } })} />
           )}
           {canReturn && (
             <Button title="Start return inspection"
-              onPress={() => router.push({ pathname: '/inspection/[id]', params: { id: b.id, phase: 'return', odo: String(b.vehicles?.odometer_km ?? 0) } })} />
+              onPress={() => router.push({ pathname: '/inspection/[id]', params: { id: b.id, phase: 'return', odo: String(b.vehicles?.odometer_km ?? 0), hrs: String(b.vehicles?.engine_hours ?? '') } })} />
           )}
         </View>
       </ScrollView>

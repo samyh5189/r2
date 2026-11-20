@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { SignaturePad } from '@/components/signature-pad';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, ErrorText, Field } from '@/components/ui';
@@ -13,22 +14,30 @@ import { ApiError, callFunction } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 
 const ANGLES = ['front', 'back', 'left', 'right', 'dashboard', 'close-ups'] as const;
-type Shot = (typeof ANGLES)[number] | 'signed-form';
+type Shot = (typeof ANGLES)[number];
 
 export default function InspectionScreen() {
-  const { id, phase, odo } = useLocalSearchParams<{ id: string; phase: 'pickup' | 'return'; odo: string }>();
+  const { id, phase, odo, hrs } = useLocalSearchParams<{ id: string; phase: 'pickup' | 'return'; odo: string; hrs?: string }>();
   const t = useTheme();
   const [shots, setShots] = useState<Partial<Record<Shot, string>>>({});
   const [fuel, setFuel] = useState<number | null>(null);
   const [odometer, setOdometer] = useState('');
   const [notes, setNotes] = useState('');
+  const [hours, setHours] = useState('');
+  const [noMeter, setNoMeter] = useState(false);
+  const [riderSig, setRiderSig] = useState<string | null>(null);
+  const [staffSig, setStaffSig] = useState<string | null>(null);
+  const [scrollLocked, setScrollLocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const minOdo = Number(odo) || 0;
   const odoNum = Number(odometer);
   const odoValid = odometer !== '' && Number.isInteger(odoNum) && odoNum >= minOdo;
-  const complete = ANGLES.every((a) => shots[a]) && !!shots['signed-form'] && fuel !== null && odoValid;
+  const minHrs = hrs ? Number(hrs) : 0;
+  const hrsNum = Number(hours);
+  const hrsValid = noMeter || (/^\d{1,6}(\.\d)?$/.test(hours) && hrsNum >= minHrs);
+  const complete = ANGLES.every((a) => shots[a]) && fuel !== null && odoValid && hrsValid && !!riderSig && !!staffSig;
 
   async function take(shot: Shot) {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -46,16 +55,26 @@ export default function InspectionScreen() {
     return path;
   }
 
+  async function uploadSignature(who: 'rider' | 'staff', svg: string) {
+    const path = `${id}/${phase}/${who}-signature-${Date.now()}.svg`;
+    const body = new TextEncoder().encode(svg);
+    const { error } = await supabase.storage.from('inspections').upload(path, body, { contentType: 'image/svg+xml', upsert: false });
+    if (error) throw new Error(`Saving the ${who} signature failed. Check signal and retry.`);
+    return path;
+  }
+
   async function submit() {
     setBusy(true); setError(null);
     try {
       // TODO: offline queue — persist shots locally and retry when back online.
       const photoPaths = await Promise.all(ANGLES.map((a) => upload(a, shots[a]!)));
-      const formPath = await upload('signed-form', shots['signed-form']!);
+      const [riderSignaturePath, staffSignaturePath] = await Promise.all([
+        uploadSignature('rider', riderSig!), uploadSignature('staff', staffSig!),
+      ]);
       await callFunction('submit-inspection', {
         bookingId: id, phase, photoPaths, fuelLevel: fuel, odometerKm: odoNum, notes: notes || undefined,
-        // TODO: on-screen signature pad (rider + staff). Until then the signed handover form photo is the signature.
-        riderSignaturePath: formPath, staffSignaturePath: formPath,
+        engineHours: noMeter ? null : Math.round(hrsNum * 10) / 10,
+        riderSignaturePath, staffSignaturePath,
       });
       router.back();
     } catch (e) {
@@ -73,7 +92,7 @@ export default function InspectionScreen() {
 
   return (
     <ThemedView style={styles.flex}>
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={styles.body} scrollEnabled={!scrollLocked}>
         <ThemedText type="smallBold">{phase === 'pickup' ? 'Pickup' : 'Return'} — 6 photos required</ThemedText>
         <View style={styles.grid}>{ANGLES.map((a) => tile(a, a))}</View>
 
@@ -93,8 +112,32 @@ export default function InspectionScreen() {
 
         <Field label="Notes (existing scratches, issues)" value={notes} onChangeText={setNotes} multiline style={{ minHeight: 88 }} />
 
-        <ThemedText type="smallBold">Signed handover form</ThemedText>
-        <View style={styles.grid}>{tile('signed-form', 'signed form')}</View>
+        <View style={[styles.section, { borderColor: t.border }]}>
+          <ThemedText type="smallBold">Engine running hours — {phase === 'pickup' ? 'before delivery' : 'after collection'}</ThemedText>
+          <Field label={hrs ? `Hour meter (last recorded ${hrs} h)` : 'Hour meter reading (h)'} value={noMeter ? '' : hours}
+            editable={!noMeter} placeholder="e.g. 1234.5"
+            onChangeText={(v) => setHours(v.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1'))} keyboardType="decimal-pad" />
+          {!noMeter && hours !== '' && !hrsValid && (
+            <ErrorText>{hrsNum < minHrs ? `Hours cannot be lower than ${minHrs}.` : 'Use a number with at most one decimal, e.g. 1234.5'}</ErrorText>
+          )}
+          <Pressable onPress={() => setNoMeter((v) => !v)} accessibilityRole="checkbox" accessibilityState={{ checked: noMeter }} style={styles.checkRow}>
+            <View style={[styles.box, { borderColor: noMeter ? t.accent : t.border, backgroundColor: noMeter ? t.accent : 'transparent' }]}>
+              {noMeter && <ThemedText type="smallBold" style={{ color: '#fff', lineHeight: 16 }}>✓</ThemedText>}
+            </View>
+            <ThemedText type="small">This vehicle has no hour meter</ThemedText>
+          </Pressable>
+        </View>
+
+        <View style={[styles.section, { borderColor: t.border }]}
+          onTouchStart={() => setScrollLocked(true)} onTouchEnd={() => setScrollLocked(false)} onTouchCancel={() => setScrollLocked(false)}>
+          <ThemedText type="small" themeColor="textSecondary">
+            {phase === 'pickup'
+              ? 'Rider confirms the vehicle condition above and receives the keys.'
+              : 'Rider confirms the vehicle was returned in the condition above.'}
+          </ThemedText>
+          <SignaturePad label="Rider signature" onChange={setRiderSig} />
+          <SignaturePad label="Staff signature" onChange={setStaffSig} />
+        </View>
 
         <ErrorText>{error}</ErrorText>
         <Button title={phase === 'pickup' ? 'Complete pickup & hand over keys' : 'Complete return'}
@@ -110,5 +153,8 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   tile: { width: 104, height: 104, borderRadius: 12, borderWidth: 2, overflow: 'hidden', justifyContent: 'flex-end' },
   tileLabel: { padding: Spacing.one, backgroundColor: '#0008', color: '#fff' },
+  section: { borderWidth: 1, borderRadius: 14, padding: Spacing.three, gap: Spacing.two },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 44 },
+  box: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   fuel: { minWidth: 52, minHeight: 44, borderRadius: 10, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
 });

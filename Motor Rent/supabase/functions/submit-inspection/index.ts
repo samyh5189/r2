@@ -16,7 +16,7 @@ Deno.serve(handler(async (req) => {
   if (!staff || staff.role === "rider") throw new HttpError(403, "FORBIDDEN", "Staff only.");
 
   const { data: b } = await db.from("bookings")
-    .select("id, status, period, branch_id, vehicle_id, rider_id, currency, vehicles!inner(odometer_km, price_plans!inner(late_fee_per_hour, late_grace_minutes, daily))")
+    .select("id, status, period, branch_id, vehicle_id, rider_id, currency, vehicles!inner(odometer_km, engine_hours, price_plans!inner(late_fee_per_hour, late_grace_minutes, daily))")
     .eq("id", input.bookingId).single();
   if (!b) throw new HttpError(404, "NOT_FOUND", "Booking not found.");
   if (staff.role === "staff" && staff.branch_id !== b.branch_id) throw new HttpError(403, "WRONG_BRANCH", "This booking belongs to another branch.");
@@ -30,6 +30,16 @@ Deno.serve(handler(async (req) => {
   // deno-lint-ignore no-explicit-any
   const vehicle = b.vehicles as any;
   if (input.odometerKm < vehicle.odometer_km) throw new HttpError(422, "ODOMETER", `Odometer cannot be below ${vehicle.odometer_km} km.`);
+  if (input.engineHours != null && vehicle.engine_hours != null && input.engineHours < Number(vehicle.engine_hours)) {
+    throw new HttpError(422, "ENGINE_HOURS", `Engine hours cannot be below ${vehicle.engine_hours} h.`);
+  }
+
+  // Signatures must be the plain SVG strokes the staff app draws — nothing else is accepted.
+  for (const [who, path] of [["rider", input.riderSignaturePath], ["staff", input.staffSignaturePath]] as const) {
+    const { data: file } = await db.storage.from("inspections").download(path);
+    const svg = file ? await file.text() : "";
+    if (!isSignatureSvg(svg)) throw new HttpError(422, "SIGNATURE", `The ${who} signature is missing or invalid. Please sign again.`);
+  }
 
   const { start, end } = parseTstzRange(b.period);
   const now = new Date();
@@ -47,13 +57,16 @@ Deno.serve(handler(async (req) => {
 
   const { error: insErr } = await db.from("inspections").insert({
     booking_id: b.id, phase: input.phase, photo_paths: input.photoPaths, fuel_level: input.fuelLevel,
-    odometer_km: input.odometerKm, rider_signature_path: input.riderSignaturePath,
+    odometer_km: input.odometerKm, engine_hours: input.engineHours, rider_signature_path: input.riderSignaturePath,
     staff_signature_path: input.staffSignaturePath, notes: input.notes, staff_id: user.id,
   });
   if (insErr?.code === "23505") throw new HttpError(409, "ALREADY_DONE", `The ${input.phase} inspection was already recorded.`);
   if (insErr) throw insErr;
 
-  await db.from("vehicles").update({ odometer_km: input.odometerKm }).eq("id", b.vehicle_id);
+  await db.from("vehicles").update({
+    odometer_km: input.odometerKm,
+    ...(input.engineHours != null ? { engine_hours: input.engineHours } : {}),
+  }).eq("id", b.vehicle_id);
 
   if (input.phase === "pickup") {
     await db.from("bookings").update({ status: "active", picked_up_at: now.toISOString() }).eq("id", b.id).eq("status", "confirmed");
@@ -73,3 +86,10 @@ Deno.serve(handler(async (req) => {
   }
   return json({ status: "returned", lateFee: fee });
 }));
+
+/** A signature is a bare <svg> containing only <path d="..."> strokes with numeric commands (≥ 1 stroke, ≤ 60 KB). */
+function isSignatureSvg(svg: string): boolean {
+  if (svg.length < 40 || svg.length > 60_000) return false;
+  const m = /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 \d{2,4} \d{2,4}" width="\d{2,4}" height="\d{2,4}">((?:<path d="[MLQ0-9. ,-]+" fill="none" stroke="#[0-9A-Fa-f]{6}" stroke-width="\d(?:\.\d)?" stroke-linecap="round" stroke-linejoin="round"\/>)+)<\/svg>$/.exec(svg.trim());
+  return !!m;
+}
