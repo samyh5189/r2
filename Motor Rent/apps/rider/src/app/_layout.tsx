@@ -38,6 +38,7 @@ export default function RootLayout() {
           animation: 'slide_from_right',
         }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="book" options={{ title: 'Book a bike', headerBackTitle: 'Bikes', ...webHeaderOption }} />
           <Stack.Screen name="bike/[id]" options={{ title: 'Book a bike', headerBackTitle: 'Bikes', ...webHeaderOption }} />
           <Stack.Screen name="sign-in" options={{ title: 'Sign in', presentation: 'modal', ...webHeaderOption }} />
           <Stack.Screen name="verify" options={{ title: 'Verify your identity', ...webHeaderOption }} />

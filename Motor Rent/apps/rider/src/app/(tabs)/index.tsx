@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Platform, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useWebPullToRefresh } from '@/components/pull-to-refresh';
@@ -8,7 +8,7 @@ import { KenBurns, StockPhotos, vehiclePhotos, ZoomPhoto, type VehicleKind } fro
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Plate } from '@/components/plate';
-import { Card, ErrorText, PressableScale } from '@/components/ui';
+import { Button, Card, ErrorText, PressableScale } from '@/components/ui';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing, TopNavInset } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/lib/format';
@@ -121,7 +121,10 @@ function Hero({ count, from, wide }: { count: number; from: number | null; wide:
               Ride Kulhudhuffushi.
             </ThemedText>
             <View style={[styles.roadLine, { backgroundColor: t.cta }]} />
-            <ThemedText style={[styles.onPhotoMuted, { fontSize: 17, lineHeight: 25, maxWidth: 420 }]}>{line} Pick one, choose your times, collect the keys.</ThemedText>
+            <ThemedText style={[styles.onPhotoMuted, { fontSize: 17, lineHeight: 25, maxWidth: 420 }]}>{line} Choose your times, pick a bike, collect the keys.</ThemedText>
+            <View style={{ alignSelf: 'flex-start', minWidth: 220 }}>
+              <Button title="Book a ride" onPress={() => router.push('/book')} />
+            </View>
           </Animated.View>
         </View>
         {!!credit && <ThemedText type="small" style={styles.credit} numberOfLines={1}>{credit}</ThemedText>}
@@ -149,7 +152,7 @@ function BikeCard({ bike, wide }: { bike: Bike; index: number; wide: boolean }) 
   const spec = [KIND_LABEL[bike.kind], bike.engine_cc != null ? `${bike.engine_cc} cc` : null, bike.branches?.name].filter(Boolean).join(', ');
   return (
     <View style={wide ? styles.half : undefined}>
-      <Link href={{ pathname: '/bike/[id]', params: { id: bike.id } }} asChild>
+      <Link href={{ pathname: '/book', params: { bike: bike.id } }} asChild>
         <PressableScale accessibilityRole="button" accessibilityLabel={`${bike.make} ${bike.model}, ${bike.plate}`} scaleTo={0.985} lift={false}
           onHoverIn={() => setActive(true)} onHoverOut={() => setActive(false)}>
           <Card style={[styles.bikeCard, active && { borderColor: t.text }]}>
