@@ -4,6 +4,7 @@ import { avatarPublicUrl, diff, Timeline, type TimelineEntry } from "@/component
 import { requireStaff } from "@/lib/auth";
 import { dt, money, parseRange } from "@/lib/format";
 import { StatusBadge } from "../../status-badge";
+import { DeleteRider, EditRider } from "./edit-rider";
 
 export const metadata = { title: "Rider" };
 
@@ -20,9 +21,10 @@ export default function RiderPage({ params }: { params: Promise<{ id: string }> 
 
 async function Rider({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { db } = await requireStaff();
+  const { db, user } = await requireStaff();
+  const canEdit = user.role === "manager" || user.role === "owner";
   const { data: p } = await db.from("profiles")
-    .select("id, full_name, phone, role, date_of_birth, kyc_status, licence_expires_on, avatar_path, created_at").eq("id", id).maybeSingle();
+    .select("id, full_name, phone, whatsapp, whatsapp_verified, role, date_of_birth, kyc_status, licence_expires_on, avatar_path, created_at").eq("id", id).maybeSingle();
   if (!p) return <p role="alert" className="text-red-600">Rider not found.</p>;
 
   const [subs, bookings, audit, blocks] = await Promise.all([
@@ -79,7 +81,7 @@ async function Rider({ params }: { params: Promise<{ id: string }> }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
       <section className="space-y-4">
-        <Link href="/verifications" className="text-sm text-muted hover:underline">← Verifications</Link>
+        <Link href="/riders" className="text-sm text-muted hover:underline">← Riders</Link>
         <div className="space-y-3 rounded-2xl border border-line bg-panel p-5">
           <div className="flex items-center gap-3">
             {av ? (
@@ -88,16 +90,25 @@ async function Rider({ params }: { params: Promise<{ id: string }> }) {
             ) : <span className="flex size-14 items-center justify-center rounded-full bg-sky-600 text-lg font-bold text-white">{name.slice(0, 1)}</span>}
             <div>
               <h1 className="text-xl font-semibold">{name}</h1>
-              <p className="text-sm text-muted">{p.phone ?? "no phone"} · {p.role}</p>
+              <p className="text-sm text-muted">{p.phone ?? "no phone"}</p>
             </div>
           </div>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted">Verification</dt><dd><StatusBadge status={p.kyc_status} /></dd>
             <dt className="text-muted">Date of birth</dt><dd>{p.date_of_birth ?? "—"}</dd>
             <dt className="text-muted">Licence until</dt><dd>{p.licence_expires_on ?? "—"}</dd>
+            <dt className="text-muted">WhatsApp</dt><dd>{p.whatsapp ? <a className="text-accent hover:underline" href={`https://wa.me/${p.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">{p.whatsapp}</a> : "—"}{p.whatsapp && !p.whatsapp_verified ? <span className="text-muted"> (not confirmed)</span> : null}</dd>
             <dt className="text-muted">Joined</dt><dd>{dt(new Date(p.created_at))}</dd>
+            {!!bookings.data?.length && <><dt className="text-muted">Spent</dt><dd className="tabular-nums">{money((bookings.data as { status: string; total: number }[]).filter((b) => !["held", "cancelled", "expired"].includes(b.status)).reduce((a, b) => a + b.total, 0))}</dd></>}
+            {blocks.data?.some((b) => b.active) && <><dt className="text-muted">Blocklist</dt><dd><Link href="/blocklist" className="font-semibold text-red-600 hover:underline">Blocked</Link></dd></>}
           </dl>
         </div>
+        {canEdit && p.role === "rider" && (
+          <>
+            <EditRider rider={{ id: p.id, full_name: p.full_name, phone: p.phone, whatsapp: p.whatsapp, date_of_birth: p.date_of_birth, licence_expires_on: p.licence_expires_on }} />
+            <DeleteRider id={p.id} name={name} />
+          </>
+        )}
         {!!bookings.data?.length && (
           <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-panel text-sm">
             {(bookings.data as unknown as { id: string; reference: string; status: string; period: string; vehicles: { plate: string } | null }[]).map((b) => {

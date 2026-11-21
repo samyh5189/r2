@@ -16,8 +16,8 @@ import { ApiError, callFunction, type CreateBookingResponse, type QuoteResponse 
 import { dateTime, money } from '@/lib/format';
 import { useSession } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
+import { TERMS_VERSION } from '@/lib/terms';
 
-const TERMS_VERSION = '2026-11-v1';
 const DURATIONS = [
   { label: '2 hours', hours: 2 },
   { label: '4 hours', hours: 4 },
@@ -178,7 +178,7 @@ export default function BikeScreen() {
                 Free cancellation until 24 h before pickup, 50% refund after.
               </ThemedText>
               <View style={styles.line}>
-                <ThemedText type="small" style={styles.flex}>I accept the rental agreement and cancellation policy</ThemedText>
+                <ThemedText type="small" style={styles.flex}>I accept the{' '}<ThemedText type="small" themeColor="accent" onPress={() => router.push('/terms')} accessibilityRole="link" style={{ textDecorationLine: 'underline' }}>rental terms</ThemedText>, including cancellations and the blocklist</ThemedText>
                 <Switch value={accepted} onValueChange={setAccepted} accessibilityLabel="Accept rental agreement"
                   trackColor={{ true: t.accent, false: t.border }} thumbColor="#FFFFFF" />
               </View>

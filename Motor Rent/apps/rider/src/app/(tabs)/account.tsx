@@ -20,6 +20,7 @@ import { changeAvatar, removeAvatar } from '@/lib/avatar';
 import { useSession } from '@/lib/session';
 import { useSiteSettings } from '@/lib/site';
 import { supabase } from '@/lib/supabase';
+import { formatMoney } from '@motor-rent/shared';
 
 type Profile = { avatar_path: string | null; full_name: string | null; phone: string | null; kyc_status: 'pending' | 'approved' | 'rejected'; licence_expires_on: string | null; whatsapp: string | null; whatsapp_verified: boolean };
 
@@ -35,14 +36,18 @@ export default function AccountScreen() {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [block, setBlock] = useState<{ reason: string; amount_owed: number | null; currency: string } | null>(null);
 
   const load = useCallback(async () => {
     if (!session) return;
-    const [p, k] = await Promise.all([
+    const [p, k, bl] = await Promise.all([
       supabase.from('profiles').select('avatar_path, full_name, phone, kyc_status, licence_expires_on, whatsapp, whatsapp_verified').eq('id', session.user.id).single(),
       supabase.from('kyc_submissions').select('status, note').eq('profile_id', session.user.id)
         .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      // Only ever the rider's own entry (row-level security).
+      supabase.from('rider_blocks').select('reason, amount_owed, currency').eq('profile_id', session.user.id).eq('active', true).limit(1).maybeSingle(),
     ]);
+    setBlock(bl.data as typeof block);
     setProfile(p.data as Profile | null);
     setSubmission(k.data as typeof submission);
   }, [session]);
@@ -176,6 +181,15 @@ export default function AccountScreen() {
             </Card>
           </Animated.View>
 
+          {block && (
+            <Card style={{ borderColor: t.danger, borderWidth: 1.5 }}>
+              <ThemedText type="heading">Bookings are paused on your account</ThemedText>
+              <ThemedText type="small">Reason: {block.reason}</ThemedText>
+              {!!block.amount_owed && <ThemedText type="smallBold">Amount owed: {formatMoney(block.amount_owed, block.currency as 'MVR' | 'USD')}</ThemedText>}
+              <ThemedText type="small" themeColor="textSecondary">Settle it at the counter or by bank transfer, or tell us if you think this is a mistake. Only our staff can see this; it is never public.</ThemedText>
+            </Card>
+          )}
+
           {session && profile && (
             <WhatsAppCard userId={session.user.id} number={profile.whatsapp} verified={profile.whatsapp_verified}
               ready={!!site?.whatsapp_ready} onSaved={load} />
@@ -192,6 +206,7 @@ export default function AccountScreen() {
             {site?.support_email && (
               <Button title={`Email ${site.support_email}`} variant="secondary" onPress={() => Linking.openURL(`mailto:${site.support_email}`)} />
             )}
+            <Button title="Rental terms" variant="ghost" onPress={() => router.push('/terms')} />
             <Button title="Sign out" variant="secondary" onPress={() => supabase.auth.signOut()} />
             <Button title="Delete my account" variant="ghost" onPress={deleteAccount} />
             {deleteError && <ThemedText type="small" style={{ color: t.danger, textAlign: 'center' }}>{deleteError}</ThemedText>}

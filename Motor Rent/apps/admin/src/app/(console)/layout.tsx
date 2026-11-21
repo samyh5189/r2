@@ -6,9 +6,11 @@ import { SignOutButton } from "./sign-out";
 const NAV: { href: string; label: string; count?: "messages" | "kyc" | "slips" | "whatsapp" }[] = [
   { href: "/", label: "Today" },
   { href: "/bookings", label: "Bookings", count: "messages" },
+  { href: "/riders", label: "Riders" },
   { href: "/verifications", label: "Verifications", count: "kyc" },
   { href: "/transfers", label: "Transfers", count: "slips" },
   { href: "/whatsapp", label: "WhatsApp", count: "whatsapp" },
+  { href: "/accounting", label: "Accounting" },
   { href: "/fleet", label: "Fleet" },
   { href: "/blocklist", label: "Blocklist" },
   { href: "/settings", label: "Settings" },
