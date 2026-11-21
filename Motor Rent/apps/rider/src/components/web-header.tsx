@@ -8,7 +8,7 @@ import { NavBar } from './app-tabs.web';
 import { ThemedText } from './themed-text';
 
 const LINKS = [
-  { href: '/', label: 'Bikes' },
+  { href: '/', label: 'Home' }, { href: '/book', label: 'Book' },
   { href: '/bookings', label: 'My rentals' },
   { href: '/account', label: 'Account' },
 ] as const;

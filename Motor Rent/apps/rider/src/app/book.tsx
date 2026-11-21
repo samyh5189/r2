@@ -70,6 +70,13 @@ export default function BookScreen() {
     supabase.rpc('available_vehicles', { p_start: startIso, p_end: endIso })
       .then(({ data }) => setFree(new Set(((data ?? []) as (string | { available_vehicles: string })[]).map((x) => (typeof x === 'string' ? x : x.available_vehicles)))));
   }, [startIso, endIso]);
+  // Busy windows for the next 120 days, to work out when booked bikes are free again.
+  const [busy, setBusy] = useState<Busy[] | null>(null);
+  useEffect(() => {
+    supabase.rpc('vehicle_busy', { p_from: new Date().toISOString(), p_to: new Date(Date.now() + 120 * 86_400_000).toISOString() })
+      .then(({ data }) => setBusy(((data ?? []) as { vehicle_id: string; busy_from: string; busy_to: string }[])
+        .map((r) => ({ id: r.vehicle_id, from: +new Date(r.busy_from), to: +new Date(r.busy_to) }))));
+  }, []);
   const bike = bikes?.find((b) => b.id === bikeId) ?? null;
   const estimate = (b: Bike) => {
     const p = b.price_plans; if (!p) return null;
@@ -187,7 +194,10 @@ export default function BookScreen() {
                 <ThemedText type="subtitle">Pick your bike</ThemedText>
                 {!bikes || !free ? <ActivityIndicator color={t.accent} /> : (
                   <BikeList bikes={bikes} free={free} selected={bikeId} estimate={estimate}
-                    onPick={(id) => set({ bike: id, step: '2' })} onChangeTimes={() => go(0)} />
+                    nextFree={(b) => (busy ? nextFree(busy.filter((w) => w.id === b.id), start, +end - +start) : null)}
+                    onPick={(id) => set({ bike: id, step: '2' })}
+                    onPickAt={(id, s) => set({ bike: id, start: s.toISOString(), end: new Date(+s + (+end - +start)).toISOString(), step: '2' })}
+                    onChangeTimes={() => go(0)} />
                 )}
               </>
             )}
@@ -266,20 +276,64 @@ export default function BookScreen() {
   );
 }
 
-function BikeList({ bikes, free, selected, estimate, onPick, onChangeTimes }: {
+type Busy = { id: string; from: number; to: number };
+const MV = 5 * 3_600_000;
+const mvHour = (ms: number) => new Date(ms + MV).getUTCHours() + new Date(ms + MV).getUTCMinutes() / 60;
+
+/** Earliest counter-hours pickup (at or after `from`) where a rental of `len` ms fits between busy windows. */
+function nextFree(windows: Busy[], from: Date, len: number): Date | null {
+  let s = firstSlot(from);
+  for (let i = 0; i < 400; i++) {
+    const e = +s + len;
+    const clash = windows.find((w) => w.from < e && w.to > +s);
+    if (clash) { s = firstSlot(new Date(clash.to)); continue; }
+    const h = mvHour(e);
+    if (h < 7 || h > 22) { s = firstSlot(new Date(+s + 30 * 60_000)); continue; }
+    return s;
+  }
+  return null;
+}
+
+function BikeList({ bikes, free, selected, estimate, nextFree: freeAt, onPick, onPickAt, onChangeTimes }: {
   bikes: Bike[]; free: Set<string>; selected: string | null; estimate: (b: Bike) => number | null;
-  onPick: (id: string) => void; onChangeTimes: () => void;
+  nextFree: (b: Bike) => Date | null;
+  onPick: (id: string) => void; onPickAt: (id: string, start: Date) => void; onChangeTimes: () => void;
 }) {
   const t = useTheme();
   const available = bikes.filter((b) => free.has(b.id));
   const taken = bikes.filter((b) => !free.has(b.id));
+  const bookedList = !!taken.length && (
+    <View style={{ gap: Spacing.two, marginTop: Spacing.two }}>
+      <ThemedText type="smallBold" themeColor="textSecondary">Booked for your times</ThemedText>
+      {taken.map((b) => {
+        const at = freeAt(b);
+        return (
+          <View key={b.id} style={[styles.bike, { borderColor: t.border, backgroundColor: t.backgroundElement }]}>
+            <Image source={vehiclePhotos(b)[0]} style={[styles.bikePhoto, { opacity: 0.55 }]} contentFit="cover" />
+            <View style={[styles.flex, { gap: 4 }]}>
+              <ThemedText type="smallBold" style={{ fontSize: 17 }}>{b.make} {b.model}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">{at ? `Free for the same length from ${dateTime(at)}` : 'Checking when it’s free…'}</ThemedText>
+              {at && (
+                <ThemedText type="smallBold" themeColor="accent" onPress={() => onPickAt(b.id, at)} accessibilityRole="button"
+                  style={{ textDecorationLine: 'underline' }}>Book it then</ThemedText>
+              )}
+            </View>
+            <Plate size="sm">{b.plate}</Plate>
+          </View>
+        );
+      })}
+    </View>
+  );
   if (!available.length) {
     return (
-      <Card style={{ gap: Spacing.two }}>
-        <ThemedText>All bikes are booked for these times.</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">Try a later pickup or a shorter rental.</ThemedText>
-        <Button variant="secondary" title="Change times" onPress={onChangeTimes} />
-      </Card>
+      <View style={{ gap: Spacing.two }}>
+        <Card style={{ gap: Spacing.two }}>
+          <ThemedText>{bikes.length === 1 ? 'Our bike is booked for these times.' : 'All bikes are booked for these times.'}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">Pick different times, or book when a bike is free again below.</ThemedText>
+          <Button variant="secondary" title="Change times" onPress={onChangeTimes} />
+        </Card>
+        {bookedList}
+      </View>
     );
   }
   return (
@@ -310,7 +364,7 @@ function BikeList({ bikes, free, selected, estimate, onPick, onChangeTimes }: {
           </Animated.View>
         );
       })}
-      {!!taken.length && <ThemedText type="small" themeColor="textSecondary">{taken.length} more already booked for these times.</ThemedText>}
+      {bookedList}
     </View>
   );
 }
