@@ -14,11 +14,13 @@ WebBrowser.maybeCompleteAuthSession();
  * - iOS/Android: secure in-app browser session, then we exchange the returned code ourselves.
  * Returns true once a session exists (native) or the redirect has started (web).
  */
-export async function signInWithProvider(provider: OAuthProvider): Promise<boolean> {
+export async function signInWithProvider(provider: OAuthProvider, next?: string): Promise<boolean> {
   if (Platform.OS === 'web') {
+    // Come back to where the rider was (e.g. mid-booking). Only same-site paths are allowed.
+    const path = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: window.location.origin + path },
     });
     if (error) throw error;
     return true;

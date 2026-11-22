@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
@@ -34,6 +34,7 @@ function friendly(message: string) {
 
 export default function SignInScreen() {
   const t = useTheme();
+  const { next } = useLocalSearchParams<{ next?: string }>();
   const [method, setMethod] = useState<Method>('email');
   const [, setBusy] = useState(false);
   // WhatsApp codes appear once the owner connects WhatsApp in admin Settings.
@@ -53,7 +54,7 @@ export default function SignInScreen() {
               <ThemedText themeColor="textSecondary">Sign in to see prices, book and track your rentals.</ThemedText>
             </Animated.View>
 
-            <SocialButtons onSignedIn={done} onBusy={setBusy} />
+            <SocialButtons onSignedIn={done} onBusy={setBusy} next={next} />
 
             {whatsapp && <View style={[styles.segment, { backgroundColor: t.backgroundSelected }]} accessibilityRole="tablist">
               {(['email', 'phone'] as const).map((m) => (

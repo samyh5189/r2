@@ -32,7 +32,7 @@ function AppleLogo({ size = 20, color }: { size?: number; color: string }) {
  * "Continue with Google" (primary) and "Continue with Apple" (secondary).
  * Providers are configured in Supabase Auth; until they are, the press shows a friendly message.
  */
-export function SocialButtons({ onSignedIn, onBusy }: { onSignedIn: () => void; onBusy?: (b: boolean) => void }) {
+export function SocialButtons({ onSignedIn, onBusy, next }: { onSignedIn: () => void; onBusy?: (b: boolean) => void; next?: string }) {
   const t = useTheme();
   const [busy, setBusy] = useState<OAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +40,7 @@ export function SocialButtons({ onSignedIn, onBusy }: { onSignedIn: () => void; 
   async function go(provider: OAuthProvider) {
     setBusy(provider); onBusy?.(true); setError(null);
     try {
-      const ok = await signInWithProvider(provider);
+      const ok = await signInWithProvider(provider, next);
       if (ok) onSignedIn();
     } catch (e) {
       setError(oauthErrorMessage(provider, e));
