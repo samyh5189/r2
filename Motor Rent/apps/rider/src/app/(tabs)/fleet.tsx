@@ -1,6 +1,6 @@
 import { ActivityIndicator, View } from 'react-native';
 
-import { ModelGrid, useModels } from '@/components/fleet-cards';
+import { ModelCarousel, useModels } from '@/components/fleet-cards';
 import { Page, PageHead } from '@/components/page-kit';
 import { bikeCredit } from '@/components/photo';
 import { ThemedText } from '@/components/themed-text';
@@ -16,7 +16,7 @@ export default function FleetScreen() {
     <Page>
       <PageHead title="Pick your bike." lead="Scooters and motorbikes by the hour or the day, from our counter in Kulhudhuffushi. Helmets on request." />
       {!models ? <ActivityIndicator color={t.accent} style={{ marginVertical: Spacing.six }} /> : (
-        <ModelGrid models={models} style={{ marginTop: Spacing.six }} />
+        <ModelCarousel models={models} style={{ marginTop: Spacing.six }} />
       )}
       {models && models.length > 0 && (
         <View style={{ marginTop: Spacing.three }}>

@@ -86,7 +86,7 @@ export function TripPlanner({ start, end, earliest, minEnd, hours, onStart, onEn
 
 /** Success: the vehicle photo with a confirmation check popping in. */
 export function Reserved({ booking, bankTransfer, vehicle, title }: {
-  booking: CreateBookingResponse['booking']; bankTransfer: boolean; vehicle: { photos?: string[] | null; kind?: VehicleKind | null }; title: string;
+  booking: CreateBookingResponse['booking']; bankTransfer: boolean; vehicle: { photos?: string[] | null; kind?: VehicleKind | null; make?: string | null; model?: string | null }; title: string;
 }) {
   const t = useTheme();
   const reference = booking.reference;

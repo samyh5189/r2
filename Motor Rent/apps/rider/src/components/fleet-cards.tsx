@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent, type ViewStyle } from 'react-native';
 import { baseRental } from '@motor-rent/shared';
 
 import { Fonts, Spacing } from '@/constants/theme';
@@ -9,7 +9,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 
-import { ArrowRightIcon } from './icons';
+import { ArrowLeftIcon, ArrowRightIcon } from './icons';
 import { redLine, Reveal, tr, web } from './page-kit';
 import { bikeSource, type VehicleKind } from './photo';
 import { ThemedText } from './themed-text';
@@ -54,19 +54,74 @@ export function useModels() {
   return models;
 }
 
-/** The fleet as a grid of showroom cards: 1, 2 or 3 columns by width. */
-export function ModelGrid({ models, onView = false, style }: { models: Model[]; onView?: boolean; style?: ViewStyle }) {
+/**
+ * The fleet as a row of showroom cards you swipe through sideways (snaps card by card).
+ * One card a screen on phones with the next one peeking in, two on tablets, three on desktop;
+ * dots show where you are and arrows step through on wide screens.
+ */
+export function ModelCarousel({ models, onView = false, style }: { models: Model[]; onView?: boolean; style?: ViewStyle }) {
+  const t = useTheme();
   const { width } = useWindowDimensions();
-  const cols = width >= 1024 ? 3 : width >= 640 ? 2 : 1;
-  const colWidth = `${(100 - (cols - 1) * 2.2) / cols}%` as `${number}%`;
+  const per = width >= 1024 ? 3 : width >= 640 ? 2 : 1;
+  const [boxW, setBoxW] = useState(0);
+  const [index, setIndex] = useState(0);
+  const ref = useRef<{ scrollTo: (o: { x: number; animated: boolean }) => void } | null>(null);
+  const gap = Spacing.three;
+  const swipes = models.length > per;
+  const cardW = boxW ? ((boxW - gap * (per - 1)) / per) * (per === 1 && swipes ? 0.86 : 1) : 0;
+  const step = cardW + gap;
+  const last = Math.max(0, per === 1 ? models.length - 1 : models.length - per);
+  const go = (i: number) => ref.current?.scrollTo({ x: Math.max(0, Math.min(last, i)) * step, animated: true });
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const i = Math.round(e.nativeEvent.contentOffset.x / step);
+    if (i !== index) setIndex(Math.max(0, Math.min(last, i)));
+  };
+
   return (
-    <View style={[styles.grid, { columnGap: cols > 1 ? '2.2%' : 0 } as ViewStyle, style]}>
-      {models.map((m, i) => (
-        <Reveal key={m.key} onView={onView} delay={80 * (i + 1)} duration={800} style={{ width: cols === 1 ? '100%' : colWidth }}>
-          <ModelCard m={m} />
-        </Reveal>
-      ))}
+    <View style={style} onLayout={(e) => setBoxW(e.nativeEvent.layout.width)}>
+      {cardW > 0 && (
+        <ScrollView ref={ref as never} horizontal showsHorizontalScrollIndicator={false} scrollEnabled={swipes}
+          snapToInterval={step} decelerationRate="fast" disableIntervalMomentum onScroll={onScroll} scrollEventThrottle={32}
+          style={[styles.track, web && ({ scrollSnapType: 'x mandatory', overscrollBehaviorX: 'contain' } as ViewStyle)]}
+          contentContainerStyle={[styles.trackInner, { gap }]}
+          accessibilityRole="list" accessibilityLabel="Bikes in the fleet">
+          {models.map((m, i) => (
+            <View key={m.key} style={[{ width: cardW }, web && ({ scrollSnapAlign: 'start' } as ViewStyle)]}>
+              <Reveal onView={onView} delay={80 * (i + 1)} duration={800}>
+                <ModelCard m={m} />
+              </Reveal>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+      {swipes && (
+        <View style={styles.controls}>
+          <View style={styles.dots} accessibilityRole="tablist">
+            {Array.from({ length: last + 1 }, (_, i) => (
+              <Pressable key={i} onPress={() => go(i)} accessibilityRole="tab" accessibilityLabel={`Bike ${i + 1}`} accessibilityState={{ selected: i === index }} hitSlop={8}
+                style={[styles.dot, { width: i === index ? 24 : 8, backgroundColor: i === index ? t.accent : t.textSecondary + '55' }, tr('width, background-color', 350)]} />
+            ))}
+          </View>
+          {width >= 640 && (
+            <View style={styles.arrows}>
+              <Arrow label="Previous bike" disabled={index === 0} onPress={() => go(index - 1)}><ArrowLeftIcon color={t.text} /></Arrow>
+              <Arrow label="Next bike" disabled={index >= last} onPress={() => go(index + 1)}><ArrowRightIcon color={t.text} /></Arrow>
+            </View>
+          )}
+        </View>
+      )}
     </View>
+  );
+}
+
+function Arrow({ label, disabled, onPress, children }: { label: string; disabled: boolean; onPress: () => void; children: ReactNode }) {
+  const t = useTheme();
+  return (
+    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={label}
+      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.arrow, { borderColor: t.border, backgroundColor: hovered ? t.backgroundSelected : t.backgroundElement },
+        disabled && { opacity: 0.35 }, pressed && { transform: [{ scale: 0.95 }] }, tr('background-color', 200)]}>
+      {children}
+    </Pressable>
   );
 }
 
@@ -142,7 +197,13 @@ export function ModelCard({ m }: { m: Model }) {
 }
 
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: Spacing.four },
+  track: { marginTop: -Spacing.two, marginBottom: -Spacing.five, marginHorizontal: -Spacing.one },
+  trackInner: { paddingTop: Spacing.two, paddingBottom: Spacing.five + Spacing.one, paddingHorizontal: Spacing.one },
+  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.four, minHeight: 44 },
+  dots: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dot: { height: 8, borderRadius: 4 },
+  arrows: { flexDirection: 'row', gap: Spacing.two },
+  arrow: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   card: { borderWidth: 1, borderRadius: 16, overflow: 'hidden' },
   stage: { aspectRatio: 5 / 4, width: '100%', overflow: 'hidden' },
   wordBox: { position: 'absolute', top: '13%', left: '-50%', right: '-50%', alignItems: 'center' },

@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 
-import { ModelGrid, useModels } from '@/components/fleet-cards';
+import { ModelCarousel, useModels } from '@/components/fleet-cards';
 import { ArrowDownIcon } from '@/components/icons';
 import {
   ArrowLink, DrawnRule, EASE_IN_OUT, Panel, pageStyles, Question, ReadyToRide, Reveal, RiseTitle, SectionTitle, SiteFooter,
@@ -31,7 +31,7 @@ export default function HomeScreen() {
           {models && models.length > 0 && (
             <View style={styles.section}>
               <SectionTitle title="The fleet" sub="Well-kept scooters and motorbikes, shown with the full day price." />
-              <ModelGrid models={models.slice(0, 3)} onView />
+              <ModelCarousel models={models} onView />
               <Reveal onView><ArrowLink label="See the whole fleet" href="/fleet" /></Reveal>
             </View>
           )}

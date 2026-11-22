@@ -27,6 +27,7 @@ const Cutouts: Partial<Record<VehicleKind, ImageProps['source']>> = {
 /** Showroom cut-outs of specific models, used instead of uploaded photos (see CREDITS.md). */
 const ModelCutouts: { match: RegExp; source: ImageProps['source']; credit: string }[] = [
   { match: /air\s*blade/i, source: require('@/assets/images/stock/airblade-cutout.webp'), credit: 'Airblade photo: Dmitry Makeev, Wikimedia Commons, CC BY-SA 4.0' },
+  { match: /\bpcx\b/i, source: require('@/assets/images/stock/pcx-cutout.webp'), credit: 'PCX photo: Chanokchon, Wikimedia Commons, CC BY-SA 4.0' },
 ];
 
 type BikeLike = { photos?: string[] | null; kind?: VehicleKind | null; make?: string | null; model?: string | null };
@@ -34,7 +35,9 @@ type BikeLike = { photos?: string[] | null; kind?: VehicleKind | null; make?: st
 /** Uploaded PNG/WebP photos are treated as cut-outs (transparent background) and shown whole. */
 export const isCutout = (uri?: string | null) => !!uri && /\.(png|webp)(\?|$)/i.test(uri);
 
-const modelCutout = (v: BikeLike) => ModelCutouts.find((m) => m.match.test(`${v.make ?? ''} ${v.model ?? ''}`));
+/** Model cut-outs are Honda photos, so match the make too (an unknown make never gets a Honda picture). */
+const modelCutout = (v: BikeLike) =>
+  /honda/i.test(v.make ?? '') ? ModelCutouts.find((m) => m.match.test(v.model ?? '')) : undefined;
 /** Photo credit to show when a model cut-out is on screen. */
 export const bikeCredit = (v: BikeLike) => {
   const own = (v.photos ?? []).find(Boolean);

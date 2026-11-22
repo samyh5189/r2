@@ -15,3 +15,4 @@ They are fallbacks only: real vehicle photos uploaded in the admin console (Flee
 
 The cut-outs are shown whole on a plain surface (BikeImage in src/components/photo.tsx) until a vehicle has its own uploaded photo.
 | airblade-cutout.webp | "Honda Airblade 125 scooters. Cambodia, Sihanoukville." — Dmitry Makeev, Wikimedia Commons — https://commons.wikimedia.org/wiki/File:Honda_Airblade_125_scooters._Cambodia,_Sihanoukville.jpg — **CC BY-SA 4.0** (https://creativecommons.org/licenses/by-sa/4.0/); background removed and resized, and this cut-out is shared under the same licence. Credit is shown on the Fleet page. |
+| pcx-cutout.webp | "2021 Honda PCX 160 Standard" by Chanokchon, Wikimedia Commons, https://commons.wikimedia.org/wiki/File:2021_Honda_PCX_160_Standard.jpg, **CC BY-SA 4.0** (https://creativecommons.org/licenses/by-sa/4.0/). Background removed and resized; this cut-out is shared under the same licence. The credit is shown on the Fleet page. |
