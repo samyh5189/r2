@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent, type ViewStyle } from 'react-native';
-import { baseRental } from '@motor-rent/shared';
+import { baseRental, isVehicleColour, VEHICLE_COLOURS, type VehicleColour } from '@motor-rent/shared';
 
 import { Fonts, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -11,18 +11,23 @@ import { supabase } from '@/lib/supabase';
 
 import { ArrowLeftIcon, ArrowRightIcon } from './icons';
 import { redLine, Reveal, tr, web } from './page-kit';
-import { bikeSource, type VehicleKind } from './photo';
+import { bikeSource, isCutout, stockPhotoColour, type VehicleKind } from './photo';
+
 import { ThemedText } from './themed-text';
 
 export type Plan = { hourly: number; daily: number; weekly: number; deposit: number; multiplier: number; currency: 'MVR' | 'USD' };
 export type Bike = {
   id: string; kind: VehicleKind; photos: string[]; make: string; model: string; engine_cc: number | null;
-  price_plans: Plan | null;
+  price_plans: Plan | null; colour?: string | null;
 };
 export type Model = {
   key: string; make: string; model: string; kind: VehicleKind; cc: number | null; count: number;
   daily: number | null; currency: 'MVR' | 'USD'; plan: Plan | null; first: Bike;
+  /** One bike per recorded colour (the order bikes were listed in). */
+  colours: { colour: VehicleColour; bike: Bike }[];
 };
+
+const showsOwnCutout = (b: Bike) => isCutout(b.photos?.find(Boolean));
 
 /** Price of `hours` on a plan, with its seasonal multiplier. */
 export const planPrice = (plan: Plan, hours: number) => Math.round(baseRental(hours, plan) * (Number(plan.multiplier) || 1));
@@ -31,21 +36,31 @@ export const planPrice = (plan: Plan, hours: number) => Math.round(baseRental(ho
 export function useModels() {
   const [models, setModels] = useState<Model[] | null>(null);
   useEffect(() => {
-    supabase.from('vehicles')
-      .select('id, kind, photos, make, model, engine_cc, price_plans(hourly, daily, weekly, deposit, multiplier, currency)')
-      .eq('status', 'active').order('make')
-      .then(({ data }) => {
+    const cols = 'id, kind, photos, make, model, engine_cc, price_plans(hourly, daily, weekly, deposit, multiplier, currency)';
+    const load = (withColour: boolean) => supabase.from('vehicles')
+      .select(withColour ? `${cols}, colour` : cols).eq('status', 'active').order('make').order('plate');
+    // Colour is a newer column: fall back to loading without it if the database doesn't have it yet.
+    load(true).then(async (first) => (first.error ? load(false) : first)).then(({ data }) => {
         const groups = new Map<string, Model>();
         for (const b of (data ?? []) as unknown as Bike[]) {
           const key = `${b.make} ${b.model}`.toLowerCase();
           const p = b.price_plans;
           const daily = p ? planPrice(p, 24) : null;
           const g = groups.get(key);
-          if (!g) groups.set(key, { key, make: b.make, model: b.model, kind: b.kind, cc: b.engine_cc, count: 1, daily, currency: p?.currency ?? 'MVR', plan: p, first: b });
-          else {
-            g.count += 1;
-            if (daily != null && (g.daily == null || daily < g.daily)) { g.daily = daily; g.plan = p; }
-            if (!g.first.photos?.length && b.photos?.length) g.first = b;
+          let g2 = g;
+          if (!g2) {
+            g2 = { key, make: b.make, model: b.model, kind: b.kind, cc: b.engine_cc, count: 1, daily, currency: p?.currency ?? 'MVR', plan: p, first: b, colours: [] };
+            groups.set(key, g2);
+          } else {
+            g2.count += 1;
+            if (daily != null && (g2.daily == null || daily < g2.daily)) { g2.daily = daily; g2.plan = p; }
+            if (!g2.first.photos?.length && b.photos?.length) g2.first = b;
+          }
+          const c = b.colour;
+          if (isVehicleColour(c)) {
+            const have = g2.colours.find((x) => x.colour === c);
+            if (!have) g2.colours.push({ colour: c, bike: b });
+            else if (!showsOwnCutout(have.bike) && showsOwnCutout(b)) have.bike = b;
           }
         }
         setModels([...groups.values()]);
@@ -129,9 +144,13 @@ export function ModelCard({ m }: { m: Model }) {
   const t = useTheme();
   const [hover, setHover] = useState(false);
   const [stageW, setStageW] = useState(0);
-  const { source, cutout } = bikeSource(m.first);
+  const [pick, setPick] = useState(0);
+  const chosen = m.colours[pick];
+  const shown = chosen?.bike ?? m.first;
+  const { source, cutout } = bikeSource(shown);
+  const photoColour = stockPhotoColour(shown);
   const word = m.model.split(/\s+/)[0]!.toUpperCase();
-  const book = () => router.push({ pathname: '/book', params: { bike: m.first.id } });
+  const book = () => router.push({ pathname: '/book', params: { bike: shown.id } });
   const ink = t.text;
   const wordSize = stageW * 0.19;
 
@@ -175,6 +194,26 @@ export function ModelCard({ m }: { m: Model }) {
       <View style={styles.cardBody}>
         <ThemedText style={[styles.kicker, { color: t.accent }]}>{m.cc ? `${m.cc} cc ` : ''}{m.kind}</ThemedText>
         <ThemedText style={[styles.name, { color: t.text }]}>{m.make} {m.model}</ThemedText>
+        {m.colours.length > 0 && (
+          <View style={styles.swatchRow}>
+            <View style={styles.swatches} accessibilityRole="radiogroup" accessibilityLabel="Colour">
+              {m.colours.map((c, i) => {
+                const on = i === pick;
+                return (
+                  <Pressable key={c.colour} onPress={() => setPick(i)} hitSlop={6} disabled={m.colours.length < 2}
+                    accessibilityRole="radio" accessibilityLabel={VEHICLE_COLOURS[c.colour].label} accessibilityState={{ checked: on }}
+                    style={[styles.swatchRing, { borderColor: on ? t.accent : 'transparent', transform: [{ scale: on ? 1 : 0.92 }] }, tr('border-color, transform', 250)]}>
+                    <View style={[styles.swatch, { backgroundColor: VEHICLE_COLOURS[c.colour].hex, borderColor: t.text + '22' }]} />
+                  </Pressable>
+                );
+              })}
+            </View>
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={{ flexShrink: 1 }}>
+              {chosen ? VEHICLE_COLOURS[chosen.colour].label : ''}
+              {chosen && photoColour && photoColour !== chosen.colour ? ` · photo shows ${photoColour}` : ''}
+            </ThemedText>
+          </View>
+        )}
         {m.count > 1 && <ThemedText type="small" themeColor="textSecondary">{m.count} in the fleet</ThemedText>}
         <View style={[styles.foot, { borderColor: t.border }]}>
           <View style={styles.price}>
@@ -197,6 +236,10 @@ export function ModelCard({ m }: { m: Model }) {
 }
 
 const styles = StyleSheet.create({
+  swatchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginTop: -4 },
+  swatches: { flexDirection: 'row', gap: 4 },
+  swatchRing: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  swatch: { width: 20, height: 20, borderRadius: 10, borderWidth: 1 },
   track: { marginTop: -Spacing.two, marginBottom: -Spacing.five, marginHorizontal: -Spacing.one },
   trackInner: { paddingTop: Spacing.two, paddingBottom: Spacing.five + Spacing.one, paddingHorizontal: Spacing.one },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.four, minHeight: 44 },

@@ -1,8 +1,10 @@
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Linking, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { ClockIcon, PinIcon } from '@/components/icons';
+import { IslandMap } from '@/components/island-map';
 import { ArrowLink, OPENING, OpenNow, Page, PageHead, Panel, pageStyles, Reveal, whatsappUrl } from '@/components/page-kit';
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui';
@@ -10,7 +12,6 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useSiteSettings } from '@/lib/site';
 import { supabase } from '@/lib/supabase';
-import { router } from 'expo-router';
 
 type Branch = { name: string; address: string | null; lat: number | null; lng: number | null };
 
@@ -32,7 +33,7 @@ export default function CounterScreen() {
         {branches.map((b, i) => (
           <Reveal key={b.name} delay={120 + i * 80} style={wide ? { flex: 1.3 } : undefined}>
             <Panel style={{ gap: Spacing.three, padding: 0, overflow: 'hidden' }}>
-              <PinStage />
+              <MapStage />
               <View style={{ padding: Spacing.four, paddingTop: 0, gap: Spacing.three }}>
                 <ThemedText style={[pageStyles.display, { fontSize: 30, lineHeight: 34, letterSpacing: -1, color: t.text }]}>{b.name}</ThemedText>
                 <View style={styles.line}>
@@ -71,22 +72,30 @@ export default function CounterScreen() {
   );
 }
 
-/** A soft island-coloured stage with a red pin and a pulsing ring under it. */
-function PinStage() {
+/** The animated island map on a soft "sea" with slow ripples, and the OpenStreetMap credit. */
+function MapStage() {
+  const t = useTheme();
+  const { width } = useWindowDimensions();
+  const h = width >= 900 ? 420 : 340;
+  return (
+    <View style={[styles.stage, { height: h + 40, backgroundColor: t.backgroundSelected }]}>
+      <Wave delay={0} /><Wave delay={2000} /><Wave delay={4000} />
+      <IslandMap height={h} />
+      <ThemedText themeColor="textSecondary" style={styles.osm}>Map data © OpenStreetMap contributors</ThemedText>
+    </View>
+  );
+}
+
+/** A faint ring spreading out across the sea, on a 6 s loop. */
+function Wave({ delay }: { delay: number }) {
   const t = useTheme();
   const reduce = useReducedMotion();
   const p = useSharedValue(0);
   useEffect(() => {
-    if (!reduce) p.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.bezier(0, 0, 0.58, 1) }), -1, false);
-  }, [reduce, p]);
-  const ring = useAnimatedStyle(() => ({ opacity: 0.5 * (1 - p.value), transform: [{ scale: 0.6 + p.value * 1.6 }] }));
-  return (
-    <View style={[styles.stage, { backgroundColor: t.backgroundSelected }]}>
-      <View style={[styles.island, { backgroundColor: t.backgroundElement, borderColor: t.border }]} />
-      <Animated.View style={[styles.ring, { backgroundColor: t.accent }, ring]} />
-      <View style={[styles.pin, { backgroundColor: t.accent, borderColor: t.backgroundElement }]} />
-    </View>
-  );
+    if (!reduce) p.value = withDelay(delay, withRepeat(withTiming(1, { duration: 6000, easing: Easing.out(Easing.quad) }), -1, false));
+  }, [reduce, delay, p]);
+  const a = useAnimatedStyle(() => ({ opacity: reduce ? 0 : 0.5 * (1 - p.value), transform: [{ scale: 0.5 + p.value }] }));
+  return <Animated.View pointerEvents="none" style={[styles.wave, { borderColor: t.textSecondary + '40' }, a]} />;
 }
 
 const styles = StyleSheet.create({
@@ -94,8 +103,7 @@ const styles = StyleSheet.create({
   lineText: { fontSize: 16, lineHeight: 22, flex: 1 },
   hours: { gap: Spacing.two },
   chip: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 8, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
-  stage: { height: 180, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  island: { position: 'absolute', width: 230, height: 96, borderRadius: 60, borderWidth: 1, transform: [{ rotate: '-14deg' }] },
-  ring: { position: 'absolute', width: 56, height: 56, borderRadius: 28 },
-  pin: { width: 18, height: 18, borderRadius: 9, borderWidth: 3 },
+  stage: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  wave: { position: 'absolute', width: 520, height: 520, borderRadius: 260, borderWidth: 1.5 },
+  osm: { position: 'absolute', right: 10, bottom: 6, fontSize: 10, lineHeight: 14 },
 });

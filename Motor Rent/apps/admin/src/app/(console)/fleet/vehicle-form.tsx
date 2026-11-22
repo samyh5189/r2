@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { VEHICLE_COLOURS, type VehicleColour } from "@motor-rent/shared";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import type { Kind } from "./vehicle-photos";
 
@@ -9,6 +10,7 @@ export type Option = { id: string; name: string };
 export type VehicleDraft = {
   id?: string; kind: Kind; plate: string; make: string; model: string; engine_cc: number | null; year: number | null;
   branch_id: string; price_plan_id: string; status: "active" | "maintenance" | "retired"; odometer_km: number;
+  colour: VehicleColour | null;
 };
 
 const field = "w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
@@ -26,7 +28,7 @@ export function VehicleForm({
   const supabase = supabaseBrowser();
   const [v, setV] = useState<VehicleDraft>(initial ?? {
     kind: "scooter", plate: "", make: "", model: "", engine_cc: 125, year: new Date().getFullYear(),
-    branch_id: branches[0]?.id ?? "", price_plan_id: plans[0]?.id ?? "", status: "active", odometer_km: 0,
+    branch_id: branches[0]?.id ?? "", price_plan_id: plans[0]?.id ?? "", status: "active", odometer_km: 0, colour: null,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +44,12 @@ export function VehicleForm({
       p_engine_cc: v.engine_cc, p_year: v.year, p_branch: v.branch_id, p_plan: v.price_plan_id,
       p_status: v.status, p_odometer: v.odometer_km,
     });
+    if (error) { setBusy(false); return setError(friendly(error.message)); }
+    if (v.colour !== (initial?.colour ?? null)) {
+      const { error: ce } = await supabase.rpc("set_vehicle_colour", { v: data as string, p_colour: v.colour });
+      if (ce) { setBusy(false); return setError(friendly(ce.message)); }
+    }
     setBusy(false);
-    if (error) return setError(friendly(error.message));
     setSaved(true);
     router.refresh();
     onDone?.(data as string);
@@ -67,6 +73,11 @@ export function VehicleForm({
         <input className={field} inputMode="numeric" value={v.year ?? ""} onChange={(e) => set("year", num(e.target.value))} /></label>
       <label className="space-y-1"><span className="text-xs font-medium text-muted">Odometer (km)</span>
         <input className={field} inputMode="numeric" value={v.odometer_km} onChange={(e) => set("odometer_km", num(e.target.value) ?? 0)} /></label>
+      <label className="space-y-1"><span className="text-xs font-medium text-muted">Colour</span>
+        <select className={field} value={v.colour ?? ""} onChange={(e) => set("colour", (e.target.value || null) as VehicleColour | null)}>
+          <option value="">Not set</option>
+          {(Object.keys(VEHICLE_COLOURS) as VehicleColour[]).map((c) => <option key={c} value={c}>{VEHICLE_COLOURS[c].label}</option>)}
+        </select></label>
       <label className="space-y-1"><span className="text-xs font-medium text-muted">Status</span>
         <select className={field} value={v.status} onChange={(e) => set("status", e.target.value as VehicleDraft["status"])}>
           <option value="active">Active — bookable</option>

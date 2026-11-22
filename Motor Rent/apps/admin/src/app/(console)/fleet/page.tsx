@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { requireStaff } from "@/lib/auth";
 import { money } from "@/lib/format";
 import { AddVehicle } from "./add-vehicle";
+import type { VehicleColour } from "@motor-rent/shared";
 import { PricePlans, type Plan } from "./price-plans";
 import { DeleteVehicle, VehicleForm, type Option } from "./vehicle-form";
 import { VehiclePhotos, type Kind } from "./vehicle-photos";
@@ -23,7 +24,7 @@ const STOCK: Record<Kind, string> = { scooter: "/stock/scooter.jpg", motorbike: 
 
 type Row = {
   id: string; kind: Kind; photos: string[]; plate: string; make: string; model: string; engine_cc: number | null; year: number | null;
-  status: "active" | "maintenance" | "retired"; odometer_km: number; branch_id: string; price_plan_id: string;
+  status: "active" | "maintenance" | "retired"; odometer_km: number; branch_id: string; price_plan_id: string; colour: VehicleColour | null;
   branches: { name: string } | null;
   price_plans: { name: string; hourly: number; daily: number; currency: string } | null;
 };
@@ -33,7 +34,7 @@ async function Fleet() {
   const canEdit = user.role === "manager" || user.role === "owner";
   const [vehicles, branches, plans] = await Promise.all([
     db.from("vehicles")
-      .select("id, kind, photos, plate, make, model, engine_cc, year, status, odometer_km, branch_id, price_plan_id, branches(name), price_plans(name, hourly, daily, currency)")
+      .select("id, kind, photos, plate, make, model, engine_cc, year, colour, status, odometer_km, branch_id, price_plan_id, branches(name), price_plans(name, hourly, daily, currency)")
       .order("status").order("plate"),
     db.from("branches").select("id, name").order("name"),
     db.from("price_plans").select("id, name, currency, hourly, daily, weekly, deposit, late_fee_per_hour, active").order("hourly"),
@@ -90,7 +91,7 @@ async function Fleet() {
                           <h3 className="text-sm font-semibold text-muted">Details and price</h3>
                           <VehicleForm branches={branchOpts} plans={planOpts.length ? planOpts : [{ id: v.price_plan_id, name: v.price_plans?.name ?? "Current plan" }]}
                             initial={{ id: v.id, kind: v.kind, plate: v.plate, make: v.make, model: v.model, engine_cc: v.engine_cc, year: v.year,
-                              branch_id: v.branch_id, price_plan_id: v.price_plan_id, status: v.status, odometer_km: v.odometer_km }} />
+                              branch_id: v.branch_id, price_plan_id: v.price_plan_id, status: v.status, odometer_km: v.odometer_km, colour: v.colour ?? null }} />
                         </div>
                         <div className="border-t border-line pt-4">
                           <DeleteVehicle id={v.id} label={`${v.make} ${v.model} (${v.plate})`} photos={v.photos} />
