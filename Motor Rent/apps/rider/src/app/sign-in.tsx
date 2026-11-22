@@ -54,13 +54,13 @@ export default function SignInScreen() {
               <ThemedText themeColor="textSecondary">Sign in to see prices, book and track your rentals.</ThemedText>
             </Animated.View>
 
-            <SocialButtons onSignedIn={done} onBusy={setBusy} next={next} />
+            <SocialButtons onSignedIn={() => done(next)} onBusy={setBusy} next={next} />
 
             {whatsapp && <View style={[styles.segment, { backgroundColor: t.backgroundSelected }]} accessibilityRole="tablist">
               {(['email', 'phone'] as const).map((m) => (
                 <Pressable key={m} accessibilityRole="tab" accessibilityState={{ selected: method === m }} onPress={() => setMethod(m)}
-                  style={[styles.segmentBtn, method === m && { backgroundColor: t.backgroundElement }]}>
-                  <ThemedText type="smallBold" themeColor={method === m ? 'text' : 'textSecondary'}>
+                  style={[styles.segmentBtn, method === m && { backgroundColor: t.accent }]}>
+                  <ThemedText type="smallBold" style={{ color: method === m ? t.accentText : t.textSecondary }}>
                     {m === 'email' ? 'Email' : 'WhatsApp'}
                   </ThemedText>
                 </Pressable>
@@ -68,7 +68,7 @@ export default function SignInScreen() {
             </View>}
 
             <Animated.View key={method} entering={FadeIn.duration(250)} exiting={FadeOut.duration(150)} layout={LinearTransition} style={styles.form}>
-              {method === 'email' ? <EmailForm onBusy={setBusy} /> : <PhoneForm onBusy={setBusy} />}
+              {method === 'email' ? <EmailForm onBusy={setBusy} next={next} /> : <PhoneForm onBusy={setBusy} next={next} />}
             </Animated.View>
           </View>
         </ScrollView>
@@ -77,12 +77,14 @@ export default function SignInScreen() {
   );
 }
 
-function done() {
-  if (router.canGoBack()) router.back();
+/** After signing in: back to where the rider was (e.g. mid-booking), else the previous screen or home. */
+function done(next?: string) {
+  if (next && next.startsWith('/') && !next.startsWith('//')) router.replace(next as never);
+  else if (router.canGoBack()) router.back();
   else router.replace('/');
 }
 
-function EmailForm({ onBusy }: { onBusy: (b: boolean) => void }) {
+function EmailForm({ onBusy, next }: { onBusy: (b: boolean) => void; next?: string }) {
   const [mode, setMode] = useState<EmailMode>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -100,13 +102,13 @@ function EmailForm({ onBusy }: { onBusy: (b: boolean) => void }) {
       if (mode === 'signin') {
         const { error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
         if (error) return setError(friendly(error.message));
-        return done();
+        return done(next);
       }
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail, password, options: { data: { full_name: name.trim() } },
       });
       if (error) return setError(friendly(error.message));
-      if (data.session) return done();
+      if (data.session) return done(next);
       setInfo('Check your inbox to confirm your email, then sign in.');
       setMode('signin');
     } finally { setBusy(false); onBusy(false); }
@@ -137,7 +139,7 @@ function EmailForm({ onBusy }: { onBusy: (b: boolean) => void }) {
         onSubmitEditing={() => valid && submit()} />
       <ErrorText>{error}</ErrorText>
       {info && <ThemedText type="small" themeColor="success" accessibilityRole="alert">{info}</ThemedText>}
-      <Button variant="secondary" title={mode === 'signin' ? 'Sign in with email' : 'Create account'} onPress={submit} disabled={!valid} loading={busy} />
+      <Button title={mode === 'signin' ? 'Sign in with email' : 'Create account'} onPress={submit} disabled={!valid} loading={busy} />
       <View style={styles.links}>
         <Button variant="ghost" title={mode === 'signin' ? 'New here? Create an account' : 'Have an account? Sign in'}
           onPress={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(null); setInfo(null); }} />
@@ -147,7 +149,7 @@ function EmailForm({ onBusy }: { onBusy: (b: boolean) => void }) {
   );
 }
 
-function PhoneForm({ onBusy }: { onBusy: (b: boolean) => void }) {
+function PhoneForm({ onBusy, next }: { onBusy: (b: boolean) => void; next?: string }) {
   const [phone, setPhone] = useState('');
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [code, setCode] = useState('');
@@ -169,7 +171,7 @@ function PhoneForm({ onBusy }: { onBusy: (b: boolean) => void }) {
     const r = await callFunction<{ tokenHash: string }>('whatsapp-otp', { action: 'verify', phone: sentTo!, code, purpose: 'login' });
     const { error } = await supabase.auth.verifyOtp({ token_hash: r.tokenHash, type: 'email' });
     if (error) throw new ApiError('LOGIN', 'Signing in failed. Request a new code.');
-    done();
+    done(next);
   });
 
   return !sentTo ? (

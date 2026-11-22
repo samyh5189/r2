@@ -98,8 +98,8 @@ export function LoginForm() {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <button type="button" onClick={() => oauth("google")} disabled={!!oauthBusy}
-        className="relative flex w-full items-center justify-center rounded-xl bg-accent px-4 py-3 font-semibold text-white shadow-[0_8px_20px_color-mix(in_srgb,var(--accent)_35%,transparent)] transition hover:-translate-y-0.5 active:scale-[.98] disabled:opacity-60">
-        <span className="absolute left-2 flex h-9 w-9 items-center justify-center rounded-lg bg-white">
+        className="google-btn relative w-full">
+        <span className="absolute left-3 flex h-9 w-9 items-center justify-center">
           <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden>
             <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
             <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
@@ -110,7 +110,7 @@ export function LoginForm() {
         {oauthBusy === "google" ? "Redirecting…" : "Continue with Google"}
       </button>
       <button type="button" onClick={() => oauth("apple")} disabled={!!oauthBusy}
-        className="relative flex w-full items-center justify-center rounded-xl border-[1.5px] border-line bg-panel px-4 py-3 font-semibold transition hover:-translate-y-0.5 active:scale-[.98] disabled:opacity-60">
+        className="btn btn-secondary btn-lg relative w-full">
         <svg viewBox="0 0 24 24" className="absolute left-4 h-5 w-5 fill-current" aria-hidden>
           <path d="M16.37 12.6c-.02-2.24 1.83-3.32 1.91-3.37-1.04-1.52-2.66-1.73-3.24-1.75-1.38-.14-2.69.81-3.39.81-.7 0-1.78-.79-2.92-.77-1.5.02-2.89.87-3.66 2.21-1.56 2.71-.4 6.72 1.12 8.92.74 1.08 1.63 2.28 2.79 2.24 1.12-.05 1.54-.72 2.89-.72 1.35 0 1.73.72 2.91.7 1.2-.02 1.96-1.1 2.7-2.18.85-1.25 1.2-2.46 1.22-2.52-.03-.01-2.33-.9-2.35-3.56zM14.15 6.02c.62-.75 1.03-1.78.92-2.82-.89.04-1.97.59-2.6 1.34-.57.66-1.07 1.72-.94 2.73.99.08 2.01-.5 2.62-1.25z" />
         </svg>
@@ -159,15 +159,15 @@ export function LoginForm() {
       {info && <p role="status" className="rise rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400">{info}</p>}
 
       <button disabled={disabled}
-        className="w-full rounded-xl bg-foreground px-4 py-3 font-semibold text-background transition hover:-translate-y-0.5 active:translate-y-0 active:scale-[.98] disabled:translate-y-0 disabled:opacity-40">
+        className="btn btn-primary btn-lg w-full">
         {busy ? "Please wait…" : method === "email" ? "Sign in with email" : step === "code" ? "Sign in" : "Send code"}
       </button>
 
       {method === "email" && (
-        <button type="button" onClick={forgot} className="w-full text-sm text-muted hover:text-foreground">Forgot password?</button>
+        <button type="button" onClick={forgot} className="btn btn-ghost btn-sm w-full">Forgot password?</button>
       )}
       {method === "phone" && step === "code" && (
-        <button type="button" onClick={() => { setStep("phone"); setCode(""); }} className="w-full text-sm text-muted hover:text-foreground">
+        <button type="button" onClick={() => { setStep("phone"); setCode(""); }} className="btn btn-ghost btn-sm w-full">
           Use a different number
         </button>
       )}

@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { Tabs, TabList, TabTrigger, TabSlot, type TabTriggerSlotProps, type TabListProps } from 'expo-router/ui';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
@@ -6,7 +6,7 @@ import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated'
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-import { Plate } from './plate';
+import { BrandMark } from './brand';
 import { ThemedText } from './themed-text';
 
 export default function AppTabs() {
@@ -38,8 +38,8 @@ export function TabButton({ children, isFocused, ref: _ref, ...props }: TabTrigg
   }));
   return (
     <Pressable {...props} style={({ pressed }) => [styles.tab, pressed && !isFocused && { opacity: 0.75 }]}>
-      <Animated.View style={[StyleSheet.absoluteFill, styles.pill, { backgroundColor: t.accent }, pill]} />
-      <ThemedText type="smallBold" style={{ color: isFocused ? t.accentText : t.text }}>{children}</ThemedText>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.pill, { backgroundColor: t.accentSoft }, pill]} />
+      <ThemedText type="smallBold" style={{ color: isFocused ? t.accent : t.text }}>{children}</ThemedText>
     </Pressable>
   );
 }
@@ -55,7 +55,8 @@ export function CustomTabList(props: TabListProps) {
 /** The glass brand bar. Used by the tab layout (floating) and by stack screens on web (see web-header). */
 export function NavBar({ children, leading }: { children: React.ReactNode; leading?: React.ReactNode }) {
   const t = useTheme();
-  const compact = useWindowDimensions().width < 520;
+  const compact = useWindowDimensions().width < 720;
+  const path = usePathname();
   return (
     <View
       style={[
@@ -67,9 +68,9 @@ export function NavBar({ children, leading }: { children: React.ReactNode; leadi
       <Pressable onPress={() => router.navigate('/')} accessibilityRole="link" accessibilityLabel="Rent a Motor home"
         style={({ pressed }) => [styles.brand, pressed && { opacity: 0.7 }, { cursor: 'pointer' } as object]}>
         {!(leading && compact) && (
-          <Plate size="md">RM</Plate>
+          <BrandMark />
         )}
-        {!compact && (
+        {useWindowDimensions().width >= 520 && (
           <View>
             <ThemedText type="heading" style={{ fontSize: 18, lineHeight: 20 }}>Rent a Motor</ThemedText>
             <ThemedText type="small" themeColor="textSecondary" style={{ fontSize: 11, lineHeight: 14 }}>Kulhudhuffushi Motor Rentals</ThemedText>
@@ -77,6 +78,12 @@ export function NavBar({ children, leading }: { children: React.ReactNode; leadi
         )}
       </Pressable>
       <View style={styles.tabs}>{children}</View>
+      {!compact && path !== '/book' && (
+        <Pressable onPress={() => router.push('/book')} accessibilityRole="link"
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.book, { backgroundColor: hovered ? t.accentStrong : t.accent }, pressed && { transform: [{ scale: 0.97 }] }]}>
+          <ThemedText type="smallBold" style={{ color: t.accentText }}>Book a ride</ThemedText>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -105,6 +112,7 @@ const styles = StyleSheet.create({
   brand: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginRight: 'auto' },
   tabs: { flexDirection: 'row', gap: Spacing.one },
   mark: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  book: { paddingVertical: Spacing.two, paddingHorizontal: Spacing.three, borderRadius: Radius.md, marginLeft: Spacing.one },
   tab: { paddingVertical: Spacing.two, paddingHorizontal: Spacing.three, borderRadius: Radius.pill, justifyContent: 'center' },
   pill: { borderRadius: Radius.pill },
 });

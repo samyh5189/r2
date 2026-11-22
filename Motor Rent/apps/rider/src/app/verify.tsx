@@ -138,7 +138,7 @@ export default function VerifyScreen() {
               </ThemedText>
             </Card>
           </Animated.View>
-          <Button title={next ? 'Continue booking' : 'Browse vehicles'} onPress={() => (next ? router.replace(next as never) : router.replace('/'))} />
+          <Button title={next ? 'Continue booking' : 'Book a ride'} onPress={() => (next ? router.replace(next as never) : router.replace('/book'))} />
         </ScrollView>
       </ThemedView>
     );
@@ -167,8 +167,8 @@ export default function VerifyScreen() {
           <View style={styles.segment}>
             {(['national_id', 'passport'] as const).map((k) => (
               <PressableScale key={k} onPress={() => setIdType(k)} accessibilityRole="radio" accessibilityState={{ selected: idType === k }}
-                style={[styles.segBtn, { borderColor: idType === k ? t.accent : t.border, backgroundColor: idType === k ? t.accentSoft : 'transparent' }]}>
-                <ThemedText type="smallBold" style={{ color: idType === k ? t.accent : t.text }}>{k === 'national_id' ? 'Maldivian ID card' : 'Passport'}</ThemedText>
+                style={[styles.segBtn, { borderColor: idType === k ? t.accent : t.border, backgroundColor: idType === k ? t.accent : t.backgroundElement }]}>
+                <ThemedText type="smallBold" style={{ color: idType === k ? t.accentText : t.text }}>{k === 'national_id' ? 'Maldivian ID card' : 'Passport'}</ThemedText>
               </PressableScale>
             ))}
           </View>
@@ -192,13 +192,9 @@ export default function VerifyScreen() {
                   <ThemedText type="small" themeColor="textSecondary">{d.hint}</ThemedText>
                   <View style={styles.docBtns}>
                     {Platform.OS !== 'web' && (
-                      <PressableScale onPress={() => pick(d.type, true)} style={[styles.small, { backgroundColor: t.accentSoft }]}>
-                        <ThemedText type="smallBold" style={{ color: t.accent }}>Take photo</ThemedText>
-                      </PressableScale>
+                      <Button size="sm" variant="secondary" title="Take photo" onPress={() => pick(d.type, true)} />
                     )}
-                    <PressableScale onPress={() => pick(d.type, false)} style={[styles.small, { backgroundColor: t.backgroundSelected }]}>
-                      <ThemedText type="smallBold">{f ? 'Replace' : Platform.OS === 'web' ? 'Upload photo' : 'From gallery'}</ThemedText>
-                    </PressableScale>
+                    <Button size="sm" variant="secondary" title={f ? 'Replace' : Platform.OS === 'web' ? 'Upload photo' : 'From gallery'} onPress={() => pick(d.type, false)} />
                   </View>
                 </View>
               </View>

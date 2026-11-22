@@ -9,7 +9,7 @@ import { Image } from 'expo-image';
 import { StockPhotos, vehiclePhotos, type VehicleKind } from '@/components/photo';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Plate } from '@/components/plate';
+import { RefTag } from '@/components/brand';
 import { TransferPayment } from '@/components/transfer-payment';
 import { useWebPullToRefresh } from '@/components/pull-to-refresh';
 import { Button, Card, ErrorText, Pill, PressableScale } from '@/components/ui';
@@ -80,7 +80,7 @@ export default function BookingsScreen() {
             </Animated.View>
           }
           ListEmptyComponent={!loading ? (
-            <EmptyState inline title="No rides yet" body="Your first ride is one tap away." action="Find a bike" onPress={() => router.navigate('/')} />
+            <EmptyState inline title="No rides yet" body="Your first ride is one tap away." action="Book a ride" onPress={() => router.push('/book')} />
           ) : undefined}
           renderItem={({ item, index }) => <RentalCard row={item} index={index} onChanged={load} />}
         />
@@ -124,7 +124,7 @@ function RentalCard({ row, index, onChanged }: { row: Row; index: number; onChan
         {r && live && <RideProgress start={r.start} end={r.end} color={row.status === 'overdue' ? t.danger : t.accent} />}
         <View style={[styles.line, styles.footer, { borderColor: t.border }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.two }}>
-            <Plate size="sm" label="Booking reference">{row.reference}</Plate>
+            <RefTag>{row.reference}</RefTag>
             <ThemedText type="small" themeColor="textSecondary">{row.vehicles?.plate}</ThemedText>
           </View>
           <ThemedText type="smallBold">{money(row.total, row.currency)}</ThemedText>

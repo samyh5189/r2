@@ -36,7 +36,7 @@ export function MessageComposer({ bookingId }: { bookingId: string }) {
         placeholder="Message the rider… (they see this in their app)"
         className="w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none focus:border-accent" />
       <div className="flex items-center gap-3">
-        <button type="button" onClick={send} disabled={busy || !body.trim()} className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50">
+        <button type="button" onClick={send} disabled={busy || !body.trim()} className="btn btn-primary">
           {busy ? "Sending…" : "Send message"}</button>
         <span className="text-xs text-muted">Ctrl/⌘ + Enter to send</span>
         {error && <span role="alert" className="text-sm text-red-600">{error}</span>}

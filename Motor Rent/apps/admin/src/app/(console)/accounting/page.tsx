@@ -55,7 +55,7 @@ async function Accounting({ searchParams }: { searchParams: Promise<{ p?: string
       <nav aria-label="Period" className="-mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
         {PRESETS.map((x) => (
           <Link key={x.key} href={qs(x.key)} aria-current={x.key === period.key ? "page" : undefined}
-            className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium ${x.key === period.key ? "bg-black text-white" : "border border-line hover:bg-panel"}`}>{x.label}</Link>
+            className="seg">{x.label}</Link>
         ))}
         <a href={`/accounting/export?p=${period.key}`} className="ml-auto shrink-0 rounded-lg border border-line px-3 py-1.5 text-sm font-medium hover:bg-panel">Download CSV</a>
       </nav>
@@ -189,7 +189,7 @@ const fmtDay = (d: string) => new Date(d).toLocaleDateString("en-GB", { day: "nu
 
 function Tile({ label, value, note, strong, tone }: { label: string; value: string; note?: string; strong?: boolean; tone?: "warn" }) {
   return (
-    <div className={`space-y-1 rounded-2xl border p-4 ${strong ? "border-transparent bg-black text-white" : tone === "warn" ? "border-amber-500/40 bg-amber-500/10" : "border-line bg-panel"}`}>
+    <div className={`space-y-1 rounded-2xl border p-4 ${strong ? "border-transparent bg-accent text-white" : tone === "warn" ? "border-amber-500/40 bg-amber-500/10" : "border-line bg-panel"}`}>
       <div className={`text-xs ${strong ? "text-white/70" : "text-muted"}`}>{label}</div>
       <div className="font-display text-2xl font-extrabold tabular-nums">{value}</div>
       {note && <div className={`text-xs ${strong ? "text-white/70" : "text-muted"}`}>{note}</div>}

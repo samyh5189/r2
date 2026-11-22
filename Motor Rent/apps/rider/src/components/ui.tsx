@@ -33,34 +33,43 @@ export function PressableScale({
   );
 }
 
+export type ButtonVariant = 'primary' | 'cta' | 'secondary' | 'ghost';
+
+/**
+ * One button family, all brand red:
+ * - primary: red fill, white text (the main action on a screen; `cta` is the same, taller)
+ * - secondary: red outline, red text (other actions)
+ * - ghost: red text only (cancel, small links)
+ */
 export function Button({
-  title, onPress, disabled, loading, variant = 'primary', icon,
-}: { title: string; onPress: () => void; disabled?: boolean; loading?: boolean; variant?: 'primary' | 'cta' | 'secondary' | 'ghost'; icon?: ReactNode }) {
+  title, onPress, disabled, loading, variant = 'primary', size = 'md', icon,
+}: { title: string; onPress: () => void; disabled?: boolean; loading?: boolean; variant?: ButtonVariant; size?: 'sm' | 'md'; icon?: ReactNode }) {
   const t = useTheme();
   const inactive = disabled || loading;
-  const bg = variant === 'primary' ? '#000000' : variant === 'cta' ? t.cta : variant === 'secondary' ? t.backgroundElement : 'transparent';
-  const fg = variant === 'primary' ? '#FFFFFF' : variant === 'cta' ? t.ctaText : t.text;
+  const filled = variant === 'primary' || variant === 'cta';
+  const bg = filled ? t.accent : variant === 'secondary' ? t.backgroundElement : 'transparent';
+  const fg = filled ? t.accentText : t.accent;
+  const sm = size === 'sm';
   return (
     <PressableScale
       accessibilityRole="button"
       accessibilityState={{ disabled: !!inactive, busy: !!loading }}
       disabled={inactive}
       onPress={onPress}
-      lift={!inactive}
+      lift={!inactive && filled}
       style={[
         styles.button,
-        { backgroundColor: bg, opacity: inactive ? 0.5 : 1 },
-        variant === 'secondary' && { borderWidth: 1, borderColor: t.border },
-        variant === 'primary' && { borderWidth: 1.5, borderColor: '#8A9A9B' },
+        sm && styles.buttonSm,
+        { backgroundColor: bg, borderColor: variant === 'secondary' ? t.accent : 'transparent', opacity: inactive ? 0.45 : 1 },
         variant === 'cta' && { minHeight: 56 },
+        filled && !inactive && shadow(t.accent, 0.22, 12),
       ]}>
       {loading ? (
         <ActivityIndicator color={fg} />
       ) : (
-        <View style={styles.buttonRow}>
-          {variant === 'primary' && <View pointerEvents="none" style={styles.rim} />}
+        <View style={[styles.buttonRow, sm && { minHeight: 0 }]}>
           {icon}
-          <ThemedText type="smallBold" style={{ color: fg, fontSize: 16, fontWeight: 700 }}>{title}</ThemedText>
+          <ThemedText type="smallBold" style={{ color: fg, fontSize: sm ? 14 : 16, fontWeight: 700 }}>{title}</ThemedText>
         </View>
       )}
     </PressableScale>
@@ -135,10 +144,9 @@ function hexToRgba(hex: string, a: number) {
 }
 
 const styles = StyleSheet.create({
-  button: { minHeight: 52, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.four },
+  button: { minHeight: 52, borderRadius: Radius.md, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.four },
+  buttonSm: { minHeight: 36, paddingHorizontal: Spacing.three, borderRadius: Radius.sm + 2 },
   buttonRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, alignSelf: 'stretch', justifyContent: 'center', minHeight: 48 },
-  // Thin white inner line, like the rim on a Maldivian number plate.
-  rim: { position: 'absolute', top: -0.5, bottom: -0.5, left: -20, right: -20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.65)', borderRadius: Radius.md - 3 },
   input: { minHeight: 54, borderWidth: 1.5, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 17 },
   card: { borderRadius: Radius.md, padding: Spacing.three, gap: Spacing.two, borderWidth: 1 },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 3, borderRadius: Radius.sm, alignSelf: 'flex-start' },

@@ -122,7 +122,7 @@ export function VehiclePhotos({
                     className="flex-1 rounded-lg bg-white/90 px-2 py-1 text-xs font-semibold text-black hover:bg-white disabled:opacity-50">Make cover</button>
                 )}
                 <button type="button" disabled={!!busy} onClick={() => remove(url)} aria-label={`Remove photo ${i + 1}`}
-                  className="rounded-lg bg-red-600/90 px-2 py-1 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-50">Remove</button>
+                  className="btn btn-primary btn-sm">Remove</button>
               </div>
             )}
           </li>

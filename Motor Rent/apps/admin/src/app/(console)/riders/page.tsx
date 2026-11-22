@@ -48,12 +48,12 @@ async function Riders({ searchParams }: { searchParams: Promise<{ q?: string; f?
         <input name="q" defaultValue={q} placeholder="Search name or phone" aria-label="Search riders"
           className="min-w-0 flex-1 rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none focus:border-accent" />
         <input type="hidden" name="f" value={f} />
-        <button className="rounded-xl bg-black px-4 py-2 font-semibold text-white">Search</button>
+        <button className="btn btn-primary">Search</button>
       </form>
       <nav aria-label="Filter" className="-mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
         {FILTERS.map((x) => (
           <Link key={x.key} href={`/riders?f=${x.key}${q ? `&q=${encodeURIComponent(q)}` : ""}`} aria-current={x.key === f ? "page" : undefined}
-            className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium ${x.key === f ? "bg-black text-white" : "border border-line hover:bg-panel"}`}>{x.label}</Link>
+            className="seg">{x.label}</Link>
         ))}
       </nav>
       <p className="text-sm text-muted">{rows.length} rider{rows.length === 1 ? "" : "s"}</p>

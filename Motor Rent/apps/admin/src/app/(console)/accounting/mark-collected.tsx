@@ -21,7 +21,7 @@ export function MarkCollected({ id }: { id: string }) {
       <select value={method} onChange={(e) => setMethod(e.target.value)} aria-label="Paid by" className="rounded-lg border border-line bg-panel px-2 py-1 text-xs">
         <option value="cash">Cash</option><option value="bank">Bank transfer</option><option value="card">Card</option>
       </select>
-      <button type="button" onClick={save} disabled={busy} className="rounded-lg bg-black px-2.5 py-1 text-xs font-semibold text-white">{busy ? "Saving…" : "Mark paid"}</button>
+      <button type="button" onClick={save} disabled={busy} className="btn btn-primary btn-sm">{busy ? "Saving…" : "Mark paid"}</button>
       {err && <span className="text-xs text-red-600">{err}</span>}
     </span>
   );

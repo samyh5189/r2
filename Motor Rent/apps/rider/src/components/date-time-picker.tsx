@@ -85,8 +85,8 @@ export function DateTimePicker({ value, onChange, min, days = 30, label }: {
           return (
             <PressableScale key={s.getTime()} onPress={() => onChange(s)} accessibilityRole="radio" accessibilityState={{ selected: sel }}
               scaleTo={0.93} lift={false}
-              style={[styles.time, { borderColor: sel ? t.accent : t.border, backgroundColor: sel ? t.accentSoft : t.backgroundElement }]}>
-              <ThemedText type="smallBold" style={{ color: sel ? t.accent : t.text, fontVariant: ['tabular-nums'] }}>
+              style={[styles.time, { borderColor: sel ? t.accent : t.border, backgroundColor: sel ? t.accent : t.backgroundElement }]}>
+              <ThemedText type="smallBold" style={{ color: sel ? t.accentText : t.text, fontVariant: ['tabular-nums'] }}>
                 {fmtTime(s)}
               </ThemedText>
             </PressableScale>

@@ -28,7 +28,7 @@ export function CancelBooking({ id, reference, paid }: { id: string; reference: 
         className="rounded-lg border border-line bg-panel px-2 py-1 text-xs outline-none focus:border-accent" />
       {paid && <span className="text-xs text-amber-700">Paid booking: refund the rider separately.</span>}
       <div className="flex gap-2">
-        <button type="button" disabled={busy || reason.trim().length < 3} onClick={run} className="rounded-md bg-red-600 px-2 py-1 text-xs font-semibold text-white disabled:opacity-50">Confirm</button>
+        <button type="button" disabled={busy || reason.trim().length < 3} onClick={run} className="btn btn-primary btn-sm">Confirm</button>
         <button type="button" onClick={() => setOpen(false)} className="text-xs text-muted">Keep</button>
       </div>
       {error && <span className="text-xs text-red-600">{error}</span>}

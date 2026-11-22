@@ -84,7 +84,7 @@ export function VehicleForm({
 
       {error && <p role="alert" className="col-span-full rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
       <div className="col-span-full flex items-center gap-3">
-        <button disabled={busy} className="rounded-xl bg-accent px-4 py-2 font-semibold text-white transition hover:-translate-y-0.5 disabled:opacity-50">
+        <button disabled={busy} className="btn btn-primary">
           {busy ? "Saving…" : v.id ? "Save changes" : "Add vehicle"}
         </button>
         {saved && <span className="rise text-sm text-emerald-600">Saved ✓</span>}
@@ -118,13 +118,13 @@ export function DeleteVehicle({ id, label, photos }: { id: string; label: string
     <div className="flex flex-wrap items-center gap-2">
       {!confirming ? (
         <button type="button" onClick={() => setConfirming(true)}
-          className="rounded-xl border border-red-500/40 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-500/10">Delete vehicle</button>
+          className="btn btn-secondary btn-sm">Delete vehicle</button>
       ) : (
         <>
           <span className="text-sm">Delete <b>{label}</b>? This cannot be undone.</span>
-          <button type="button" disabled={busy} onClick={run} className="rounded-xl bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          <button type="button" disabled={busy} onClick={run} className="btn btn-primary btn-sm">
             {busy ? "Deleting…" : "Yes, delete"}</button>
-          <button type="button" onClick={() => setConfirming(false)} className="rounded-xl px-3 py-2 text-sm text-muted">Cancel</button>
+          <button type="button" onClick={() => setConfirming(false)} className="btn btn-ghost btn-sm">Cancel</button>
         </>
       )}
       {msg && <p role="status" className="w-full text-sm text-amber-700 dark:text-amber-400">{msg}</p>}

@@ -91,8 +91,8 @@ function BlockForm({ block, userId, onClose }: { block?: Block; userId: string; 
               className="rounded-full border border-line px-2 py-0.5 text-xs hover:border-accent">{r}</button>))}</div></label>
         {error && <p role="alert" className="col-span-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
         <div className="col-span-2 flex gap-2">
-          <button disabled={busy || !!file} className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : block ? "Save" : "Add to blocklist"}</button>
-          <button type="button" onClick={onClose} className="rounded-xl px-3 py-2 text-muted">Cancel</button>
+          <button disabled={busy || !!file} className="btn btn-primary">{busy ? "Saving…" : block ? "Save" : "Add to blocklist"}</button>
+          <button type="button" onClick={onClose} className="btn btn-ghost">Cancel</button>
         </div>
       </div>
     </form>
@@ -128,7 +128,7 @@ export function BlockList({ blocks, canEdit, userId }: { blocks: Block[]; canEdi
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3">
         <input className={`${field} max-w-sm flex-1`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, phone, email, ID…" aria-label="Search blocklist" />
-        {canEdit && editing !== "new" && <button type="button" onClick={() => setEditing("new")} className="rounded-xl bg-accent px-4 py-2 font-semibold text-white">＋ Add person</button>}
+        {canEdit && editing !== "new" && <button type="button" onClick={() => setEditing("new")} className="btn btn-primary">＋ Add person</button>}
       </div>
       {editing === "new" && <BlockForm userId={userId} onClose={() => setEditing(null)} />}
       {error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
@@ -148,7 +148,7 @@ export function BlockList({ blocks, canEdit, userId }: { blocks: Block[]; canEdi
               </div>
               <p className="text-xs text-muted">{[b.phone, b.email, b.id_number].filter(Boolean).join(" · ")}</p>
               <p className="text-sm">{b.reason}</p>
-              {b.amount_owed > 0 && <p className="text-sm font-semibold text-red-600">Owes {money(b.amount_owed, b.currency)}</p>}
+              {b.amount_owed > 0 && <p className="text-sm font-semibold text-accent">Owes {money(b.amount_owed, b.currency)}</p>}
               {canEdit && (
                 <div className="flex flex-wrap gap-2 pt-1 text-sm">
                   <button type="button" onClick={() => setEditing(b.id)} className="font-semibold text-accent">Edit</button>

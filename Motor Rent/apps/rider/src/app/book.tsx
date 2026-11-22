@@ -9,6 +9,7 @@ import { DURATIONS, MAX_RENTAL_DAYS, MIN_RENTAL_HOURS, Reserved, lengthLabel } f
 import { DateTimePicker, firstSlot } from '@/components/date-time-picker';
 import { Plate } from '@/components/plate';
 import { vehiclePhotos, type VehicleKind } from '@/components/photo';
+import { BrandMark } from '@/components/brand';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, ErrorText, Pill, PressableScale } from '@/components/ui';
@@ -150,7 +151,7 @@ export default function BookScreen() {
     <Animated.View key={step} entering={FadeInRight.duration(240)} style={styles.stepBody}>
       {step > 0 && (
         <Pressable onPress={() => go(step - 1)} accessibilityRole="button" hitSlop={8} style={{ alignSelf: 'flex-start' }}>
-          <ThemedText type="smallBold" themeColor="textSecondary">Back</ThemedText>
+          <ThemedText type="smallBold" themeColor="accent">‹ Back</ThemedText>
         </Pressable>
       )}
       <ThemedText themeColor="textSecondary" style={{ fontSize: 17 }}>{lead}</ThemedText>
@@ -199,7 +200,7 @@ export default function BookScreen() {
       <Stack.Screen options={{ headerShown: false, title: 'Book a ride' }} />
       <View style={[styles.bar, { borderColor: t.border, backgroundColor: t.background }]}>
         <Pressable onPress={() => router.replace('/')} accessibilityRole="link" accessibilityLabel="Rent a Motor home" style={styles.brand}>
-          <Plate size="sm">RM</Plate>
+          <BrandMark size={30} />
           <ThemedText type="smallBold" style={{ fontSize: 17 }}>Rent a Motor</ThemedText>
         </Pressable>
         <ThemedText type="small" themeColor="textSecondary" style={{ marginLeft: 'auto' }}>{step + 1} of {STEPS.length}</ThemedText>

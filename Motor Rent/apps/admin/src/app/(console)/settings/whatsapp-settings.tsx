@@ -5,7 +5,7 @@ import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 const field = "w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
-const btn = "rounded-xl bg-black px-4 py-2 font-semibold text-white ring-1 ring-inset ring-white/60 disabled:opacity-40";
+const btn = "btn btn-primary";
 
 function toE164(raw: string) {
   const s = raw.replace(/[\s()-]/g, "");
@@ -152,7 +152,7 @@ export function ConnectWhatsApp({ ready, isOwner, templates }: { ready: boolean;
           {isOwner && (
             <div className="flex flex-wrap items-center gap-3">
               <button type="button" className={btn} disabled={busy} onClick={submitTemplates}>{busy ? "Submitting…" : "Submit templates to Meta"}</button>
-              <button type="button" onClick={disconnect} className="text-sm font-semibold text-red-600">Disconnect WhatsApp</button>
+              <button type="button" onClick={disconnect} className="btn btn-ghost btn-sm">Disconnect WhatsApp</button>
             </div>
           )}
           <details className="text-sm">

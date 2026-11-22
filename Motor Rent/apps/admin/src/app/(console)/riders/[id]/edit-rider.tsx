@@ -29,7 +29,7 @@ export function EditRider({ rider }: { rider: Rider }) {
 
   if (!open) return (
     <div className="flex items-center gap-3">
-      <button type="button" onClick={() => setOpen(true)} className="rounded-xl border border-line px-4 py-2 text-sm font-semibold hover:bg-line/40">Edit details</button>
+      <button type="button" onClick={() => setOpen(true)} className="btn btn-secondary">Edit details</button>
       {msg?.ok && <span role="status" className="text-sm text-emerald-600">{msg.text}</span>}
     </div>
   );
@@ -42,7 +42,7 @@ export function EditRider({ rider }: { rider: Rider }) {
       <label className="space-y-1"><span className="text-xs font-medium text-muted">Licence valid until</span><input className={field} type="date" value={v.licence} onChange={set("licence")} /></label>
       {msg && !msg.ok && <p role="alert" className="text-sm text-red-600 sm:col-span-2">{msg.text}</p>}
       <div className="flex gap-3 sm:col-span-2">
-        <button className="rounded-xl bg-black px-4 py-2 font-semibold text-white">Save</button>
+        <button className="btn btn-primary">Save</button>
         <button type="button" onClick={() => setOpen(false)} className="text-sm text-muted">Cancel</button>
       </div>
     </form>
@@ -68,7 +68,7 @@ export function DeleteRider({ id, name }: { id: string; name: string }) {
     router.push(data?.anonymised ? `/riders/${id}` : "/riders");
     router.refresh();
   }
-  if (!open) return <button type="button" onClick={() => setOpen(true)} className="text-sm font-semibold text-red-600">Delete rider</button>;
+  if (!open) return <button type="button" onClick={() => setOpen(true)} className="btn btn-ghost btn-sm">Delete rider</button>;
   return (
     <div className="space-y-2 rounded-2xl border border-red-500/40 bg-red-500/5 p-4 text-sm">
       <p><b>This can&apos;t be undone.</b> Identity documents and the profile photo are erased. If {name} has past rentals, those stay as financial records but their name and contact details are removed and they can no longer sign in.</p>
@@ -76,7 +76,7 @@ export function DeleteRider({ id, name }: { id: string; name: string }) {
         <input className={field} value={confirm} onChange={(e) => setConfirm(e.target.value)} /></label>
       {err && <p role="alert" className="text-red-600">{err}</p>}
       <div className="flex gap-3">
-        <button type="button" disabled={confirm !== "DELETE" || busy} onClick={del} className="rounded-xl bg-red-600 px-4 py-2 font-semibold text-white disabled:opacity-40">{busy ? "Deleting…" : "Delete rider"}</button>
+        <button type="button" disabled={confirm !== "DELETE" || busy} onClick={del} className="btn btn-primary">{busy ? "Deleting…" : "Delete rider"}</button>
         <button type="button" onClick={() => setOpen(false)} className="text-muted">Cancel</button>
       </div>
     </div>

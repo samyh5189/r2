@@ -64,8 +64,8 @@ function PlanForm({ plan, onClose }: { plan?: Plan; onClose: () => void }) {
       {plan && plan.vehicles > 0 && <p className="col-span-full text-xs text-muted">Changes apply to new quotes for all {plan.vehicles} vehicle(s) on this plan. Existing bookings keep their price.</p>}
       {error && <p role="alert" className="col-span-full rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
       <div className="col-span-full flex gap-2">
-        <button disabled={busy} className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : plan ? "Save prices" : "Create plan"}</button>
-        <button type="button" onClick={onClose} className="rounded-xl px-3 py-2 text-muted">Cancel</button>
+        <button disabled={busy} className="btn btn-primary">{busy ? "Saving…" : plan ? "Save prices" : "Create plan"}</button>
+        <button type="button" onClick={onClose} className="btn btn-ghost">Cancel</button>
       </div>
     </form>
   );
@@ -81,7 +81,7 @@ export function PricePlans({ plans, canEdit }: { plans: Plan[]; canEdit: boolean
           <p className="text-sm text-muted">Each vehicle uses one price plan. Riders are always quoted from these prices on the server.</p>
         </div>
         {canEdit && editing !== "new" && (
-          <button type="button" onClick={() => setEditing("new")} className="rounded-xl border border-line px-3 py-2 text-sm font-semibold hover:border-accent">＋ New plan</button>
+          <button type="button" onClick={() => setEditing("new")} className="btn btn-secondary btn-sm">＋ New plan</button>
         )}
       </div>
       {editing === "new" && <PlanForm onClose={() => setEditing(null)} />}
@@ -95,7 +95,7 @@ export function PricePlans({ plans, canEdit }: { plans: Plan[]; canEdit: boolean
                 <p className="font-semibold">{p.name}</p>
                 <p className="text-xs text-muted">{p.vehicles} vehicle{p.vehicles === 1 ? "" : "s"}{p.active ? "" : " · inactive"}</p>
               </div>
-              {canEdit && <button type="button" onClick={() => setEditing(p.id)} className="rounded-lg px-2 py-1 text-sm font-semibold text-accent hover:bg-accent/10">Edit</button>}
+              {canEdit && <button type="button" onClick={() => setEditing(p.id)} className="btn btn-ghost btn-sm">Edit</button>}
             </div>
             <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
               <div><dt className="text-xs text-muted">Hour</dt><dd className="font-semibold tabular-nums">{money(p.hourly, p.currency)}</dd></div>

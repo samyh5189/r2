@@ -54,8 +54,8 @@ function AccountForm({ account, onClose }: { account?: BankAccount; onClose: () 
         <input className={field} value={a.note} onChange={(e) => setA({ ...a, note: e.target.value })} placeholder="e.g. Use for MVR payments only" maxLength={200} /></label>
       {error && <p role="alert" className="col-span-full rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
       <div className="col-span-full flex gap-2">
-        <button disabled={busy} className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : account ? "Save account" : "Add account"}</button>
-        <button type="button" onClick={onClose} className="rounded-xl px-3 py-2 text-muted">Cancel</button>
+        <button disabled={busy} className="btn btn-primary">{busy ? "Saving…" : account ? "Save account" : "Add account"}</button>
+        <button type="button" onClick={onClose} className="btn btn-ghost">Cancel</button>
       </div>
     </form>
   );
@@ -88,7 +88,7 @@ export function BankAccounts({ accounts, note, hero, canEdit }: {
           <h2 className="text-lg font-semibold">Bank transfer accounts</h2>
           <p className="text-sm text-muted">Riders see active accounts after booking, can copy the number, and upload their transfer slip.</p>
         </div>
-        {canEdit && editing !== "new" && <button type="button" onClick={() => setEditing("new")} className="rounded-xl border border-line px-3 py-2 text-sm font-semibold hover:border-accent">＋ Add account</button>}
+        {canEdit && editing !== "new" && <button type="button" onClick={() => setEditing("new")} className="btn btn-secondary btn-sm">＋ Add account</button>}
       </div>
       {editing === "new" && <AccountForm onClose={() => setEditing(null)} />}
       {!accounts.length && editing !== "new" && (
@@ -111,8 +111,8 @@ export function BankAccounts({ accounts, note, hero, canEdit }: {
               </div>
               {canEdit && (
                 <div className="flex flex-col gap-1">
-                  <button type="button" onClick={() => setEditing(a.id)} className="rounded-lg px-2 py-1 text-sm font-semibold text-accent hover:bg-accent/10">Edit</button>
-                  <button type="button" onClick={() => remove(a.id)} className="rounded-lg px-2 py-1 text-sm text-red-600 hover:bg-red-500/10">Remove</button>
+                  <button type="button" onClick={() => setEditing(a.id)} className="btn btn-ghost btn-sm">Edit</button>
+                  <button type="button" onClick={() => remove(a.id)} className="btn btn-ghost btn-sm">Remove</button>
                 </div>
               )}
             </div>
@@ -121,7 +121,7 @@ export function BankAccounts({ accounts, note, hero, canEdit }: {
       </ul>
       <label className="block space-y-1"><span className="text-xs font-medium text-muted">Instructions shown to riders</span>
         <textarea className={`${field} min-h-20`} value={noteText} maxLength={300} disabled={!canEdit} onChange={(e) => setNoteText(e.target.value)} /></label>
-      {canEdit && <button type="button" onClick={saveNote} className="rounded-xl border border-line px-3 py-2 text-sm font-semibold hover:border-accent">Save instructions</button>}
+      {canEdit && <button type="button" onClick={saveNote} className="btn btn-secondary btn-sm">Save instructions</button>}
       {msg && <p role="status" className="text-sm text-muted">{msg}</p>}
     </section>
   );

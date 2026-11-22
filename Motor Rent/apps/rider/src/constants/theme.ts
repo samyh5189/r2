@@ -1,5 +1,5 @@
 /**
- * Island road palette: coral-sand white, ink and teal, road-marking yellow for the one main action.
+ * Brand palette: one red for every action, selection and link; ink text on warm white; status colours only for status.
  * Every screen reads colors through useTheme(), so both schemes stay in sync.
  */
 
@@ -14,10 +14,11 @@ export const Colors = {
     backgroundElement: '#FFFFFF',
     backgroundSelected: '#F1E9E7',
     textSecondary: '#61646B',
-    accent: '#D7192A',          // brand red: selection, links, progress, main actions
+    accent: '#D7192A',          // brand red: every button, selection, link and progress bar
+    accentStrong: '#B5121F',
     accentSoft: '#FBE3E5',
     accentText: '#FFFFFF',
-    cta: '#D7192A',             // road-marking yellow: the main action on a screen
+    cta: '#D7192A',
     ctaText: '#FFFFFF',
     ocean: '#D7192A',
     highlight: '#FFC629',
@@ -43,7 +44,8 @@ export const Colors = {
     backgroundElement: '#1B1B1E',
     backgroundSelected: '#2A2224',
     textSecondary: '#A3A1A6',
-    accent: '#FF4D5A',
+    accent: '#E5273A',
+    accentStrong: '#FF4D5A',
     accentSoft: '#3A1418',
     accentText: '#FFFFFF',
     cta: '#E5273A',

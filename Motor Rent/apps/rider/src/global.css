@@ -11,7 +11,7 @@
 
 html,
 body {
-  background: #f3f5f2;
+  background: #f6f4f1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -19,7 +19,7 @@ body {
 @media (prefers-color-scheme: dark) {
   html,
   body {
-    background: #08171c;
+    background: #121214;
   }
 }
 

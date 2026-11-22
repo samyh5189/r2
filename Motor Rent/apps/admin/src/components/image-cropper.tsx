@@ -128,10 +128,10 @@ export function ImageCropper({
         {error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
 
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={() => { setZoom(1); setPos({ x: 0, y: 0 }); }} className="mr-auto rounded-xl px-3 py-2 text-sm text-muted hover:text-foreground">Reset</button>
-          <button type="button" onClick={onCancel} className="rounded-xl border border-line px-4 py-2 font-semibold hover:bg-background">Cancel</button>
+          <button type="button" onClick={() => { setZoom(1); setPos({ x: 0, y: 0 }); }} className="btn btn-ghost btn-sm mr-auto">Reset</button>
+          <button type="button" onClick={onCancel} className="btn btn-secondary">Cancel</button>
           <button type="button" onClick={confirm} disabled={!img}
-            className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50">Use photo</button>
+            className="btn btn-primary">Use photo</button>
         </div>
       </div>
     </div>

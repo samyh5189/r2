@@ -84,7 +84,7 @@ async function Today() {
                   <span className="ml-auto flex items-center gap-3">
                     <StatusBadge status={r.status} />
                     {(r.status === "confirmed" || r.status === "active" || r.status === "overdue") && (
-                      <Link href={`/bookings/${r.id}#handover`} className="rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-inset ring-white/60">
+                      <Link href={`/bookings/${r.id}#handover`} className="btn btn-primary btn-sm">
                         {r.status === "confirmed" ? "Hand over" : "Collect"}</Link>
                     )}
                   </span>

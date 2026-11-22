@@ -34,7 +34,7 @@ function CopyRow({ label, value, mono }: { label: string; value: string; mono?: 
         <ThemedText type="heading" selectable style={mono ? { fontVariant: ['tabular-nums'], letterSpacing: 1.5, fontSize: 18 } : { fontSize: 17 }}>{value}</ThemedText>
       </View>
       <PressableScale accessibilityRole="button" accessibilityLabel={`Copy ${label}`} onPress={copy}
-        style={[styles.copyBtn, { backgroundColor: copied ? t.successSoft : t.accentSoft }]}>
+        style={[styles.copyBtn, { backgroundColor: copied ? t.successSoft : t.backgroundElement, borderWidth: 1.5, borderColor: copied ? t.success : t.accent }]}>
         <ThemedText type="smallBold" style={{ color: copied ? t.success : t.accent }}>{copied ? 'Copied ✓' : 'Copy'}</ThemedText>
       </PressableScale>
     </View>

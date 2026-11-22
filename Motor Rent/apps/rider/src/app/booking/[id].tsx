@@ -7,7 +7,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Chatter, type ChatterItem } from '@/components/chatter';
 import { vehiclePhotos, type VehicleKind } from '@/components/photo';
 import { useWebPullToRefresh } from '@/components/pull-to-refresh';
-import { Plate } from '@/components/plate';
+import { RefTag } from '@/components/brand';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, ErrorText, Pill } from '@/components/ui';
@@ -143,7 +143,7 @@ export default function BookingDetail() {
               )}
               <View style={[styles.row, styles.footer, { borderColor: t.border }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexShrink: 1 }}>
-                  <Plate size="md" label="Booking reference">{booking.reference}</Plate>
+                  <RefTag>{booking.reference}</RefTag>
                   <ThemedText type="small" themeColor="textSecondary">{booking.vehicles?.plate}{booking.branches ? `, ${booking.branches.name}` : ''}</ThemedText>
                 </View>
                 <ThemedText type="smallBold">{money(booking.total, booking.currency)}</ThemedText>

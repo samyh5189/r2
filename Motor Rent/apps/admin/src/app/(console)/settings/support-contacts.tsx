@@ -31,7 +31,7 @@ export function SupportContacts({ phone, email, canEdit }: { phone: string | nul
           <input className={field} value={p} onChange={(x) => setP(x.target.value)} placeholder="+960 7xx xxxx" inputMode="tel" disabled={!canEdit} /></label>
         <label className="space-y-1"><span className="text-xs font-medium text-muted">Email</span>
           <input className={field} type="email" value={e} onChange={(x) => setE(x.target.value)} placeholder="hello@yourdomain.mv" disabled={!canEdit} /></label>
-        {canEdit && <button className="rounded-xl bg-accent px-4 py-2 font-semibold text-white">Save</button>}
+        {canEdit && <button className="btn btn-primary">Save</button>}
         {msg && <p role="status" className={`text-sm sm:col-span-3 ${msg.ok ? "text-emerald-600" : "text-red-600"}`}>{msg.text}</p>}
       </form>
     </section>

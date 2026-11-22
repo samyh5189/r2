@@ -11,7 +11,7 @@ export function AddVehicle({ branches, plans }: { branches: Option[]; plans: Opt
       <div className="flex items-center gap-3">
         {added && <span className="rise text-sm text-emerald-600">Added ✓ — open it below to upload photos</span>}
         <button type="button" onClick={() => { setOpen(true); setAdded(false); }}
-          className="rounded-xl bg-accent px-4 py-2 font-semibold text-white shadow-[0_8px_20px_color-mix(in_srgb,var(--accent)_35%,transparent)] transition hover:-translate-y-0.5">
+          className="btn btn-primary">
           ＋ Add vehicle
         </button>
       </div>

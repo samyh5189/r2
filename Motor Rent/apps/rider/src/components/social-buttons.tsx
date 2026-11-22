@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { oauthErrorMessage, signInWithProvider, type OAuthProvider } from '@/lib/oauth';
 
+import { GoogleIdentityButton, googleIdentityAvailable } from './google-identity';
 import { ThemedText } from './themed-text';
-import { ErrorText, PressableScale, shadow } from './ui';
+import { ErrorText, PressableScale } from './ui';
 
 function GoogleG({ size = 20 }: { size?: number }) {
   return (
@@ -28,12 +29,16 @@ function AppleLogo({ size = 20, color }: { size?: number; color: string }) {
   );
 }
 
+const APPLE = process.env.EXPO_PUBLIC_APPLE_SIGN_IN === 'true';
+
 /**
- * "Continue with Google" (primary) and "Continue with Apple" (secondary).
- * Providers are configured in Supabase Auth; until they are, the press shows a friendly message.
+ * Google (and Apple once it is switched on), above the email form.
+ * Google's button follows Google's branding rules (white or black with the G), so it is the one button that isn't red.
+ * On the website it is Google's own button (popup on our domain); in the apps it opens the in-app browser.
  */
 export function SocialButtons({ onSignedIn, onBusy, next }: { onSignedIn: () => void; onBusy?: (b: boolean) => void; next?: string }) {
   const t = useTheme();
+  const dark = useColorScheme() === 'dark';
   const [busy, setBusy] = useState<OAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,21 +56,25 @@ export function SocialButtons({ onSignedIn, onBusy, next }: { onSignedIn: () => 
 
   return (
     <View style={styles.wrap}>
-      <PressableScale accessibilityRole="button" accessibilityLabel="Continue with Google" disabled={!!busy}
-        onPress={() => go('google')}
-        style={[styles.btn, { backgroundColor: t.accent }, shadow(t.accent, 0.35, 14), busy && styles.dim]}>
-        <View style={styles.iconChip}><GoogleG /></View>
-        <ThemedText type="smallBold" style={[styles.label, { color: t.accentText }]}>Continue with Google</ThemedText>
-        {busy === 'google' && <ActivityIndicator color={t.accentText} style={styles.spinner} />}
-      </PressableScale>
+      {Platform.OS === 'web' && googleIdentityAvailable ? (
+        <GoogleIdentityButton onSignedIn={onSignedIn} onError={setError} />
+      ) : (
+        <PressableScale accessibilityRole="button" accessibilityLabel="Continue with Google" disabled={!!busy} onPress={() => go('google')} lift={false}
+          style={[styles.btn, dark ? styles.googleDark : styles.googleLight, busy && styles.dim]}>
+          <View style={styles.icon}><GoogleG /></View>
+          <ThemedText type="smallBold" style={[styles.label, { color: dark ? '#E3E3E3' : '#1F1F1F' }]}>Continue with Google</ThemedText>
+          {busy === 'google' && <ActivityIndicator color={dark ? '#E3E3E3' : '#1F1F1F'} style={styles.spinner} />}
+        </PressableScale>
+      )}
 
-      <PressableScale accessibilityRole="button" accessibilityLabel="Continue with Apple" disabled={!!busy}
-        onPress={() => go('apple')}
-        style={[styles.btn, { backgroundColor: t.backgroundElement, borderWidth: 1.5, borderColor: t.border }, busy && styles.dim]}>
-        <View style={styles.iconPlain}><AppleLogo color={t.text} /></View>
-        <ThemedText type="smallBold" style={[styles.label, { color: t.text }]}>Continue with Apple</ThemedText>
-        {busy === 'apple' && <ActivityIndicator color={t.text} style={styles.spinner} />}
-      </PressableScale>
+      {APPLE && (
+        <PressableScale accessibilityRole="button" accessibilityLabel="Continue with Apple" disabled={!!busy} onPress={() => go('apple')} lift={false}
+          style={[styles.btn, { backgroundColor: dark ? '#FFFFFF' : '#000000' }, busy && styles.dim]}>
+          <View style={styles.icon}><AppleLogo color={dark ? '#000000' : '#FFFFFF'} /></View>
+          <ThemedText type="smallBold" style={[styles.label, { color: dark ? '#000000' : '#FFFFFF' }]}>Continue with Apple</ThemedText>
+          {busy === 'apple' && <ActivityIndicator color={dark ? '#000000' : '#FFFFFF'} style={styles.spinner} />}
+        </PressableScale>
+      )}
 
       <ErrorText>{error}</ErrorText>
 
@@ -80,10 +89,11 @@ export function SocialButtons({ onSignedIn, onBusy, next }: { onSignedIn: () => 
 
 const styles = StyleSheet.create({
   wrap: { gap: Spacing.two + 2 },
-  btn: { minHeight: 54, borderRadius: Radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.four },
-  iconChip: { position: 'absolute', left: 8, width: 38, height: 38, borderRadius: 10, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  iconPlain: { position: 'absolute', left: 17 },
-  label: { fontSize: 16 },
+  btn: { minHeight: 48, borderRadius: Radius.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.four, gap: Spacing.two + 2 },
+  googleLight: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#747775' },
+  googleDark: { backgroundColor: '#131314', borderWidth: 1, borderColor: '#8E918F' },
+  icon: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
+  label: { fontSize: 15 },
   spinner: { position: 'absolute', right: 16 },
   dim: { opacity: 0.6 },
   divider: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, marginTop: Spacing.two },

@@ -90,17 +90,17 @@ export function KycReview({ sub }: { sub: PendingKyc }) {
       {error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
       {!rejecting ? (
         <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={busy} onClick={() => decide(true)} className="rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white disabled:opacity-50">
+          <button type="button" disabled={busy} onClick={() => decide(true)} className="btn btn-primary">
             {busy ? "…" : "Approve rider"}</button>
-          <button type="button" disabled={busy} onClick={() => setRejecting(true)} className="rounded-xl border border-red-500/40 px-4 py-2 font-semibold text-red-600 hover:bg-red-500/10">Reject</button>
+          <button type="button" disabled={busy} onClick={() => setRejecting(true)} className="btn btn-secondary">Reject</button>
         </div>
       ) : (
         <div className="flex flex-wrap items-end gap-2">
           <label className="min-w-64 flex-1 space-y-1"><span className="text-xs font-medium text-muted">What should the rider fix? (they see this)</span>
             <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} autoFocus className={`${field} w-full`}
               placeholder="e.g. Licence photo is blurry — please retake in good light" /></label>
-          <button type="button" disabled={busy || reason.trim().length < 3} onClick={() => decide(false)} className="rounded-xl bg-red-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Reject</button>
-          <button type="button" onClick={() => setRejecting(false)} className="rounded-xl px-3 py-2 text-muted">Cancel</button>
+          <button type="button" disabled={busy || reason.trim().length < 3} onClick={() => decide(false)} className="btn btn-primary">Reject</button>
+          <button type="button" onClick={() => setRejecting(false)} className="btn btn-ghost">Cancel</button>
         </div>
       )}
     </article>

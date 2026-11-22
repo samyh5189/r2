@@ -63,7 +63,7 @@ export function HeroSettings({ url, credit, note, canEdit }: { url: string | nul
         {canEdit ? (
           <div className="flex flex-wrap items-end gap-3 p-4">
             <button type="button" disabled={!!busy} onClick={() => input.current?.click()}
-              className="rounded-xl bg-accent px-4 py-2 font-semibold text-white disabled:opacity-50">{busy ?? "Change photo"}</button>
+              className="btn btn-primary">{busy ?? "Change photo"}</button>
             <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden
               onChange={(e) => { const f = e.target.files?.[0]; if (f) setFile(f); e.target.value = ""; }} />
             <label className="min-w-56 flex-1 space-y-1"><span className="text-xs font-medium text-muted">Photo credit (shown small on the photo)</span>

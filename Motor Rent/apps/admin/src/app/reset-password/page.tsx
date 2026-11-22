@@ -35,7 +35,7 @@ export default function ResetPasswordPage() {
         <p className="text-xs text-muted">At least 8 characters, with letters and a number.</p>
         {pw2 && pw !== pw2 && <p className="text-sm text-red-600">Passwords don&apos;t match.</p>}
         {error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
-        <button disabled={!valid || busy} className="w-full rounded-xl bg-accent px-4 py-3 font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : "Save password"}</button>
+        <button disabled={!valid || busy} className="btn btn-primary btn-lg w-full">{busy ? "Saving…" : "Save password"}</button>
       </form>
     </main>
   );

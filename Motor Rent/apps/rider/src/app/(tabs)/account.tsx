@@ -195,22 +195,41 @@ export default function AccountScreen() {
               ready={!!site?.whatsapp_ready} onSaved={load} />
           )}
 
-          <Animated.View style={{ gap: Spacing.two }}>
-            {site?.support_phone && (
-              <Button title="Message us on WhatsApp" variant="secondary"
-                onPress={() => Linking.openURL(`https://wa.me/${site.support_phone!.replace(/\D/g, '').replace(/^(\d{7})$/, '960$1')}`)} />
-            )}
-            {site?.support_phone && (
-              <Button title={`Call us · ${site.support_phone}`} variant="secondary" onPress={() => Linking.openURL(`tel:${site.support_phone!.replace(/\s/g, '')}`)} />
-            )}
-            {site?.support_email && (
-              <Button title={`Email ${site.support_email}`} variant="secondary" onPress={() => Linking.openURL(`mailto:${site.support_email}`)} />
-            )}
-            <Button title="Rental terms" variant="ghost" onPress={() => router.push('/terms')} />
-            <Button title="Sign out" variant="secondary" onPress={() => supabase.auth.signOut()} />
-            <Button title="Delete my account" variant="ghost" onPress={deleteAccount} />
-            {deleteError && <ThemedText type="small" style={{ color: t.danger, textAlign: 'center' }}>{deleteError}</ThemedText>}
-          </Animated.View>
+          {(site?.support_phone || site?.support_email) && (
+            <Card>
+              <ThemedText type="heading">Need help?</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">We answer during counter hours, 07:00 to 22:00.</ThemedText>
+              <View style={styles.actions}>
+                {site?.support_phone && (
+                  <Button size="sm" title="WhatsApp us"
+                    onPress={() => Linking.openURL(`https://wa.me/${site.support_phone!.replace(/\D/g, '').replace(/^(\d{7})$/, '960$1')}`)} />
+                )}
+                {site?.support_phone && (
+                  <Button size="sm" variant="secondary" title={`Call ${site.support_phone}`} onPress={() => Linking.openURL(`tel:${site.support_phone!.replace(/\s/g, '')}`)} />
+                )}
+                {site?.support_email && (
+                  <Button size="sm" variant="secondary" title="Email us" onPress={() => Linking.openURL(`mailto:${site.support_email}`)} />
+                )}
+              </View>
+            </Card>
+          )}
+
+          <Card>
+            <ThemedText type="heading">Your account</ThemedText>
+            <View style={styles.actions}>
+              <Button size="sm" variant="secondary" title="Rental terms" onPress={() => router.push('/terms')} />
+              <Button size="sm" variant="secondary" title="Privacy policy" onPress={() => router.push('/privacy')} />
+              <Button size="sm" variant="secondary" title="Sign out" onPress={() => supabase.auth.signOut()} />
+            </View>
+            <View style={[styles.danger, { borderColor: t.border }]}>
+              <View style={styles.flex}>
+                <ThemedText type="smallBold">Delete my account</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">Erases your documents and signs you out. Close open rentals first.</ThemedText>
+              </View>
+              <Button size="sm" variant="ghost" title="Delete" onPress={deleteAccount} />
+            </View>
+            {deleteError && <ThemedText type="small" style={{ color: t.danger }}>{deleteError}</ThemedText>}
+          </Card>
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -247,5 +266,7 @@ const styles = StyleSheet.create({
   camBadge: { position: 'absolute', right: -2, bottom: -2, width: 24, height: 24, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   steps: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginTop: Spacing.one },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginTop: Spacing.one },
+  danger: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, borderTopWidth: 1, paddingTop: Spacing.three, marginTop: Spacing.two },
   step: { borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
 });

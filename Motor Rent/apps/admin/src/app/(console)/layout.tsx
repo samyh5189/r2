@@ -2,8 +2,9 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { requireStaff } from "@/lib/auth";
 import { SignOutButton } from "./sign-out";
+import { NavLinks, type NavItem } from "./nav-links";
 
-const NAV: { href: string; label: string; count?: "messages" | "kyc" | "slips" | "whatsapp" }[] = [
+const NAV: NavItem[] = [
   { href: "/", label: "Today" },
   { href: "/bookings", label: "Bookings", count: "messages" },
   { href: "/riders", label: "Riders" },
@@ -21,23 +22,7 @@ async function Nav() {
   const { db } = await requireStaff();
   const { data } = await db.rpc("staff_inbox_counts");
   const counts = (data ?? {}) as Partial<Record<"messages" | "kyc" | "slips" | "whatsapp", number>>;
-  return <NavLinks counts={counts} />;
-}
-
-function NavLinks({ counts }: { counts: Partial<Record<"messages" | "kyc" | "slips" | "whatsapp", number>> }) {
-  return (
-    <nav aria-label="Console" className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
-      {NAV.map((n) => {
-        const c = n.count ? counts[n.count] ?? 0 : 0;
-        return (
-          <Link key={n.href} href={n.href} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-sm hover:bg-panel">
-            {n.label}
-            {c > 0 && <span className="min-w-5 rounded-full bg-accent px-1.5 text-center text-[11px] font-bold leading-5 text-white" aria-label={`${c} waiting`}>{c}</span>}
-          </Link>
-        );
-      })}
-    </nav>
-  );
+  return <NavLinks items={NAV} counts={counts} />;
 }
 
 async function CurrentUser() {
@@ -55,11 +40,11 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
     <div className="flex min-h-full flex-1 flex-col">
       <header className="sticky top-0 z-30 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-background/95 px-4 py-2 backdrop-blur sm:static sm:px-6 sm:py-3">
         <Link href="/" className="flex items-center gap-2 leading-tight">
-          <span className="plate text-sm">RM</span>
+          <span className="brand-mark text-sm" aria-hidden>RM</span>
           <span><span className="block font-display font-extrabold">Rent a Motor</span><span className="hidden text-xs text-muted sm:block">Kulhudhuffushi Motor Rentals</span></span>
         </Link>
         <div className="order-2 w-full sm:order-none sm:w-auto">
-          <Suspense fallback={<NavLinks counts={{}} />}>
+          <Suspense fallback={<nav aria-label="Console" className="flex gap-1 overflow-x-auto">{NAV.map((n) => <Link key={n.href} href={n.href} className="nav-link">{n.label}</Link>)}</nav>}>
             <Nav />
           </Suspense>
         </div>

@@ -5,7 +5,7 @@ import { Image } from 'expo-image';
 
 import { After, LaneMarkings, RisingHeadline } from '@/components/hero-motion';
 import { KenBurns, StockPhotos, vehiclePhotos, type VehicleKind } from '@/components/photo';
-import { Plate } from '@/components/plate';
+import { RefTag } from '@/components/brand';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, Pill, PressableScale } from '@/components/ui';
@@ -114,19 +114,21 @@ function Welcome() {
       <ThemedText type="subtitle">How it works</ThemedText>
       {steps.map(([title, body], i) => (
         <View key={title} style={styles.howRow}>
-          <View style={[styles.howNum, { borderColor: t.accent }]}><ThemedText type="smallBold" style={{ color: t.accent }}>{i + 1}</ThemedText></View>
+          <View style={[styles.howNum, { backgroundColor: t.accent }]}><ThemedText type="smallBold" style={{ color: t.accentText }}>{i + 1}</ThemedText></View>
           <View style={styles.flex}>
             <ThemedText type="smallBold" style={{ fontSize: 17 }}>{title}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">{body}</ThemedText>
           </View>
         </View>
       ))}
-      <Button variant="secondary" title="Sign in or create an account" onPress={() => router.push('/sign-in')} />
-      <ThemedText type="small" themeColor="textSecondary">
-        <ThemedText type="small" themeColor="textSecondary" onPress={() => router.push('/terms')} style={{ textDecorationLine: 'underline' }}>Rental terms</ThemedText>
-        {'   '}
-        <ThemedText type="small" themeColor="textSecondary" onPress={() => router.push('/privacy')} style={{ textDecorationLine: 'underline' }}>Privacy policy</ThemedText>
-      </ThemedText>
+      <View style={styles.quick}>
+        <Button title="Book a ride" onPress={() => router.push('/book')} />
+        <Button variant="secondary" title="Sign in" onPress={() => router.push('/sign-in')} />
+      </View>
+      <View style={styles.quick}>
+        <Button size="sm" variant="ghost" title="Rental terms" onPress={() => router.push('/terms')} />
+        <Button size="sm" variant="ghost" title="Privacy policy" onPress={() => router.push('/privacy')} />
+      </View>
     </View>
   );
 }
@@ -203,9 +205,9 @@ function Dashboard({ me, rows, pendingCheck }: { me: Me | null; rows: Row[] | nu
       )}
 
       <View style={styles.quick}>
-        <Button variant="secondary" title="My rentals" onPress={() => router.push('/bookings')} />
-        <Button variant="secondary" title="Rental terms" onPress={() => router.push('/terms')} />
-        <Button variant="ghost" title="Privacy" onPress={() => router.push('/privacy')} />
+        <Button size="sm" variant="secondary" title="My rentals" onPress={() => router.push('/bookings')} />
+        <Button size="sm" variant="secondary" title="Rental terms" onPress={() => router.push('/terms')} />
+        <Button size="sm" variant="secondary" title="Privacy policy" onPress={() => router.push('/privacy')} />
       </View>
     </View>
   );
@@ -236,7 +238,7 @@ function RideCard({ row, start, end }: { row: Row; start?: Date; end?: Date }) {
             <View style={[styles.flex, { alignItems: 'flex-end' }]}><ThemedText type="small" themeColor="textSecondary">Return</ThemedText><ThemedText type="smallBold">{end ? dateTime(end) : '—'}</ThemedText></View>
           </View>
           <View style={styles.headRow}>
-            <Plate size="sm" label="Booking reference">{row.reference}</Plate>
+            <RefTag>{row.reference}</RefTag>
             {v && <ThemedText type="small" themeColor="textSecondary">bike {v.plate}</ThemedText>}
             <ThemedText type="smallBold" style={{ marginLeft: 'auto' }}>{money(row.total, row.currency)}</ThemedText>
           </View>
@@ -271,7 +273,7 @@ const styles = StyleSheet.create({
   credit: { position: 'absolute', right: Spacing.three, top: TopNavInset + Spacing.two, fontSize: 10, lineHeight: 13, color: 'rgba(255,255,255,0.7)' },
   section: { gap: Spacing.three, maxWidth: 640, width: '100%' },
   howRow: { flexDirection: 'row', gap: Spacing.three, alignItems: 'flex-start' },
-  howNum: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  howNum: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   ride: { padding: 0, overflow: 'hidden', gap: 0 },
   ridePhoto: { height: 150, width: '100%' },
   times: { flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderStyle: 'dashed', paddingVertical: Spacing.two },

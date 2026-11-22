@@ -99,7 +99,7 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
   if (done) return <p role="status" className="rounded-xl bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">{done}</p>;
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="w-full rounded-xl bg-black px-4 py-3 font-semibold text-white ring-1 ring-inset ring-white/60 outline outline-[1.5px] outline-[#8a9a9b]">
+      <button type="button" onClick={() => setOpen(true)} className="btn btn-primary btn-lg w-full">
         {isPickup ? `Hand over the vehicle to ${riderName}` : `Collect the vehicle from ${riderName}`}
       </button>
     );
@@ -152,7 +152,7 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
       {error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" disabled={!!problems.length || !!busy} onClick={submit}
-          className="rounded-xl bg-black px-5 py-2.5 font-semibold text-white ring-1 ring-inset ring-white/60 disabled:opacity-40">
+          className="btn btn-primary btn-lg">
           {busy ?? (isPickup ? "Confirm handover" : "Confirm collection")}</button>
         <button type="button" onClick={() => setOpen(false)} className="text-sm text-muted">Cancel</button>
         {!!problems.length && <span className="text-xs text-muted">Still needed: {problems.join(", ")}</span>}

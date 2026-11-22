@@ -8,7 +8,7 @@ import { NavBar } from './app-tabs.web';
 import { ThemedText } from './themed-text';
 
 const LINKS = [
-  { href: '/', label: 'Home' }, { href: '/book', label: 'Book' },
+  { href: '/', label: 'Home' },
   { href: '/bookings', label: 'My rentals' },
   { href: '/account', label: 'Account' },
 ] as const;
@@ -25,16 +25,16 @@ export function WebHeader() {
   return (
     <View style={[styles.outer, { backgroundColor: t.background }]}>
       <NavBar leading={
-        <Pressable onPress={back} accessibilityRole="button" accessibilityLabel="Back" style={[styles.back, { borderColor: t.border }]}>
-          <ThemedText type="heading" style={{ fontSize: 18, lineHeight: 20 }}>←</ThemedText>
+        <Pressable onPress={back} accessibilityRole="button" accessibilityLabel="Back" style={[styles.back, { borderColor: t.accent }]}>
+          <ThemedText type="heading" style={{ fontSize: 18, lineHeight: 20, color: t.accent }}>←</ThemedText>
         </Pressable>
       }>
         {LINKS.map((l) => {
           const active = path === l.href;
           return (
             <Pressable key={l.href} onPress={() => router.navigate(l.href)} accessibilityRole="link"
-              style={({ pressed }) => [styles.tab, tight && { paddingHorizontal: Spacing.two }, active && { backgroundColor: t.accent }, pressed && { opacity: 0.75 }]}>
-              <ThemedText type="smallBold" style={{ color: active ? t.accentText : t.text }}>{l.label}</ThemedText>
+              style={({ pressed }) => [styles.tab, tight && { paddingHorizontal: Spacing.two }, active && { backgroundColor: t.accentSoft }, pressed && { opacity: 0.75 }]}>
+              <ThemedText type="smallBold" style={{ color: active ? t.accent : t.text }}>{l.label}</ThemedText>
             </Pressable>
           );
         })}

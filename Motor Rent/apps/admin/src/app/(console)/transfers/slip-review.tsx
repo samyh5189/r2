@@ -114,9 +114,9 @@ export function SlipReview({ slip, accountNumbers }: { slip: PendingSlip; accoun
               <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal"
                 className="w-36 rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 tabular-nums outline-none focus:border-accent" /></label>
             <button type="button" disabled={busy || expired} onClick={() => decide(true)}
-              className="rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{busy ? "…" : "Approve & confirm booking"}</button>
+              className="btn btn-primary">{busy ? "…" : "Approve & confirm booking"}</button>
             <button type="button" disabled={busy} onClick={() => setRejecting(true)}
-              className="rounded-xl border border-red-500/40 px-4 py-2 font-semibold text-red-600 hover:bg-red-500/10">Reject</button>
+              className="btn btn-secondary">Reject</button>
           </div>
         ) : (
           <div className="flex flex-wrap items-end gap-2">
@@ -124,8 +124,8 @@ export function SlipReview({ slip, accountNumbers }: { slip: PendingSlip; accoun
               <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} autoFocus placeholder="e.g. Amount does not match / money not received"
                 className="w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none focus:border-accent" /></label>
             <button type="button" disabled={busy || !reason.trim()} onClick={() => decide(false)}
-              className="rounded-xl bg-red-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Reject slip</button>
-            <button type="button" onClick={() => setRejecting(false)} className="rounded-xl px-3 py-2 text-muted">Cancel</button>
+              className="btn btn-primary">Reject slip</button>
+            <button type="button" onClick={() => setRejecting(false)} className="btn btn-ghost">Cancel</button>
           </div>
         )}
       </div>
