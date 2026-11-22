@@ -4,7 +4,7 @@ import { Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowD
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Fonts, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useSiteSettings } from '@/lib/site';
 
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   floating: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: Spacing.three, alignItems: 'center', zIndex: 10 },
   inFlow: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.two, alignItems: 'center' },
   bar: {
-    width: '100%', maxWidth: MaxContentWidth + 160, flexDirection: 'row', alignItems: 'center', gap: Spacing.two,
+    width: '100%', maxWidth: 1216, flexDirection: 'row', alignItems: 'center', gap: Spacing.two,
     paddingVertical: Spacing.two, paddingLeft: Spacing.two + 4, paddingRight: Spacing.two, borderRadius: Radius.lg, borderWidth: 1,
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginRight: 'auto' },

@@ -24,15 +24,39 @@ const Cutouts: Partial<Record<VehicleKind, ImageProps['source']>> = {
   motorbike: require('@/assets/images/stock/motorbike-cutout.webp'),
 };
 
-type BikeLike = { photos?: string[] | null; kind?: VehicleKind | null };
+/** Showroom cut-outs of specific models, used instead of uploaded photos (see CREDITS.md). */
+const ModelCutouts: { match: RegExp; source: ImageProps['source']; credit: string }[] = [
+  { match: /air\s*blade/i, source: require('@/assets/images/stock/airblade-cutout.webp'), credit: 'Airblade photo: Dmitry Makeev, Wikimedia Commons, CC BY-SA 4.0' },
+];
+
+type BikeLike = { photos?: string[] | null; kind?: VehicleKind | null; make?: string | null; model?: string | null };
 
 /** Uploaded PNG/WebP photos are treated as cut-outs (transparent background) and shown whole. */
 export const isCutout = (uri?: string | null) => !!uri && /\.(png|webp)(\?|$)/i.test(uri);
-/** True when the bike will be shown as a whole cut-out (stock or uploaded PNG/WebP). */
-export function showsCutout(v: BikeLike) {
+
+const modelCutout = (v: BikeLike) => ModelCutouts.find((m) => m.match.test(`${v.make ?? ''} ${v.model ?? ''}`));
+/** Photo credit to show when a model cut-out is on screen. */
+export const bikeCredit = (v: BikeLike) => {
   const own = (v.photos ?? []).find(Boolean);
-  return own ? isCutout(own) : !!Cutouts[v.kind ?? 'scooter'];
+  return own && isCutout(own) ? null : modelCutout(v)?.credit ?? null;
+};
+
+/**
+ * The picture to use for a bike and whether it is a whole-bike cut-out (shown uncropped).
+ * Order: an uploaded cut-out, a showroom cut-out of the model, an uploaded photo, the stock picture for its type.
+ */
+export function bikeSource(v: BikeLike): { source: ImageProps['source']; cutout: boolean } {
+  const own = (v.photos ?? []).find(Boolean);
+  if (own && isCutout(own)) return { source: { uri: own }, cutout: true };
+  const model = modelCutout(v);
+  if (model) return { source: model.source, cutout: true };
+  if (own) return { source: { uri: own }, cutout: false };
+  const kind = v.kind ?? 'scooter';
+  const cut = Cutouts[kind];
+  return cut ? { source: cut, cutout: true } : { source: StockPhotos[kind], cutout: false };
 }
+/** True when the bike will be shown as a whole cut-out. */
+export const showsCutout = (v: BikeLike) => bikeSource(v).cutout;
 
 /**
  * The bike's picture. Uploaded photos fill the frame; until there is one, the stock bike is shown
@@ -42,25 +66,23 @@ export function BikeImage({ vehicle, style, faded, surface, fit = 'cover' }: {
   vehicle: BikeLike; style?: StyleProp<ViewStyle>; faded?: boolean; surface?: string; fit?: 'cover' | 'contain';
 }) {
   const t = useTheme();
-  const own = (vehicle.photos ?? []).find(Boolean);
-  const kind = vehicle.kind ?? 'scooter';
-  const cut = own ? (isCutout(own) ? { uri: own } : undefined) : Cutouts[kind];
-  if (!cut) {
+  const { source, cutout } = bikeSource(vehicle);
+  if (!cutout) {
     return (
       <View style={[{ overflow: 'hidden' }, style, faded && { opacity: 0.55 }]}>
-        <Image source={own ? { uri: own } : StockPhotos[kind]} style={StyleSheet.absoluteFill} contentFit={own ? fit : 'cover'} transition={300} />
+        <Image source={source} style={StyleSheet.absoluteFill} contentFit={fit} transition={300} />
       </View>
     );
   }
   return (
     <View style={[styles.stage, { backgroundColor: surface ?? t.backgroundSelected }, style, faded && { opacity: 0.55 }]}>
       <View style={styles.floor} />
-      <Image source={cut} style={styles.cutout} contentFit="contain" transition={300} accessibilityIgnoresInvertColors />
+      <Image source={source} style={styles.cutout} contentFit="contain" transition={300} accessibilityIgnoresInvertColors />
     </View>
   );
 }
 
-export function vehiclePhotos(v: { photos?: string[] | null; kind?: VehicleKind | null }): ImageProps['source'][] {
+export function vehiclePhotos(v: BikeLike): ImageProps['source'][] {
   const own = (v.photos ?? []).filter(Boolean);
   return own.length ? own.map((uri) => ({ uri })) : [StockPhotos[v.kind ?? 'scooter']];
 }

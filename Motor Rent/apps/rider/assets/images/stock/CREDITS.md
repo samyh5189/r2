@@ -14,3 +14,4 @@ They are fallbacks only: real vehicle photos uploaded in the admin console (Flee
 | motorbike-cutout.webp | Cut out from motorbike.jpg above (Unsplash License); background removed. |
 
 The cut-outs are shown whole on a plain surface (BikeImage in src/components/photo.tsx) until a vehicle has its own uploaded photo.
+| airblade-cutout.webp | "Honda Airblade 125 scooters. Cambodia, Sihanoukville." — Dmitry Makeev, Wikimedia Commons — https://commons.wikimedia.org/wiki/File:Honda_Airblade_125_scooters._Cambodia,_Sihanoukville.jpg — **CC BY-SA 4.0** (https://creativecommons.org/licenses/by-sa/4.0/); background removed and resized, and this cut-out is shared under the same licence. Credit is shown on the Fleet page. |

@@ -1,15 +1,15 @@
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { baseRental } from '@motor-rent/shared';
 
 import { ArrowRightIcon } from '@/components/icons';
-import { BikeImage, showsCutout, type VehicleKind } from '@/components/photo';
+import { bikeCredit, bikeSource, type VehicleKind } from '@/components/photo';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { PressableScale } from '@/components/ui';
-import { BottomTabInset, Fonts, MaxContentWidth, Radius, Spacing, TopNavInset } from '@/constants/theme';
+import { BottomTabInset, Fonts, Spacing, TopNavInset } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { money } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
@@ -20,13 +20,20 @@ type Bike = {
 };
 type Model = { key: string; make: string; model: string; kind: VehicleKind; cc: number | null; count: number; daily: number | null; currency: 'MVR' | 'USD'; first: Bike };
 
-const KIND: Record<VehicleKind, string> = { scooter: 'Scooter', motorbike: 'Motorbike', car: 'Car' };
+/** Motion curves: a long ease-out for entrances and hovers, an ease-in-out for the drawn rule. */
+const EASE = Easing.bezier(0.22, 1, 0.36, 1);
+const EASE_IN_OUT = Easing.bezier(0.65, 0, 0.35, 1);
+const web = Platform.OS === 'web';
+/** CSS transition on web (hover states); nothing on native. */
+const tr = (prop: string, ms: number) =>
+  (web ? { transitionProperty: prop, transitionDuration: `${ms}ms`, transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)' } : {}) as ViewStyle;
 
-/** Each model in the fleet, shown whole, with its day price. Tapping one starts a booking with it. */
+/** Each model in the fleet shown whole, with its day price. Tapping one starts a booking with it. */
 export default function FleetScreen() {
   const t = useTheme();
   const { width } = useWindowDimensions();
-  const cols = width >= 1000 ? 3 : width >= 680 ? 2 : 1;
+  const cols = width >= 1024 ? 3 : width >= 640 ? 2 : 1;
+  const gutter = width >= 640 ? Spacing.five : Spacing.three;
   const [models, setModels] = useState<Model[] | null>(null);
 
   useEffect(() => {
@@ -51,116 +58,188 @@ export default function FleetScreen() {
       });
   }, []);
 
+  const titleSize = Math.min(96, Math.max(44, width * 0.076));
+  const colWidth = `${(100 - (cols - 1) * 2.2) / cols}%` as `${number}%`;
+
   return (
     <ThemedView style={styles.flex}>
-      <ScrollView contentContainerStyle={styles.body}>
-        <View style={styles.head}>
-          <ThemedText type="title" accessibilityRole="header" style={[styles.h1, { fontSize: width >= 680 ? 56 : 40, lineHeight: width >= 680 ? 58 : 43 }]}>Pick your bike.</ThemedText>
-          <View style={[styles.rule, { backgroundColor: t.accent }]} />
-          <ThemedText themeColor="textSecondary" style={styles.lead}>
-            Scooters and motorbikes by the hour or the day, collected from our counter in Kulhudhuffushi. Helmets on request.
+      <ScrollView contentContainerStyle={[styles.body, { paddingHorizontal: gutter }]}>
+        <Reveal delay={0} duration={800}>
+          <ThemedText accessibilityRole="header"
+            style={[styles.title, { fontSize: titleSize, lineHeight: titleSize * 1.02, letterSpacing: -titleSize * 0.035, color: t.text }]}>
+            Pick your bike.
           </ThemedText>
-        </View>
+        </Reveal>
+        <DrawnRule color={t.accent} />
+        <Reveal delay={450} duration={900}>
+          <ThemedText themeColor="textSecondary" style={[styles.lead, { fontSize: width >= 640 ? 20 : 18 }]}>
+            Scooters and motorbikes by the hour or the day, from our counter in Kulhudhuffushi. Helmets on request.
+          </ThemedText>
+        </Reveal>
 
         {!models ? <ActivityIndicator color={t.accent} style={{ marginVertical: Spacing.six }} /> : (
-          <View style={[styles.grid, { rowGap: Spacing.three }]}>
+          <View style={[styles.grid, { columnGap: cols > 1 ? '2.2%' : 0 } as ViewStyle]}>
             {models.map((m, i) => (
-              <Animated.View key={m.key} entering={FadeInDown.delay(i * 70).duration(420)} style={{ width: cols === 1 ? '100%' : `${(100 - (cols - 1) * 2.4) / cols}%` as `${number}%` }}>
+              <Reveal key={m.key} delay={80 * (i + 1)} duration={800} style={{ width: cols === 1 ? '100%' : colWidth }}>
                 <ModelCard m={m} />
-              </Animated.View>
+              </Reveal>
             ))}
           </View>
         )}
         {models && models.length > 0 && (
-          <ThemedText type="small" themeColor="textSecondary">Colours and plates depend on which bike is free for your times.</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" style={{ marginTop: Spacing.three }}>
+            Colours and plates depend on which bike is free for your times.
+          </ThemedText>
         )}
+        {models && [...new Set(models.map((m) => bikeCredit(m.first)).filter(Boolean))].map((c) => (
+          <ThemedText key={c} type="small" themeColor="textSecondary" style={{ fontSize: 11, lineHeight: 15, opacity: 0.8 }}>{c}</ThemedText>
+        ))}
 
-        <View style={[styles.cta, { backgroundColor: t.accent }]}>
-          <View style={[styles.ctaRing, { borderColor: 'rgba(255,255,255,0.14)' }]} />
-          <ThemedText type="title" style={[styles.ctaTitle, { color: t.accentText }]}>Any bike</ThemedText>
-          <ThemedText style={{ color: 'rgba(255,255,255,0.88)', fontSize: 17 }}>Choose your times first and we show every bike that’s free.</ThemedText>
-          <PressableScale onPress={() => router.push('/book')} accessibilityRole="link" scaleTo={0.97} lift={false}
-            style={[styles.ctaBtn, { backgroundColor: '#FFFFFF' }]}>
-            <ThemedText type="smallBold" style={{ color: t.accent, fontSize: 16 }}>Book now</ThemedText>
-            <ArrowRightIcon color={t.accent} />
-          </PressableScale>
-        </View>
+        <AnyBike wide={width >= 760} />
       </ScrollView>
     </ThemedView>
   );
 }
 
+/** Fades in and rises 12 px (once, on mount). */
+function Reveal({ delay, duration, children, style }: { delay: number; duration: number; children: ReactNode; style?: ViewStyle }) {
+  const reduce = useReducedMotion();
+  const p = useSharedValue(reduce ? 1 : 0);
+  useEffect(() => { if (!reduce) p.value = withDelay(delay, withTiming(1, { duration, easing: EASE })); }, [reduce, delay, duration, p]);
+  const a = useAnimatedStyle(() => ({ opacity: p.value, transform: [{ translateY: (1 - p.value) * 12 }] }));
+  return <Animated.View style={[style, a]}>{children}</Animated.View>;
+}
+
+/** Short red rule under the title that draws itself in from the left. */
+function DrawnRule({ color }: { color: string }) {
+  const reduce = useReducedMotion();
+  const s = useSharedValue(reduce ? 1 : 0);
+  useEffect(() => { if (!reduce) s.value = withDelay(350, withTiming(1, { duration: 1100, easing: EASE_IN_OUT })); }, [reduce, s]);
+  const a = useAnimatedStyle(() => ({ transform: [{ scaleX: s.value }] }));
+  return <Animated.View style={[styles.rule, redLine(color), { transformOrigin: 'left' } as ViewStyle, a]} />;
+}
+
+/** A 3 px red line that fades towards its end (solid on native). */
+const redLine = (color: string): ViewStyle =>
+  (web ? { backgroundImage: `linear-gradient(90deg, ${color}, ${color}99)` } : { backgroundColor: color }) as ViewStyle;
+
 function ModelCard({ m }: { m: Model }) {
   const t = useTheme();
+  const [hover, setHover] = useState(false);
+  const [stageW, setStageW] = useState(0);
+  const { source, cutout } = bikeSource(m.first);
   const word = m.model.split(/\s+/)[0]!.toUpperCase();
   const book = () => router.push({ pathname: '/book', params: { bike: m.first.id } });
-  const cut = showsCutout(m.first);
+  const ink = t.text;
+  const wordSize = stageW * 0.19;
+
   return (
-    <PressableScale onPress={book} accessibilityRole="button" accessibilityLabel={`Book the ${m.make} ${m.model}`} scaleTo={0.985}
-      style={[styles.card, { backgroundColor: t.backgroundElement, borderColor: t.border }]}>
-      {!cut ? (
-        <View style={styles.stage}>
-          <BikeImage vehicle={m.first} style={StyleSheet.absoluteFill} />
-        </View>
-      ) : (
-      <View style={styles.stage}>
-        <ThemedText numberOfLines={1} adjustsFontSizeToFit aria-hidden
-          style={[styles.ghost, Platform.OS === 'web'
-            ? ({ color: 'transparent', WebkitTextStroke: `1.5px ${t.border}` } as object)
-            : { color: t.backgroundSelected }]}>
-          {word}
-        </ThemedText>
-        <BikeImage vehicle={m.first} surface="transparent" fit="contain" style={styles.bike} />
-        <View style={[styles.road, { backgroundColor: t.accent }]} />
+    <Pressable onPress={book} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)}
+      accessibilityRole="link" accessibilityLabel={`Book the ${m.make} ${m.model}`}
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: t.backgroundElement, borderColor: hover ? t.textSecondary + '55' : t.border },
+        web && ({ boxShadow: hover
+          ? 'inset 0 1px 0 rgba(255,255,255,0.65), 0 36px 70px -42px rgba(17,16,20,0.5)'
+          : 'inset 0 1px 0 rgba(255,255,255,0.65), 0 26px 60px -46px rgba(17,16,20,0.4)' } as ViewStyle),
+        { transform: [{ translateY: hover ? -4 : 0 }, { scale: pressed ? 0.99 : 1 }] },
+        tr('transform, box-shadow, border-color', 450),
+      ]}>
+      <View style={styles.stage} onLayout={(e) => setStageW(e.nativeEvent.layout.width)}>
+        {cutout ? (
+          <>
+            {stageW > 0 && (
+              <View pointerEvents="none" style={[styles.wordBox, { transform: [{ translateX: hover ? stageW * 0.02 : 0 }] }, tr('transform', 700)]}>
+                <ThemedText aria-hidden numberOfLines={1}
+                  style={[styles.word, { fontSize: wordSize, lineHeight: wordSize, letterSpacing: -wordSize * 0.05 },
+                    web ? ({ color: 'transparent', WebkitTextStroke: `1.5px ${ink}2E`, whiteSpace: 'nowrap' } as object) : { color: ink + '14' }]}>
+                  {word}
+                </ThemedText>
+              </View>
+            )}
+            <View style={[styles.shot, { transform: [{ translateX: hover ? -stageW * 0.025 : 0 }, { scale: hover ? 1.03 : 1 }] }, tr('transform', 700)]}>
+              <Image source={source} style={StyleSheet.absoluteFill} contentFit="contain" contentPosition="bottom" transition={300} />
+            </View>
+            <View style={[styles.line, redLine(t.accent)]} />
+          </>
+        ) : (
+          <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
+            <View style={[StyleSheet.absoluteFill, { transform: [{ scale: hover ? 1.03 : 1 }] }, tr('transform', 700)]}>
+              <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" transition={300} />
+            </View>
+          </View>
+        )}
       </View>
-      )}
       <View style={styles.cardBody}>
-        <ThemedText type="eyebrow" style={{ color: t.accent }}>{KIND[m.kind]}{m.cc ? `, ${m.cc} cc` : ''}</ThemedText>
-        <ThemedText type="heading" style={styles.name}>{m.make} {m.model}</ThemedText>
-        <View style={[styles.priceRow, { borderColor: t.border }]}>
+        <ThemedText style={[styles.kicker, { color: t.accent }]}>{m.cc ? `${m.cc} cc ` : ''}{m.kind}</ThemedText>
+        <ThemedText style={[styles.name, { color: t.text }]}>{m.make} {m.model}</ThemedText>
+        {m.count > 1 && <ThemedText type="small" themeColor="textSecondary">{m.count} in the fleet</ThemedText>}
+        <View style={[styles.foot, { borderColor: t.border }]}>
           <View style={styles.price}>
             {m.daily != null ? (
               <>
-                <ThemedText type="small" themeColor="textSecondary">from</ThemedText>
-                <ThemedText style={styles.amount}>{money(m.daily, m.currency)}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">/ day</ThemedText>
+                <ThemedText style={[styles.muted, { color: t.textSecondary }]}>from</ThemedText>
+                <ThemedText style={[styles.fare, { color: t.text }]}>{money(m.daily, m.currency)}</ThemedText>
+                <ThemedText style={[styles.muted, { color: t.textSecondary }]}>/ day</ThemedText>
               </>
-            ) : <ThemedText type="small" themeColor="textSecondary">Price on booking</ThemedText>}
+            ) : <ThemedText style={[styles.muted, { color: t.textSecondary }]}>Price shown when you book</ThemedText>}
           </View>
-          <View style={[styles.go, { backgroundColor: t.accent }]}>
-            <ArrowRightIcon color={t.accentText} />
+          <View style={[styles.go, { backgroundColor: t.accent, transform: [{ translateX: hover ? 4 : 0 }] },
+            web && ({ boxShadow: `0 10px 24px -12px ${t.accent}99` } as ViewStyle), tr('transform', 350)]}>
+            <ArrowRightIcon size={20} color={t.accentText} />
           </View>
         </View>
-        {m.count > 1 && <ThemedText type="small" themeColor="textSecondary">{m.count} in the fleet</ThemedText>}
       </View>
-    </PressableScale>
+    </Pressable>
+  );
+}
+
+/** Red panel: book whichever bike is free. */
+function AnyBike({ wide }: { wide: boolean }) {
+  const t = useTheme();
+  const [hover, setHover] = useState(false);
+  return (
+    <View style={[styles.cta, { backgroundColor: t.accent, padding: wide ? Spacing.six : Spacing.four }, wide && styles.ctaWide]}>
+      <View style={[styles.ring, { width: 320, height: 320, top: -112, right: -112, borderColor: 'rgba(255,255,255,0.2)' }]} />
+      <View style={[styles.ring, { width: 480, height: 480, top: -176, right: -176, borderColor: 'rgba(255,255,255,0.12)' }]} />
+      <View style={[{ gap: Spacing.one }, wide && { flexShrink: 1 }]}>
+        <ThemedText style={[styles.ctaTitle, { color: t.accentText, fontSize: wide ? 44 : 34, lineHeight: wide ? 48 : 38 }]}>Any bike</ThemedText>
+        <ThemedText style={{ color: 'rgba(255,255,255,0.88)', fontSize: wide ? 20 : 17, lineHeight: wide ? 28 : 24 }}>Pick your times and we show every bike that’s free.</ThemedText>
+      </View>
+      <Pressable onPress={() => router.push('/book')} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)} accessibilityRole="link"
+        style={[styles.ctaBtn, { transform: [{ translateY: hover ? -2 : 0 }] }, web && ({ boxShadow: hover ? '0 16px 34px -12px rgba(0,0,0,0.35)' : 'none' } as ViewStyle), tr('transform, box-shadow', 350)]}>
+        <ThemedText style={[styles.ctaBtnText, { color: t.accent }]}>Book now</ThemedText>
+        <View style={[{ transform: [{ translateX: hover ? 4 : 0 }] }, tr('transform', 350)]}><ArrowRightIcon size={20} color={t.accent} /></View>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  body: {
-    paddingHorizontal: Spacing.three, paddingTop: TopNavInset + Spacing.five, paddingBottom: BottomTabInset + Spacing.six,
-    gap: Spacing.four, maxWidth: MaxContentWidth + 160, width: '100%', alignSelf: 'center',
-  },
-  head: { gap: Spacing.three, maxWidth: 620 },
-  h1: { letterSpacing: -1.5 },
-  rule: { width: 100, height: 3, borderRadius: 2 },
-  lead: { fontSize: 17, lineHeight: 26 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: '2.4%' } as object,
-  card: { borderWidth: 1, borderRadius: Radius.lg, overflow: 'hidden', boxShadow: '0 14px 36px rgba(20,10,10,0.08)' } as object,
-  stage: { height: 230, alignItems: 'center', justifyContent: 'flex-end', paddingHorizontal: Spacing.three },
-  ghost: { position: 'absolute', top: Spacing.four, left: Spacing.three, right: Spacing.three, textAlign: 'center', fontFamily: Fonts?.display, fontSize: 64, lineHeight: 70, fontWeight: '800', letterSpacing: -1 },
-  bike: { width: '92%', height: 200 },
-  road: { height: 3, width: '88%', borderRadius: 2, marginBottom: Spacing.two },
-  cardBody: { padding: Spacing.three, paddingTop: Spacing.two, gap: Spacing.one },
-  name: { fontSize: 24, lineHeight: 30 },
-  priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, paddingTop: Spacing.three, marginTop: Spacing.two },
-  price: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
-  amount: { fontFamily: Fonts?.display, fontSize: 24, lineHeight: 28, fontWeight: '800' },
-  go: { width: 44, height: 44, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
-  cta: { borderRadius: Radius.lg, padding: Spacing.four, gap: Spacing.three, overflow: 'hidden' },
-  ctaRing: { position: 'absolute', right: -80, bottom: -120, width: 320, height: 320, borderRadius: 160, borderWidth: 40 },
-  ctaTitle: { fontSize: 36, lineHeight: 40 },
-  ctaBtn: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, alignSelf: 'flex-start', paddingHorizontal: Spacing.four, paddingVertical: 14, borderRadius: Radius.md },
+  body: { paddingTop: TopNavInset + Spacing.five, paddingBottom: BottomTabInset + Spacing.six, maxWidth: 1296, width: '100%', alignSelf: 'center' },
+  title: { fontFamily: Fonts?.display, fontWeight: '800', maxWidth: 1100 },
+  rule: { width: 128, height: 3, borderRadius: 999, marginTop: Spacing.four },
+  lead: { marginTop: Spacing.four, maxWidth: 640, lineHeight: 30 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: Spacing.four, marginTop: Spacing.six },
+  card: { borderWidth: 1, borderRadius: 16, overflow: 'hidden' },
+  stage: { aspectRatio: 5 / 4, width: '100%', overflow: 'hidden' },
+  wordBox: { position: 'absolute', top: '13%', left: '-50%', right: '-50%', alignItems: 'center' },
+  word: { textAlign: 'center', fontFamily: Fonts?.display, fontWeight: '800' },
+  shot: { position: 'absolute', top: '16%', left: '8%', right: '8%', bottom: '3.5%' },
+  line: { position: 'absolute', left: '8%', right: '8%', bottom: '7%', height: 3, borderRadius: 999 },
+  cardBody: { paddingTop: Spacing.two, paddingHorizontal: Spacing.four, paddingBottom: Spacing.four, gap: 12, flexGrow: 1 },
+  kicker: { fontSize: 13, lineHeight: 20, fontWeight: '600', letterSpacing: 13 * 0.18, textTransform: 'uppercase' },
+  name: { fontFamily: Fonts?.display, fontSize: 26, lineHeight: 29, fontWeight: '800', letterSpacing: -0.8 },
+  foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.three, borderTopWidth: 1, paddingTop: 14, marginTop: 'auto' },
+  price: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', flexShrink: 1 },
+  muted: { fontSize: 14, lineHeight: 20 },
+  fare: { fontFamily: Fonts?.display, fontSize: 26, lineHeight: 30, fontWeight: '800', letterSpacing: -0.8, marginHorizontal: 6 },
+  go: { width: 44, height: 44, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  cta: { borderRadius: 16, overflow: 'hidden', gap: Spacing.four, marginTop: Spacing.six },
+  ctaWide: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  ring: { position: 'absolute', borderWidth: 1, borderRadius: 999 },
+  ctaTitle: { fontFamily: Fonts?.display, fontWeight: '800', letterSpacing: -1.2 },
+  ctaBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, alignSelf: 'flex-start', backgroundColor: '#FFFFFF', minHeight: 52, paddingHorizontal: Spacing.four, borderRadius: 8 },
+  ctaBtnText: { fontSize: 17, fontWeight: '600' },
 });
