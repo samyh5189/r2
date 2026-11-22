@@ -109,7 +109,7 @@ export const Spacing = {
 
 export const Radius = { sm: 6, md: 12, lg: 20, pill: 999 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
-/** The web tab bar floats over the top of every tab screen. */
-export const TopNavInset = Platform.select({ web: 84 }) ?? 0;
+export const BottomTabInset = Platform.select({ ios: 24, android: 24 }) ?? 0;
+/** The site header floats over the top of the main pages (below the status bar on phones). */
+export const TopNavInset = Platform.select({ web: 84, default: 76 }) ?? 84;
 export const MaxContentWidth = 820;

@@ -1,11 +1,11 @@
-import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { CancelBooking } from '@/components/cancel-booking';
 import { Chatter, type ChatterItem } from '@/components/chatter';
-import { vehiclePhotos, type VehicleKind } from '@/components/photo';
+import { BikeImage, type VehicleKind } from '@/components/photo';
 import { useWebPullToRefresh } from '@/components/pull-to-refresh';
 import { RefTag } from '@/components/brand';
 import { ThemedText } from '@/components/themed-text';
@@ -129,7 +129,7 @@ export default function BookingDetail() {
           <Animated.View>
             <Card>
               <View style={styles.row}>
-                {booking.vehicles && <Image source={vehiclePhotos(booking.vehicles)[0]} style={styles.thumb} contentFit="cover" transition={300} />}
+                {booking.vehicles && <BikeImage vehicle={booking.vehicles} style={styles.thumb} />}
                 <View style={[styles.flex, { gap: 4 }]}>
                   <ThemedText type="heading">{booking.vehicles?.make} {booking.vehicles?.model}</ThemedText>
                   <Pill label={s.label} tone={s.tone} />
@@ -149,6 +149,11 @@ export default function BookingDetail() {
                 <ThemedText type="smallBold">{money(booking.total, booking.currency)}</ThemedText>
               </View>
             </Card>
+            {booking.status === 'held' && (
+              <View style={{ marginTop: Spacing.two }}>
+                <CancelBooking id={booking.id} reference={booking.reference} onCancelled={load} />
+              </View>
+            )}
           </Animated.View>
         )}
 

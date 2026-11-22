@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 
-import { KenBurns, type vehiclePhotos } from '@/components/photo';
+import { BikeImage, type VehicleKind } from '@/components/photo';
+import { CancelBooking } from '@/components/cancel-booking';
 import { DateTimePicker } from '@/components/date-time-picker';
 import { ThemedText } from '@/components/themed-text';
 import { TransferPayment } from '@/components/transfer-payment';
@@ -84,8 +85,8 @@ export function TripPlanner({ start, end, earliest, minEnd, hours, onStart, onEn
 }
 
 /** Success: the vehicle photo with a confirmation check popping in. */
-export function Reserved({ booking, bankTransfer, photo, title }: {
-  booking: CreateBookingResponse['booking']; bankTransfer: boolean; photo?: ReturnType<typeof vehiclePhotos>[number]; title: string;
+export function Reserved({ booking, bankTransfer, vehicle, title }: {
+  booking: CreateBookingResponse['booking']; bankTransfer: boolean; vehicle: { photos?: string[] | null; kind?: VehicleKind | null }; title: string;
 }) {
   const t = useTheme();
   const reference = booking.reference;
@@ -94,10 +95,10 @@ export function Reserved({ booking, bankTransfer, photo, title }: {
       <Stack.Screen options={{ title: 'Reserved' }} />
       <ScrollView contentContainerStyle={styles.body}>
         <View style={[styles.gallery, { borderColor: t.border }]}>
-          {photo && <KenBurns source={photo} height={240} />}
+          <BikeImage vehicle={vehicle} style={StyleSheet.absoluteFill} />
           <View style={styles.reservedCaption}>
-            <ThemedText type="eyebrow" style={{ color: 'rgba(255,255,255,0.85)' }}>Your ride</ThemedText>
-            <ThemedText type="heading" style={{ color: '#fff' }}>{title}</ThemedText>
+            <ThemedText type="eyebrow" style={{ color: t.accent }}>Your ride</ThemedText>
+            <ThemedText type="heading">{title}</ThemedText>
           </View>
         </View>
         <Animated.View entering={ZoomIn.delay(250).springify()} style={[styles.check, { backgroundColor: t.success, borderColor: t.background }]}>
@@ -120,6 +121,7 @@ export function Reserved({ booking, bankTransfer, photo, title }: {
         <Animated.View>
           <Button variant={bankTransfer ? 'secondary' : 'primary'} title="View my rentals" onPress={() => router.replace('/bookings')} />
         </Animated.View>
+        <CancelBooking id={booking.id} reference={reference} onCancelled={() => router.replace('/bookings')} />
       </ScrollView>
     </ThemedView>
   );
@@ -132,7 +134,7 @@ const styles = StyleSheet.create({
   dots: { position: 'absolute', bottom: Spacing.three, alignSelf: 'center', flexDirection: 'row', gap: 6 },
   dot: { height: 7, borderRadius: 4, backgroundColor: '#FFFFFF' },
   stockNote: { position: 'absolute', bottom: Spacing.three, right: Spacing.three, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: 'rgba(11,16,32,0.45)' },
-  reservedCaption: { position: 'absolute', left: Spacing.three, bottom: Spacing.three },
+  reservedCaption: { position: 'absolute', left: Spacing.three, top: Spacing.three },
   showroomTop: { position: 'absolute', top: Spacing.three, left: Spacing.three, flexDirection: 'row', gap: Spacing.two },
   titleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.three },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },

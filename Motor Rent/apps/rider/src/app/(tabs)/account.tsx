@@ -1,26 +1,31 @@
-import { router, useFocusEffect } from 'expo-router';
+import { Redirect, router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Image } from 'expo-image';
-
 import { Avatar } from '@/components/avatar';
-import { StockPhotos } from '@/components/photo';
+import { BikeImage, type VehicleKind } from '@/components/photo';
+import { RefTag } from '@/components/brand';
+import { ChevronRightIcon } from '@/components/icons';
 import { useWebPullToRefresh } from '@/components/pull-to-refresh';
 import { WhatsAppCard } from '@/components/whatsapp-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, Pill, PressableScale } from '@/components/ui';
-import { BottomTabInset, MaxContentWidth, Spacing, TopNavInset } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth, Radius, Spacing, TopNavInset } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError, callFunction } from '@/lib/api';
+import { statusOf } from '@/lib/booking-status';
+import { dateTime, parseRange } from '@/lib/format';
 import { changeAvatar, removeAvatar } from '@/lib/avatar';
 import { useSession } from '@/lib/session';
 import { useSiteSettings } from '@/lib/site';
 import { supabase } from '@/lib/supabase';
 import { formatMoney } from '@motor-rent/shared';
+
+type Ride = { id: string; reference: string; status: string; period: string; vehicles: { make: string; model: string; kind: VehicleKind; photos: string[] } | null };
+const LIVE = ['held', 'confirmed', 'active', 'overdue'];
 
 type Profile = { avatar_path: string | null; full_name: string | null; phone: string | null; kyc_status: 'pending' | 'approved' | 'rejected'; licence_expires_on: string | null; whatsapp: string | null; whatsapp_verified: boolean };
 
@@ -37,16 +42,23 @@ export default function AccountScreen() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [block, setBlock] = useState<{ reason: string; amount_owed: number | null; currency: string } | null>(null);
+  const [rides, setRides] = useState<Ride[] | null>(null);
+  const [rideCount, setRideCount] = useState(0);
 
   const load = useCallback(async () => {
     if (!session) return;
-    const [p, k, bl] = await Promise.all([
+    const [p, k, bl, r] = await Promise.all([
       supabase.from('profiles').select('avatar_path, full_name, phone, kyc_status, licence_expires_on, whatsapp, whatsapp_verified').eq('id', session.user.id).single(),
       supabase.from('kyc_submissions').select('status, note').eq('profile_id', session.user.id)
         .order('created_at', { ascending: false }).limit(1).maybeSingle(),
       // Only ever the rider's own entry (row-level security).
       supabase.from('rider_blocks').select('reason, amount_owed, currency').eq('profile_id', session.user.id).eq('active', true).limit(1).maybeSingle(),
+      supabase.from('bookings').select('id, reference, status, period, vehicles(make, model, kind, photos)', { count: 'exact' })
+        .eq('rider_id', session.user.id).order('created_at', { ascending: false }).limit(20),
     ]);
+    const all = (r.data as unknown as Ride[] | null) ?? [];
+    setRides(all.filter((x) => LIVE.includes(x.status)));
+    setRideCount(r.count ?? all.length);
     setBlock(bl.data as typeof block);
     setProfile(p.data as Profile | null);
     setSubmission(k.data as typeof submission);
@@ -80,22 +92,8 @@ export default function AccountScreen() {
     ]);
   }
 
-  if (!session) {
-    return (
-      <ThemedView style={[styles.flex, styles.center]}>
-        <Animated.View style={styles.signedOut}>
-          <View style={[styles.badge, { borderColor: t.border }]}>
-            <Image source={StockPhotos.scooter} style={StyleSheet.absoluteFill} contentFit="cover" transition={400} />
-          </View>
-          <ThemedText type="heading" style={{ textAlign: 'center' }}>Your rider profile</ThemedText>
-          <ThemedText themeColor="textSecondary" style={{ textAlign: 'center' }}>
-            Sign in to verify your licence once and book any bike in seconds.
-          </ThemedText>
-          <Button title="Sign in or create account" onPress={() => router.push('/sign-in')} />
-        </Animated.View>
-      </ThemedView>
-    );
-  }
+  // Signed out: My account is the sign-in page, and comes back here afterwards.
+  if (!session) return <Redirect href={{ pathname: '/sign-in', params: { next: '/account' } }} />;
 
   const expired = !!profile?.licence_expires_on && new Date(profile.licence_expires_on) <= new Date();
   const status: 'none' | 'review' | 'approved' | 'rejected' | 'expired' =
@@ -143,7 +141,7 @@ export default function AccountScreen() {
         <ScrollView ref={pull.ref} contentContainerStyle={styles.body}
           refreshControl={Platform.OS !== 'web' ? <RefreshControl refreshing={refreshing} onRefresh={refresh} /> : undefined}>
           <Animated.View>
-            <ThemedText type="subtitle">Account</ThemedText>
+            <ThemedText type="subtitle">My account</ThemedText>
           </Animated.View>
 
           <Animated.View>
@@ -168,6 +166,20 @@ export default function AccountScreen() {
               </View>
             </Card>
           </Animated.View>
+
+          <Card>
+            <View style={styles.row}>
+              <ThemedText type="heading" style={styles.flex}>My rentals</ThemedText>
+              {rideCount > 0 && <ThemedText type="small" themeColor="textSecondary">{rideCount} in total</ThemedText>}
+            </View>
+            {rides === null ? <ActivityIndicator color={t.accent} /> : rides.length === 0 ? (
+              <ThemedText type="small" themeColor="textSecondary">No rides booked right now.</ThemedText>
+            ) : rides.map((ride) => <RideRow key={ride.id} ride={ride} />)}
+            <View style={styles.actions}>
+              {rides !== null && rides.length === 0 && <Button size="sm" title="Book a ride" onPress={() => router.push('/book')} />}
+              <Button size="sm" variant="secondary" title="All my rentals" onPress={() => router.push('/bookings')} />
+            </View>
+          </Card>
 
           <Animated.View>
             <Card>
@@ -236,6 +248,29 @@ export default function AccountScreen() {
   );
 }
 
+/** One live rental: bike, status, pickup time and reference; opens its history and messages. */
+function RideRow({ ride }: { ride: Ride }) {
+  const t = useTheme();
+  const s = statusOf(ride.status as never);
+  const r = parseRange(ride.period);
+  return (
+    <PressableScale onPress={() => router.push({ pathname: '/booking/[id]', params: { id: ride.id } })} lift={false} scaleTo={0.98}
+      accessibilityRole="button" accessibilityLabel={`Open rental ${ride.reference}`}
+      style={[styles.ride, { borderColor: t.border }]}>
+      {ride.vehicles && <BikeImage vehicle={ride.vehicles} style={styles.rideThumb} />}
+      <View style={[styles.flex, { gap: 4 }]}>
+        <View style={styles.row}>
+          <ThemedText type="smallBold" style={{ fontSize: 16 }} numberOfLines={1}>{ride.vehicles ? `${ride.vehicles.make} ${ride.vehicles.model}` : 'Rental'}</ThemedText>
+          <Pill label={s.label} tone={s.tone} />
+        </View>
+        {r && <ThemedText type="small" themeColor="textSecondary">{dateTime(r.start)}  →  {dateTime(r.end)}</ThemedText>}
+        <RefTag>{ride.reference}</RefTag>
+      </View>
+      <ChevronRightIcon color={t.textSecondary} />
+    </PressableScale>
+  );
+}
+
 function Steps({ done }: { done: number }) {
   const t = useTheme();
   const steps = ['Licence', 'ID card', 'Selfie'];
@@ -256,8 +291,8 @@ function Steps({ done }: { done: number }) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center', padding: Spacing.four, paddingTop: TopNavInset },
-  signedOut: { alignItems: 'center', gap: Spacing.three, maxWidth: 380, width: '100%' },
-  badge: { width: 200, height: 200, borderRadius: 100, overflow: 'hidden', borderWidth: 1 },
+  ride: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingVertical: Spacing.two, borderTopWidth: 1 },
+  rideThumb: { width: 72, height: 56, borderRadius: Radius.sm },
   body: {
     padding: Spacing.three, paddingTop: TopNavInset + Spacing.three, paddingBottom: BottomTabInset + Spacing.five,
     gap: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center',

@@ -60,8 +60,9 @@ export function VehiclePhotos({
   function uploadCropped(blob: Blob) {
     setQueue((q) => q.slice(1));
     run("Uploading…", async () => {
-      const path = `${vehicleId}/${crypto.randomUUID()}.jpg`;
-      const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: "image/jpeg", cacheControl: "31536000" });
+      const webp = blob.type === "image/webp";
+      const path = `${vehicleId}/${crypto.randomUUID()}.${webp ? "webp" : "jpg"}`;
+      const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: webp ? "image/webp" : "image/jpeg", cacheControl: "31536000" });
       if (error) throw new Error(error.message);
       try {
         await save(kind, [...photosRef.current, supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl]);
@@ -92,7 +93,7 @@ export function VehiclePhotos({
     <div className="space-y-3">
       {queue[0] && !busy && (
         <ImageCropper key={`${queue[0].name}-${queue.length}`} file={queue[0]} aspect={4 / 3} outWidth={1600}
-          title={`Crop photo${queue.length > 1 ? ` (${queue.length} left)` : ""}`}
+          title={`Crop photo${queue.length > 1 ? ` (${queue.length} left)` : ""}`} keepTransparency
           onDone={uploadCropped} onCancel={() => setQueue((q) => q.slice(1))} />
       )}
       <div className="flex flex-wrap items-center gap-3">
@@ -139,6 +140,7 @@ export function VehiclePhotos({
               <span className="text-2xl leading-none">＋</span>
               <span className="font-semibold">Add photos</span>
               <span className="text-xs">Drop or click · JPEG, PNG, WebP</span>
+              <span className="text-[11px] text-muted">A PNG with the background removed shows as a showroom shot in the app</span>
             </button>
             <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden
               onChange={(e) => { if (e.target.files) upload(e.target.files); e.target.value = ""; }} />

@@ -7,9 +7,11 @@ import { useEffect, useRef, useState } from "react";
  * The output is a JPEG at `outWidth` × outWidth/aspect; re-encoding strips EXIF (GPS etc.).
  */
 export function ImageCropper({
-  file, aspect, outWidth = 1600, title = "Crop photo", round = false, onDone, onCancel,
+  file, aspect, outWidth = 1600, title = "Crop photo", round = false, keepTransparency = false, onDone, onCancel,
 }: {
   file: File; aspect: number; outWidth?: number; title?: string; round?: boolean;
+  /** PNG/WebP sources come out as WebP with their transparent background kept (bike cut-outs). */
+  keepTransparency?: boolean;
   onDone: (blob: Blob) => void; onCancel: () => void;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
@@ -79,7 +81,8 @@ export function ImageCropper({
     const left = (frameW - dw) / 2 + pos.x;
     const top = (frameH - dh) / 2 + pos.y;
     ctx.drawImage(img, left * k, top * k, dw * k, dh * k);
-    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.85));
+    const transparent = keepTransparency && /^image\/(png|webp)$/.test(file.type);
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, transparent ? "image/webp" : "image/jpeg", transparent ? 0.9 : 0.85));
     if (!blob) return setError("Could not process this image.");
     onDone(blob);
   }

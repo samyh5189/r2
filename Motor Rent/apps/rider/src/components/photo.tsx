@@ -5,6 +5,7 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { useOscillate } from './motion';
+import { useTheme } from '@/hooks/use-theme';
 
 export type VehicleKind = 'scooter' | 'motorbike' | 'car';
 
@@ -17,10 +18,58 @@ export const StockPhotos = {
   car: require('@/assets/images/stock/car.jpg'),
 } as const;
 
+/** Whole bike cut out of its background, shown uncropped on a plain surface (see CREDITS.md). */
+const Cutouts: Partial<Record<VehicleKind, ImageProps['source']>> = {
+  scooter: require('@/assets/images/stock/scooter-cutout.webp'),
+  motorbike: require('@/assets/images/stock/motorbike-cutout.webp'),
+};
+
+type BikeLike = { photos?: string[] | null; kind?: VehicleKind | null };
+
+/** Uploaded PNG/WebP photos are treated as cut-outs (transparent background) and shown whole. */
+export const isCutout = (uri?: string | null) => !!uri && /\.(png|webp)(\?|$)/i.test(uri);
+/** True when the bike will be shown as a whole cut-out (stock or uploaded PNG/WebP). */
+export function showsCutout(v: BikeLike) {
+  const own = (v.photos ?? []).find(Boolean);
+  return own ? isCutout(own) : !!Cutouts[v.kind ?? 'scooter'];
+}
+
+/**
+ * The bike's picture. Uploaded photos fill the frame; until there is one, the stock bike is shown
+ * whole (never cropped) on a plain surface with a soft floor shadow, like a showroom shot.
+ */
+export function BikeImage({ vehicle, style, faded, surface, fit = 'cover' }: {
+  vehicle: BikeLike; style?: StyleProp<ViewStyle>; faded?: boolean; surface?: string; fit?: 'cover' | 'contain';
+}) {
+  const t = useTheme();
+  const own = (vehicle.photos ?? []).find(Boolean);
+  const kind = vehicle.kind ?? 'scooter';
+  const cut = own ? (isCutout(own) ? { uri: own } : undefined) : Cutouts[kind];
+  if (!cut) {
+    return (
+      <View style={[{ overflow: 'hidden' }, style, faded && { opacity: 0.55 }]}>
+        <Image source={own ? { uri: own } : StockPhotos[kind]} style={StyleSheet.absoluteFill} contentFit={own ? fit : 'cover'} transition={300} />
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.stage, { backgroundColor: surface ?? t.backgroundSelected }, style, faded && { opacity: 0.55 }]}>
+      <View style={styles.floor} />
+      <Image source={cut} style={styles.cutout} contentFit="contain" transition={300} accessibilityIgnoresInvertColors />
+    </View>
+  );
+}
+
 export function vehiclePhotos(v: { photos?: string[] | null; kind?: VehicleKind | null }): ImageProps['source'][] {
   const own = (v.photos ?? []).filter(Boolean);
   return own.length ? own.map((uri) => ({ uri })) : [StockPhotos[v.kind ?? 'scooter']];
 }
+
+const styles = StyleSheet.create({
+  stage: { overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-end' },
+  floor: { position: 'absolute', bottom: '7%', width: '66%', height: '9%', borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.14)' },
+  cutout: { width: '86%', height: '84%', marginBottom: '6%' },
+});
 
 /** Bottom-weighted dark scrim so white text stays readable on any photo. */
 export function Scrim({ from = 0, to = 0.75, top = 0.25 }: { from?: number; to?: number; top?: number }) {

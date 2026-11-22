@@ -10,3 +10,7 @@ They are fallbacks only: real vehicle photos uploaded in the admin console (Flee
 | scooter.jpg | White scooter parked — https://unsplash.com/photos/2dwHYA4-UwA |
 | motorbike.jpg | Red motorcycle parked — Jusk Squidglysqutch — https://unsplash.com/photos/RgwO__H_XJs |
 | car.jpg | Small car on a seaside road, Kamakura — https://unsplash.com/photos/H1zPQlGb77o |
+| scooter-cutout.webp | Black scooter by a white wall — Vinayak Varlikar, Pexels — https://www.pexels.com/photo/motor-scooter-by-wall-14853122/ — Pexels License; background removed. |
+| motorbike-cutout.webp | Cut out from motorbike.jpg above (Unsplash License); background removed. |
+
+The cut-outs are shown whole on a plain surface (BikeImage in src/components/photo.tsx) until a vehicle has its own uploaded photo.

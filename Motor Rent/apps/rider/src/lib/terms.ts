@@ -1,6 +1,6 @@
 /** Bump when the wording changes; riders accept a specific version when booking (stored on the booking). */
-export const TERMS_VERSION = '2026-11-v2';
-export const TERMS_UPDATED = '21 November 2026';
+export const TERMS_VERSION = '2026-11-v3';
+export const TERMS_UPDATED = '22 November 2026';
 
 export type TermsSection = { title: string; body: string[] };
 
@@ -25,7 +25,7 @@ export const TERMS: TermsSection[] = [
     'We may cancel a booking if the vehicle becomes unsafe or unavailable; you then get a full refund.',
   ] },
   { title: 'Your responsibilities', body: [
-    'Ride safely, wear a helmet, follow Maldivian traffic law, and do not carry more passengers than allowed.',
+    'Ride safely, follow Maldivian traffic law, and do not carry more passengers than allowed. A helmet is not included with the bike; ask for one when you book if you want it.',
     'You are responsible for fines, damage and loss caused while the vehicle is in your care. We show you the evidence (photos, readings, signed records) before charging for damage.',
     'Report any accident, breakdown or theft to us and, where required, to the police straight away.',
   ] },

@@ -1,6 +1,5 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Image } from 'expo-image';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInRight } from 'react-native-reanimated';
 import { baseRental, billableHours } from '@motor-rent/shared';
@@ -8,7 +7,7 @@ import { baseRental, billableHours } from '@motor-rent/shared';
 import { DURATIONS, MAX_RENTAL_DAYS, MIN_RENTAL_HOURS, Reserved, lengthLabel } from '@/components/booking-parts';
 import { DateTimePicker, firstSlot } from '@/components/date-time-picker';
 import { Plate } from '@/components/plate';
-import { vehiclePhotos, type VehicleKind } from '@/components/photo';
+import { BikeImage, type VehicleKind } from '@/components/photo';
 import { BrandMark } from '@/components/brand';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -81,6 +80,12 @@ export default function BookScreen() {
         .map((r) => ({ id: r.vehicle_id, from: +new Date(r.busy_from), to: +new Date(r.busy_to) }))));
   }, []);
   const bike = bikes?.find((b) => b.id === bikeId) ?? null;
+  // Helmets are an optional extra (none come with the bike); show the daily price on the extras step.
+  const [helmetPrice, setHelmetPrice] = useState<number | null>(null);
+  useEffect(() => {
+    supabase.from('extras').select('per_day').eq('code', 'helmet').maybeSingle()
+      .then(({ data }) => setHelmetPrice(data?.per_day ?? null));
+  }, []);
   const estimate = (b: Bike) => {
     const p = b.price_plans; if (!p) return null;
     return Math.round(baseRental(billableHours(start, end), p) * (Number(p.multiplier) || 1));
@@ -138,7 +143,7 @@ export default function BookScreen() {
   }
 
   if (result && bike) {
-    return <Reserved booking={result.booking} bankTransfer={result.payment.provider === 'bank_transfer'} photo={vehiclePhotos(bike)[0]} title={`${bike.make} ${bike.model}`} />;
+    return <Reserved booking={result.booking} bankTransfer={result.payment.provider === 'bank_transfer'} vehicle={bike} title={`${bike.make} ${bike.model}`} />;
   }
 
   const price = quote ? money(quote.total, quote.currency)
@@ -179,7 +184,7 @@ export default function BookScreen() {
           </View>
           <View style={{ alignItems: 'flex-end' }}><ThemedText type="small" themeColor="textSecondary">Return</ThemedText><ThemedText type="smallBold">{step >= 1 ? dateTime(end) : '—'}</ThemedText></View>
         </View>
-        <ThemedText type="small" themeColor="textSecondary">{step >= 1 ? lengthLabel(hours) : 'Return time next'}{helmets ? `, ${helmets} extra helmet${helmets > 1 ? 's' : ''}` : ''}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">{step >= 1 ? lengthLabel(hours) : 'Return time next'}{step >= 3 ? (helmets ? `, ${helmets} helmet${helmets > 1 ? 's' : ''}` : ', no helmet') : ''}</ThemedText>
       </View>
       <View style={[styles.ticketPad, styles.dashed, styles.rowBetween, { borderColor: t.border }]}>
         <View style={styles.flex}><ThemedText type="small" themeColor="textSecondary">Rider</ThemedText><ThemedText type="smallBold">{me?.full_name || (session ? '—' : 'Sign in at the extras step')}</ThemedText></View>
@@ -253,11 +258,14 @@ export default function BookScreen() {
 
           {step === 3 && bike && screen(
             `${bike.make} ${bike.model}, good choice.`,
-            'Need a helmet for a passenger?',
+            'Would you like a helmet?',
             <>
-              <ThemedText themeColor="textSecondary">One helmet comes with the bike.</ThemedText>
+              <ThemedText themeColor="textSecondary">
+                Helmets aren’t required in Kulhudhuffushi, so the bike comes without one. Ask for one if you’d like it
+                {helmetPrice != null ? `, ${money(helmetPrice, bike.price_plans?.currency ?? 'MVR')} a day each` : ''}.
+              </ThemedText>
               <View style={styles.chips}>
-                {[0, 1, 2].map((n) => <Choice key={n} label={n === 0 ? 'No, just me' : n === 1 ? 'Yes, one more' : 'Two more'} selected={n === helmets} onPress={() => set({ helmets: String(n) })} />)}
+                {[0, 1, 2].map((n) => <Choice key={n} label={n === 0 ? 'No helmet' : n === 1 ? '1 helmet' : '2 helmets'} selected={n === helmets} onPress={() => set({ helmets: String(n) })} />)}
               </View>
               {!session ? (
                 <View style={{ gap: Spacing.two }}>
@@ -369,7 +377,7 @@ function BikeList({ bikes, free, selected, estimate, nextFree: freeAt, onPick, o
         const at = freeAt(b);
         return (
           <View key={b.id} style={[styles.bike, { borderColor: t.border, backgroundColor: t.backgroundElement }]}>
-            <Image source={vehiclePhotos(b)[0]} style={[styles.bikePhoto, { opacity: 0.55 }]} contentFit="cover" />
+            <BikeImage vehicle={b} style={styles.bikePhoto} faded />
             <View style={[styles.flex, { gap: 4 }]}>
               <ThemedText type="smallBold" style={{ fontSize: 17 }}>{b.make} {b.model}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">{at ? `Free for the same length from ${dateTime(at)}` : 'Checking when it’s free…'}</ThemedText>
@@ -406,7 +414,7 @@ function BikeList({ bikes, free, selected, estimate, nextFree: freeAt, onPick, o
           <Animated.View key={b.id} entering={FadeIn.delay(i * 40)}>
             <PressableScale onPress={() => onPick(b.id)} accessibilityRole="button" accessibilityLabel={`Choose ${b.make} ${b.model}, ${b.plate}`}
               style={[styles.bike, { borderColor: sel ? t.accent : t.border, backgroundColor: t.backgroundElement }]}>
-              <Image source={vehiclePhotos(b)[0]} style={styles.bikePhoto} contentFit="cover" />
+              <BikeImage vehicle={b} style={styles.bikePhoto} />
               <View style={[styles.flex, { gap: 4 }]}>
                 <ThemedText type="smallBold" style={{ fontSize: 17 }}>{b.make} {b.model}</ThemedText>
                 <View style={styles.rowBetween}>
@@ -451,7 +459,7 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   choice: { borderWidth: 1.5, borderRadius: Radius.md, paddingHorizontal: Spacing.three, paddingVertical: 12, minHeight: 48, justifyContent: 'center' },
   bike: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, padding: Spacing.two, borderRadius: Radius.md, borderWidth: 1.5 },
-  bikePhoto: { width: 96, height: 72, borderRadius: Radius.sm },
+  bikePhoto: { width: 128, height: 96, borderRadius: Radius.sm },
   line: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.two },
   totalLine: { borderTopWidth: 1, paddingTop: Spacing.two, marginTop: Spacing.one },
 });

@@ -1,4 +1,4 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, Redirect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Platform, RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, Easing } from 'react-native-reanimated';
@@ -6,7 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Image } from 'expo-image';
 
-import { StockPhotos, vehiclePhotos, type VehicleKind } from '@/components/photo';
+import { CancelBooking } from '@/components/cancel-booking';
+import { BikeImage, StockPhotos, type VehicleKind } from '@/components/photo';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { RefTag } from '@/components/brand';
@@ -52,16 +53,7 @@ export default function BookingsScreen() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
   const pull = useWebPullToRefresh(load);
 
-  if (!session) {
-    return (
-      <EmptyState
-        title="Your rides live here"
-        body="Sign in to see your bookings, pickup times and receipts."
-        action="Sign in"
-        onPress={() => router.push('/sign-in')}
-      />
-    );
-  }
+  if (!session) return <Redirect href={{ pathname: '/sign-in', params: { next: '/bookings' } }} />;
 
   return (
     <ThemedView style={styles.flex}>
@@ -91,16 +83,6 @@ export default function BookingsScreen() {
 
 function RentalCard({ row, index, onChanged }: { row: Row; index: number; onChanged: () => void }) {
   const t = useTheme();
-  const [cancelling, setCancelling] = useState(false);
-  const [cancelError, setCancelError] = useState<string | null>(null);
-  async function cancel() {
-    if (Platform.OS === 'web' && !window.confirm(`Cancel reservation ${row.reference}?`)) return;
-    setCancelling(true); setCancelError(null);
-    const { error } = await supabase.rpc('cancel_my_booking', { b: row.id });
-    setCancelling(false);
-    if (error) return setCancelError(error.message.replace(/^.*?ERROR:\s*/i, ''));
-    onChanged();
-  }
   const r = parseRange(row.period);
   const s = statusOf(row.status);
   const msgs = row.msgs?.[0]?.count ?? 0;
@@ -112,7 +94,7 @@ function RentalCard({ row, index, onChanged }: { row: Row; index: number; onChan
         accessibilityRole="button" accessibilityLabel={`Open rental ${row.reference}: history and messages`}>
       <Card>
         <View style={styles.line}>
-          {row.vehicles && <Image source={vehiclePhotos(row.vehicles)[0]} style={styles.thumb} contentFit="cover" transition={300} />}
+          {row.vehicles && <BikeImage vehicle={row.vehicles} style={styles.thumb} />}
           <View style={styles.flex}>
             <ThemedText type="heading">{row.vehicles?.make} {row.vehicles?.model}</ThemedText>
             <Pill label={s.label} tone={s.tone} />
@@ -138,8 +120,7 @@ function RentalCard({ row, index, onChanged }: { row: Row; index: number; onChan
       {row.status === 'held' && (
         <View style={{ marginTop: Spacing.two, gap: Spacing.two }}>
           <TransferPayment booking={row} onChange={onChanged} />
-          <Button variant="ghost" title={cancelling ? 'Cancelling…' : 'Cancel reservation'} onPress={cancel} disabled={cancelling} />
-          <ErrorText>{cancelError}</ErrorText>
+          <CancelBooking id={row.id} reference={row.reference} onCancelled={onChanged} />
         </View>
       )}
     </Animated.View>

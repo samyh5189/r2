@@ -7,7 +7,7 @@ insert into public.price_plans (id, name, hourly, daily, weekly, deposit, late_f
   ('00000000-0000-0000-0000-0000000000a2', 'Motorbike 150cc+', 8000, 45000, 220000, 200000, 12000);
 
 insert into public.extras (code, label, per_day, max_quantity) values
-  ('helmet', 'Extra helmet', 2000, 2),
+  ('helmet', 'Helmet', 2000, 2),
   ('phone_holder', 'Phone holder', 1000, 1),
   ('insurance_plus', 'Damage cover (reduces deposit claim cap)', 5000, 1);
 
