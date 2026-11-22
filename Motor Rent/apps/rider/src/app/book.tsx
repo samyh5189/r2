@@ -21,7 +21,7 @@ import { supabase } from '@/lib/supabase';
 import { TERMS_VERSION } from '@/lib/terms';
 
 type Bike = {
-  id: string; kind: VehicleKind; photos: string[]; plate: string; make: string; model: string; engine_cc: number | null;
+  id: string; kind: VehicleKind; photos: string[]; plate: string; make: string; model: string; engine_cc: number | null; colour?: string | null;
   branches: { name: string } | null;
   price_plans: { hourly: number; daily: number; weekly: number; deposit: number; multiplier: number; currency: 'MVR' | 'USD' } | null;
 };
@@ -62,7 +62,7 @@ export default function BookScreen() {
   const [free, setFree] = useState<Set<string> | null>(null);
   useEffect(() => {
     supabase.from('vehicles')
-      .select('id, kind, photos, plate, make, model, engine_cc, branches(name), price_plans(hourly, daily, weekly, deposit, multiplier, currency)')
+      .select('id, kind, photos, plate, make, model, engine_cc, colour, branches(name), price_plans(hourly, daily, weekly, deposit, multiplier, currency)')
       .eq('status', 'active').order('make')
       .then(({ data }) => setBikes((data ?? []) as unknown as Bike[]));
   }, []);

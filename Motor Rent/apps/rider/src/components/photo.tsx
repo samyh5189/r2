@@ -25,12 +25,35 @@ const Cutouts: Partial<Record<VehicleKind, ImageProps['source']>> = {
 };
 
 /** Showroom cut-outs of specific models, used instead of uploaded photos (see CREDITS.md). */
-const ModelCutouts: { match: RegExp; source: ImageProps['source']; credit: string; colour: string }[] = [
-  { match: /air\s*blade/i, source: require('@/assets/images/stock/airblade-cutout.webp'), credit: 'Airblade photo: Dmitry Makeev, Wikimedia Commons, CC BY-SA 4.0', colour: 'red' },
-  { match: /\bpcx\b/i, source: require('@/assets/images/stock/pcx-cutout.webp'), credit: 'PCX photo: Chanokchon, Wikimedia Commons, CC BY-SA 4.0', colour: 'grey' },
+/**
+ * Showroom cut-outs of specific models. `variants` are the same photo with the body panels
+ * repainted in another colour (generated from the original; see CREDITS.md).
+ */
+const ModelCutouts: { match: RegExp; source: ImageProps['source']; credit: string; colour: string; variants: Partial<Record<string, ImageProps['source']>> }[] = [
+  { match: /air\s*blade/i, source: require('@/assets/images/stock/airblade-cutout.webp'), credit: 'Airblade photo: Dmitry Makeev, Wikimedia Commons, CC BY-SA 4.0', colour: 'red', variants: {
+    black: require('@/assets/images/stock/colours/airblade-black.webp'),
+    blue: require('@/assets/images/stock/colours/airblade-blue.webp'),
+    brown: require('@/assets/images/stock/colours/airblade-brown.webp'),
+    green: require('@/assets/images/stock/colours/airblade-green.webp'),
+    grey: require('@/assets/images/stock/colours/airblade-grey.webp'),
+    orange: require('@/assets/images/stock/colours/airblade-orange.webp'),
+    silver: require('@/assets/images/stock/colours/airblade-silver.webp'),
+    white: require('@/assets/images/stock/colours/airblade-white.webp'),
+    yellow: require('@/assets/images/stock/colours/airblade-yellow.webp'),
+  } },
+  { match: /\bpcx\b/i, source: require('@/assets/images/stock/pcx-cutout.webp'), credit: 'PCX photo: Chanokchon, Wikimedia Commons, CC BY-SA 4.0', colour: 'grey', variants: {
+    black: require('@/assets/images/stock/colours/pcx-black.webp'),
+    blue: require('@/assets/images/stock/colours/pcx-blue.webp'),
+    brown: require('@/assets/images/stock/colours/pcx-brown.webp'),
+    green: require('@/assets/images/stock/colours/pcx-green.webp'),
+    orange: require('@/assets/images/stock/colours/pcx-orange.webp'),
+    red: require('@/assets/images/stock/colours/pcx-red.webp'),
+    silver: require('@/assets/images/stock/colours/pcx-silver.webp'),
+    yellow: require('@/assets/images/stock/colours/pcx-yellow.webp'),
+  } },
 ];
 
-type BikeLike = { photos?: string[] | null; kind?: VehicleKind | null; make?: string | null; model?: string | null };
+type BikeLike = { photos?: string[] | null; kind?: VehicleKind | null; make?: string | null; model?: string | null; colour?: string | null };
 
 /** Uploaded PNG/WebP photos are treated as cut-outs (transparent background) and shown whole. */
 export const isCutout = (uri?: string | null) => !!uri && /\.(png|webp)(\?|$)/i.test(uri);
@@ -41,7 +64,10 @@ const modelCutout = (v: BikeLike) =>
 /** Colour of the bike in the model showroom picture, when that picture is what's shown (else null). */
 export const stockPhotoColour = (v: BikeLike) => {
   const own = (v.photos ?? []).find(Boolean);
-  return own && isCutout(own) ? null : modelCutout(v)?.colour ?? null;
+  if (own && isCutout(own)) return null;
+  const model = modelCutout(v);
+  if (!model) return null;
+  return v.colour && model.variants[v.colour] ? v.colour : model.colour;
 };
 /** Photo credit to show when a model cut-out is on screen. */
 export const bikeCredit = (v: BikeLike) => {
@@ -57,7 +83,7 @@ export function bikeSource(v: BikeLike): { source: ImageProps['source']; cutout:
   const own = (v.photos ?? []).find(Boolean);
   if (own && isCutout(own)) return { source: { uri: own }, cutout: true };
   const model = modelCutout(v);
-  if (model) return { source: model.source, cutout: true };
+  if (model) return { source: (v.colour && model.variants[v.colour]) || model.source, cutout: true };
   if (own) return { source: { uri: own }, cutout: false };
   const kind = v.kind ?? 'scooter';
   const cut = Cutouts[kind];

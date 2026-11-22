@@ -40,7 +40,7 @@ export default function BookingsScreen() {
     setLoading(true);
     const { data, error } = await supabase
       .from('bookings')
-      .select('id, reference, status, period, total, currency, held_until, vehicles(make, model, plate, kind, photos), msgs:booking_messages(count), last:booking_messages(from_staff, created_at)')
+      .select('id, reference, status, period, total, currency, held_until, vehicles(make, model, plate, kind, photos, colour), msgs:booking_messages(count), last:booking_messages(from_staff, created_at)')
       .order('created_at', { ascending: false })
       .order('created_at', { referencedTable: 'last', ascending: false })
       .limit(1, { referencedTable: 'last' })

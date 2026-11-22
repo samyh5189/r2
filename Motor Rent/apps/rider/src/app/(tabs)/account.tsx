@@ -53,7 +53,7 @@ export default function AccountScreen() {
         .order('created_at', { ascending: false }).limit(1).maybeSingle(),
       // Only ever the rider's own entry (row-level security).
       supabase.from('rider_blocks').select('reason, amount_owed, currency').eq('profile_id', session.user.id).eq('active', true).limit(1).maybeSingle(),
-      supabase.from('bookings').select('id, reference, status, period, vehicles(make, model, kind, photos)', { count: 'exact' })
+      supabase.from('bookings').select('id, reference, status, period, vehicles(make, model, kind, photos, colour)', { count: 'exact' })
         .eq('rider_id', session.user.id).order('created_at', { ascending: false }).limit(20),
     ]);
     const all = (r.data as unknown as Ride[] | null) ?? [];

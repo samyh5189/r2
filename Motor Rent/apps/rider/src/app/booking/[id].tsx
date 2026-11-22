@@ -52,7 +52,7 @@ export default function BookingDetail() {
     if (!uid) return;
     setLoading(true);
     const [b, ev, sl, p] = await Promise.all([
-      supabase.from('bookings').select('id, reference, status, period, total, deposit, currency, created_at, vehicles(make, model, plate, kind, photos), branches(name)').eq('id', id).maybeSingle(),
+      supabase.from('bookings').select('id, reference, status, period, total, deposit, currency, created_at, vehicles(make, model, plate, kind, photos, colour), branches(name)').eq('id', id).maybeSingle(),
       supabase.from('booking_events').select('id, from_status, to_status, actor, note, at').eq('booking_id', id).order('at'),
       supabase.from('transfer_slips').select('id, status, amount, reject_reason, created_at, reviewed_at').eq('booking_id', id),
       supabase.from('profiles').select('full_name, avatar_path').eq('id', uid).single(),
