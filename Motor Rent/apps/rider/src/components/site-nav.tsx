@@ -21,6 +21,9 @@ type NavLink = { href: Href; label: string };
 const LINKS: NavLink[] = [
   { href: '/', label: 'Home' },
   { href: '/fleet', label: 'Fleet' },
+  { href: '/prices', label: 'Prices' },
+  { href: '/counter', label: 'Our counter' },
+  { href: '/help', label: 'Questions' },
   { href: '/book', label: 'Book a ride' },
   { href: '/terms', label: 'Rental terms' },
   { href: '/privacy', label: 'Privacy' },
@@ -28,7 +31,9 @@ const LINKS: NavLink[] = [
 /** Shown inline in the header on wide screens. */
 const INLINE: NavLink[] = [
   { href: '/fleet', label: 'Fleet' },
-  { href: '/terms', label: 'Rental terms' },
+  { href: '/prices', label: 'Prices' },
+  { href: '/counter', label: 'Our counter' },
+  { href: '/help', label: 'Questions' },
 ];
 
 const go = (href: Href) => (href === '/' ? router.navigate('/') : router.push(href));

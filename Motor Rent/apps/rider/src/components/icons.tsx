@@ -51,3 +51,61 @@ export function ArrowLeftIcon({ size = 18, color, width = 2 }: P) {
     </Svg>
   );
 }
+
+export function ChevronDownIcon({ size = 18, color, width = 2 }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M6 9l6 6 6-6" />
+    </Svg>
+  );
+}
+
+export function ArrowDownIcon({ size = 18, color, width = 2 }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 5v14M6 13l6 6 6-6" />
+    </Svg>
+  );
+}
+
+export function PinIcon({ size = 20, color, width = 1.8 }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" />
+      <Circle cx={12} cy={9.5} r={2.6} />
+    </Svg>
+  );
+}
+
+export function ClockIcon({ size = 20, color, width = 1.8 }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx={12} cy={12} r={9} />
+      <Path d="M12 7v5l3 2" />
+    </Svg>
+  );
+}
+
+export function PlusIcon({ size = 18, color, width = 2 }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={width} strokeLinecap="round">
+      <Path d="M12 5v14M5 12h14" />
+    </Svg>
+  );
+}
+
+export function MinusIcon({ size = 18, color, width = 2 }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={width} strokeLinecap="round">
+      <Path d="M5 12h14" />
+    </Svg>
+  );
+}
+
+export function ShieldIcon({ size = 20, color, width = 1.8 }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 3l7 3v5.5c0 4.4-3 8-7 9.5-4-1.5-7-5.1-7-9.5V6l7-3z" />
+    </Svg>
+  );
+}
