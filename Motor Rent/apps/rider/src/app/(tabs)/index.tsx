@@ -122,6 +122,11 @@ function Welcome() {
         </View>
       ))}
       <Button variant="secondary" title="Sign in or create an account" onPress={() => router.push('/sign-in')} />
+      <ThemedText type="small" themeColor="textSecondary">
+        <ThemedText type="small" themeColor="textSecondary" onPress={() => router.push('/terms')} style={{ textDecorationLine: 'underline' }}>Rental terms</ThemedText>
+        {'   '}
+        <ThemedText type="small" themeColor="textSecondary" onPress={() => router.push('/privacy')} style={{ textDecorationLine: 'underline' }}>Privacy policy</ThemedText>
+      </ThemedText>
     </View>
   );
 }
@@ -200,6 +205,7 @@ function Dashboard({ me, rows, pendingCheck }: { me: Me | null; rows: Row[] | nu
       <View style={styles.quick}>
         <Button variant="secondary" title="My rentals" onPress={() => router.push('/bookings')} />
         <Button variant="secondary" title="Rental terms" onPress={() => router.push('/terms')} />
+        <Button variant="ghost" title="Privacy" onPress={() => router.push('/privacy')} />
       </View>
     </View>
   );

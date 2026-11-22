@@ -44,6 +44,7 @@ export default function RootLayout() {
           <Stack.Screen name="verify" options={{ title: 'Verify your identity', ...webHeaderOption }} />
           <Stack.Screen name="booking/[id]" options={{ title: 'Rental', headerBackTitle: 'Rentals', ...webHeaderOption }} />
           <Stack.Screen name="terms" options={{ title: 'Rental terms', ...webHeaderOption }} />
+          <Stack.Screen name="privacy" options={{ title: 'Privacy policy', ...webHeaderOption }} />
           <Stack.Screen name="reset-password" options={{ title: 'New password', ...webHeaderOption }} />
         </Stack>
       </ThemeProvider>
