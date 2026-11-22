@@ -1,5 +1,5 @@
 /**
- * Island road palette: coral-sand white, lagoon ink and teal, road-marking yellow for the one main action.
+ * Island road palette: coral-sand white, ink and teal, road-marking yellow for the one main action.
  * Every screen reads colors through useTheme(), so both schemes stay in sync.
  */
 
@@ -9,56 +9,56 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#0C2B33',            // lagoon ink
-    background: '#F3F5F2',      // coral-sand white
+    text: '#17181A',            // ink
+    background: '#F6F4F1',      // coral-sand white
     backgroundElement: '#FFFFFF',
-    backgroundSelected: '#E3ECE9',
-    textSecondary: '#55706F',
-    accent: '#0B7A75',          // lagoon teal: selection, links, progress
-    accentSoft: '#D7EDEA',
+    backgroundSelected: '#F1E9E7',
+    textSecondary: '#61646B',
+    accent: '#D7192A',          // brand red: selection, links, progress, main actions
+    accentSoft: '#FBE3E5',
     accentText: '#FFFFFF',
-    cta: '#FFC629',             // road-marking yellow: the main action on a screen
-    ctaText: '#0C2B33',
-    ocean: '#0B7A75',
+    cta: '#D7192A',             // road-marking yellow: the main action on a screen
+    ctaText: '#FFFFFF',
+    ocean: '#D7192A',
     highlight: '#FFC629',
-    road: '#0C2B33',
+    road: '#17181A',
     roadLine: '#FFC629',
-    border: '#D9E2DF',
-    shadow: 'rgba(12, 43, 51, 0.10)',
+    border: '#E4DFDB',
+    shadow: 'rgba(23, 24, 26, 0.10)',
     success: '#1D8A4E',
     successSoft: '#DDF1E4',
     warning: '#9A6400',
     warningSoft: '#FFF1C7',
-    danger: '#C8423A',
-    dangerSoft: '#F9E1DE',
+    danger: '#A3131F',
+    dangerSoft: '#F8DEDF',
     skyTop: '#8FD3E0',
     skyBottom: '#E9F6F4',
     sun: '#FFF3C4',
     sea: '#2AA6A0',
-    palm: '#0C2B33',
+    palm: '#17181A',
   },
   dark: {
-    text: '#E8F1EF',
-    background: '#08171C',      // night lagoon
-    backgroundElement: '#0F2229',
-    backgroundSelected: '#173239',
-    textSecondary: '#8DA7A6',
-    accent: '#3CC2B8',
-    accentSoft: '#123A3A',
-    accentText: '#04211F',
-    cta: '#FFC629',
-    ctaText: '#0C2B33',
-    ocean: '#3CC2B8',
+    text: '#F2EFEC',
+    background: '#121214',      // night lagoon
+    backgroundElement: '#1B1B1E',
+    backgroundSelected: '#2A2224',
+    textSecondary: '#A3A1A6',
+    accent: '#FF4D5A',
+    accentSoft: '#3A1418',
+    accentText: '#FFFFFF',
+    cta: '#E5273A',
+    ctaText: '#FFFFFF',
+    ocean: '#FF4D5A',
     highlight: '#FFC629',
-    road: '#0F2229',
+    road: '#1B1B1E',
     roadLine: '#FFC629',
-    border: '#1C363D',
+    border: '#2E2B2D',
     shadow: 'rgba(0, 0, 0, 0.5)',
     success: '#4CC985',
     successSoft: '#10301F',
     warning: '#F2B53A',
     warningSoft: '#33280C',
-    danger: '#F0776E',
+    danger: '#FF8A80',
     dangerSoft: '#3A1714',
     skyTop: '#06121A',
     skyBottom: '#0F2E38',

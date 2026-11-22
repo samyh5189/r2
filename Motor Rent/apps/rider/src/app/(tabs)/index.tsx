@@ -80,7 +80,7 @@ function Hero({ wide, name, signedIn }: { wide: boolean; name: string | null; si
             <View style={{ maxWidth: 680 }}>
               <RisingHeadline text={headline} style={[styles.onPhoto, { fontSize: wide ? 76 : 46, lineHeight: wide ? 76 : 48, letterSpacing: wide ? -2 : -1 }]} />
             </View>
-            <LaneMarkings color={t.cta} width={wide ? 220 : 160} delay={150 + headline.split(' ').length * 90 + 200} />
+            <LaneMarkings color="#FFFFFF" width={wide ? 220 : 160} delay={150 + headline.split(' ').length * 90 + 200} />
             <After delay={150 + headline.split(' ').length * 90 + 450}>
               <View style={{ gap: Spacing.three }}>
                 {!signedIn && (

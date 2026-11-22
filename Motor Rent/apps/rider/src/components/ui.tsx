@@ -52,7 +52,7 @@ export function Button({
         { backgroundColor: bg, opacity: inactive ? 0.5 : 1 },
         variant === 'secondary' && { borderWidth: 1, borderColor: t.border },
         variant === 'primary' && { borderWidth: 1.5, borderColor: '#8A9A9B' },
-        variant === 'cta' && { borderWidth: 1.5, borderColor: '#0C2B33', minHeight: 56 },
+        variant === 'cta' && { minHeight: 56 },
       ]}>
       {loading ? (
         <ActivityIndicator color={fg} />
