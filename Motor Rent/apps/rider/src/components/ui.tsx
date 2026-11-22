@@ -35,11 +35,11 @@ export function PressableScale({
 
 export function Button({
   title, onPress, disabled, loading, variant = 'primary', icon,
-}: { title: string; onPress: () => void; disabled?: boolean; loading?: boolean; variant?: 'primary' | 'secondary' | 'ghost'; icon?: ReactNode }) {
+}: { title: string; onPress: () => void; disabled?: boolean; loading?: boolean; variant?: 'primary' | 'cta' | 'secondary' | 'ghost'; icon?: ReactNode }) {
   const t = useTheme();
   const inactive = disabled || loading;
-  const bg = variant === 'primary' ? '#000000' : variant === 'secondary' ? t.backgroundElement : 'transparent';
-  const fg = variant === 'primary' ? '#FFFFFF' : t.text;
+  const bg = variant === 'primary' ? '#000000' : variant === 'cta' ? t.cta : variant === 'secondary' ? t.backgroundElement : 'transparent';
+  const fg = variant === 'primary' ? '#FFFFFF' : variant === 'cta' ? t.ctaText : t.text;
   return (
     <PressableScale
       accessibilityRole="button"
@@ -52,6 +52,7 @@ export function Button({
         { backgroundColor: bg, opacity: inactive ? 0.5 : 1 },
         variant === 'secondary' && { borderWidth: 1, borderColor: t.border },
         variant === 'primary' && { borderWidth: 1.5, borderColor: '#8A9A9B' },
+        variant === 'cta' && { borderWidth: 1.5, borderColor: '#0C2B33', minHeight: 56 },
       ]}>
       {loading ? (
         <ActivityIndicator color={fg} />

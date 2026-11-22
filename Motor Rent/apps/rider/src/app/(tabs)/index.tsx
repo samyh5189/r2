@@ -2,8 +2,8 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Platform, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
-import Animated, { FadeInUp } from 'react-native-reanimated';
 
+import { After, LaneMarkings, RisingHeadline } from '@/components/hero-motion';
 import { KenBurns, StockPhotos, vehiclePhotos, type VehicleKind } from '@/components/photo';
 import { Plate } from '@/components/plate';
 import { ThemedText } from '@/components/themed-text';
@@ -76,18 +76,24 @@ function Hero({ wide, name, signedIn }: { wide: boolean; name: string | null; si
     <View style={styles.heroWrap}>
       <KenBurns source={custom ? { uri: custom } : StockPhotos.hero} height={height} focus={{ top: custom ? '50%' : '55%', left: '50%' }} scrimTop={0.15} scrimBottom={0.85}>
         <View style={[styles.heroText, { paddingBottom: wide ? Spacing.five : Spacing.four }]}>
-          <Animated.View entering={FadeInUp.duration(700)} style={styles.heroInner}>
-            <ThemedText type="title" style={[styles.onPhoto, { fontSize: wide ? 68 : 44, lineHeight: wide ? 66 : 44, maxWidth: 620 }]}>{headline}</ThemedText>
-            <View style={[styles.roadLine, { backgroundColor: t.cta }]} />
-            {!signedIn && (
-              <ThemedText style={[styles.onPhotoMuted, { fontSize: 17, lineHeight: 25, maxWidth: 420 }]}>
-                Scooters and motorbikes by the hour or the day. Choose your times, pick a bike, collect the keys.
-              </ThemedText>
-            )}
-            <View style={{ alignSelf: 'flex-start', minWidth: 220 }}>
-              <Button title="Book a ride" onPress={() => router.push('/book')} />
+          <View style={styles.heroInner}>
+            <View style={{ maxWidth: 680 }}>
+              <RisingHeadline text={headline} style={[styles.onPhoto, { fontSize: wide ? 76 : 46, lineHeight: wide ? 76 : 48, letterSpacing: wide ? -2 : -1 }]} />
             </View>
-          </Animated.View>
+            <LaneMarkings color={t.cta} width={wide ? 220 : 160} delay={150 + headline.split(' ').length * 90 + 200} />
+            <After delay={150 + headline.split(' ').length * 90 + 450}>
+              <View style={{ gap: Spacing.three }}>
+                {!signedIn && (
+                  <ThemedText style={[styles.onPhotoMuted, { fontSize: 17, lineHeight: 25, maxWidth: 420 }]}>
+                    Scooters and motorbikes by the hour or the day. Choose your times, pick a bike, collect the keys.
+                  </ThemedText>
+                )}
+                <View style={{ alignSelf: 'flex-start', minWidth: 230 }}>
+                  <Button variant="cta" title="Book a ride" onPress={() => router.push('/book')} />
+                </View>
+              </View>
+            </After>
+          </View>
         </View>
         {!!credit && <ThemedText type="small" style={styles.credit} numberOfLines={1}>{credit}</ThemedText>}
       </KenBurns>
@@ -254,7 +260,6 @@ const styles = StyleSheet.create({
   heroWrap: Platform.select({ web: { width: '100vw', marginLeft: 'calc(50% - 50vw)', overflow: 'hidden' } as object, default: { marginHorizontal: -Spacing.three, overflow: 'hidden' } })!,
   heroText: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: Spacing.three, alignItems: 'center' },
   heroInner: { gap: Spacing.three, width: '100%', maxWidth: MaxContentWidth },
-  roadLine: { width: 72, height: 6, borderRadius: 1 },
   onPhoto: { color: '#FFFFFF' },
   onPhotoMuted: { color: 'rgba(255,255,255,0.88)' },
   credit: { position: 'absolute', right: Spacing.three, top: TopNavInset + Spacing.two, fontSize: 10, lineHeight: 13, color: 'rgba(255,255,255,0.7)' },
