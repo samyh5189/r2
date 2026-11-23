@@ -102,7 +102,7 @@ export function ModelCarousel({ models, onView = false, style }: { models: Model
           accessibilityRole="list" accessibilityLabel="Bikes in the fleet">
           {models.map((m, i) => (
             <View key={m.key} style={[{ width: cardW }, web && ({ scrollSnapAlign: 'start' } as ViewStyle)]}>
-              <Reveal onView={onView} delay={80 * (i + 1)} duration={800}>
+              <Reveal onView={onView} delay={80 * (i + 1)} duration={800} style={{ flex: 1 }}>
                 <ModelCard m={m} />
               </Reveal>
             </View>
@@ -249,7 +249,8 @@ const styles = StyleSheet.create({
   dot: { height: 8, borderRadius: 4 },
   arrows: { flexDirection: 'row', gap: Spacing.two },
   arrow: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  card: { borderWidth: 1, borderRadius: 16, overflow: 'hidden' },
+  // Cards in a row share one height (the row stretches them); the price sits at the bottom.
+  card: { borderWidth: 1, borderRadius: 16, overflow: 'hidden', flexGrow: 1 },
   stage: { aspectRatio: 5 / 4, width: '100%', overflow: 'hidden' },
   wordBox: { position: 'absolute', top: '13%', left: '-50%', right: '-50%', alignItems: 'center' },
   word: { textAlign: 'center', fontFamily: Fonts?.display, fontWeight: '800' },

@@ -29,8 +29,8 @@ const Cutouts: Partial<Record<VehicleKind, ImageProps['source']>> = {
  * Showroom cut-outs of specific models. `variants` are the same photo with the body panels
  * repainted in another colour (generated from the original; see CREDITS.md).
  */
-const ModelCutouts: { match: RegExp; source: ImageProps['source']; credit: string; colour: string; variants: Partial<Record<string, ImageProps['source']>> }[] = [
-  { match: /air\s*blade/i, source: require('@/assets/images/stock/airblade-cutout.webp'), credit: 'Airblade photo: Dmitry Makeev, Wikimedia Commons, CC BY-SA 4.0', colour: 'red', variants: {
+const ModelCutouts: { make: RegExp; match: RegExp; source: ImageProps['source']; credit: string; colour: string; variants: Partial<Record<string, ImageProps['source']>> }[] = [
+  { make: /honda/i, match: /air\s*blade/i, source: require('@/assets/images/stock/airblade-cutout.webp'), credit: 'Airblade photo: Dmitry Makeev, Wikimedia Commons, CC BY-SA 4.0', colour: 'red', variants: {
     black: require('@/assets/images/stock/colours/airblade-black.webp'),
     blue: require('@/assets/images/stock/colours/airblade-blue.webp'),
     brown: require('@/assets/images/stock/colours/airblade-brown.webp'),
@@ -41,7 +41,7 @@ const ModelCutouts: { match: RegExp; source: ImageProps['source']; credit: strin
     white: require('@/assets/images/stock/colours/airblade-white.webp'),
     yellow: require('@/assets/images/stock/colours/airblade-yellow.webp'),
   } },
-  { match: /\bpcx\b/i, source: require('@/assets/images/stock/pcx-cutout.webp'), credit: 'PCX photo: Chanokchon, Wikimedia Commons, CC BY-SA 4.0', colour: 'grey', variants: {
+  { make: /honda/i, match: /\bpcx\b/i, source: require('@/assets/images/stock/pcx-cutout.webp'), credit: 'PCX photo: Chanokchon, Wikimedia Commons, CC BY-SA 4.0', colour: 'grey', variants: {
     black: require('@/assets/images/stock/colours/pcx-black.webp'),
     blue: require('@/assets/images/stock/colours/pcx-blue.webp'),
     brown: require('@/assets/images/stock/colours/pcx-brown.webp'),
@@ -51,6 +51,8 @@ const ModelCutouts: { match: RegExp; source: ImageProps['source']; credit: strin
     silver: require('@/assets/images/stock/colours/pcx-silver.webp'),
     yellow: require('@/assets/images/stock/colours/pcx-yellow.webp'),
   } },
+  // Our own Mazda 2, cut out of the photo uploaded in the admin.
+  { make: /mazda/i, match: /\b2\b/, source: require('@/assets/images/stock/mazda2-cutout.webp'), credit: '', colour: 'silver', variants: {} },
 ];
 
 type BikeLike = { photos?: string[] | null; kind?: VehicleKind | null; make?: string | null; model?: string | null; colour?: string | null };
@@ -58,9 +60,9 @@ type BikeLike = { photos?: string[] | null; kind?: VehicleKind | null; make?: st
 /** Uploaded PNG/WebP photos are treated as cut-outs (transparent background) and shown whole. */
 export const isCutout = (uri?: string | null) => !!uri && /\.(png|webp)(\?|$)/i.test(uri);
 
-/** Model cut-outs are Honda photos, so match the make too (an unknown make never gets a Honda picture). */
+/** Match make and model, so an unknown make never gets another brand's picture. */
 const modelCutout = (v: BikeLike) =>
-  /honda/i.test(v.make ?? '') ? ModelCutouts.find((m) => m.match.test(v.model ?? '')) : undefined;
+  ModelCutouts.find((m) => m.make.test(v.make ?? '') && m.match.test(v.model ?? ''));
 /** Colour of the bike in the model showroom picture, when that picture is what's shown (else null). */
 export const stockPhotoColour = (v: BikeLike) => {
   const own = (v.photos ?? []).find(Boolean);
