@@ -11,7 +11,6 @@ import { adminClient, clientIp, rateLimit } from "../_shared/supabase.ts";
 const MV = 5 * 3_600_000;        // Maldives time, UTC+5
 const OPEN_HOUR = 7, CLOSE_HOUR = 22; // counter hours, keep in sync with quote
 const CALL_WINDOW = 2 * 3_600_000;    // time for the office to reach the guest
-const MAX_OPEN_PER_PHONE = 2;
 
 /** Hold long enough for the office to call during opening hours, but not past an hour after pickup time. */
 function holdUntil(start: Date) {
@@ -78,11 +77,11 @@ Deno.serve(handler(async (req) => {
     const { data: blocked } = await db.rpc("is_blocked", { u: a.id });
     if (blocked) throw new HttpError(403, "ACCOUNT_BLOCKED", "We can't take this booking online. Please contact the rental office.");
   }
-  const { count } = await db.from("bookings").select("id", { count: "exact", head: true })
-    .eq("guest_phone", phone).is("rider_id", null).in("status", ["held", "confirmed"]);
-  if ((count ?? 0) >= MAX_OPEN_PER_PHONE) {
-    throw new HttpError(429, "TOO_MANY_OPEN", "You already have bookings waiting with this number. We'll call you about them, or call us.");
-  }
+  // One unpaid booking at a time (the database enforces it too); paid, confirmed ones don't count.
+  const ids = (accounts ?? []).map((a) => a.id);
+  const { count } = await db.from("bookings").select("id", { count: "exact", head: true }).eq("status", "held")
+    .or(`guest_phone.eq.${phone}${ids.length ? `,rider_id.in.(${ids.join(",")})` : ""}`);
+  if (count) throw new HttpError(409, "ONE_UNPAID", "You already have a booking waiting for payment. We'll call you about it; once it's paid you can book again."); 
 
   const { data: claimed } = await db.from("quotes").update({ used_at: new Date().toISOString() }).eq("id", q.id).is("used_at", null).select("id");
   if (!claimed?.length) throw new HttpError(409, "QUOTE_USED", "This quote was already used.");
@@ -106,6 +105,7 @@ Deno.serve(handler(async (req) => {
     held_until: holdUntil(start).toISOString(),
   }).select("id, reference, status, held_until, total, currency, viber_token").single();
   if (error) {
+    if (error.code === "P0001") throw new HttpError(409, "ONE_UNPAID", error.message);
     if (error.code === "23P01") throw new HttpError(409, "JUST_TAKEN", "Sorry, this vehicle was just booked for a time too close to yours. Pick another time or vehicle.");
     throw error;
   }

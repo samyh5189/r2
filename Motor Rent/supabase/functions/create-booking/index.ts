@@ -49,6 +49,10 @@ Deno.serve(handler(async (req) => {
     if (age < MIN_AGE) throw new HttpError(403, "TOO_YOUNG", `Riders must be at least ${MIN_AGE}.`);
   }
 
+  // One unpaid booking at a time (the database enforces it too); paid, confirmed ones don't count.
+  const { count: unpaid } = await db.from("bookings").select("id", { count: "exact", head: true }).eq("rider_id", user.id).eq("status", "held");
+  if (unpaid) throw new HttpError(409, "ONE_UNPAID", "You already have a booking waiting for payment. Pay or cancel it first, then book again.");
+
   const { data: claimed } = await db.from("quotes")
     .update({ used_at: new Date().toISOString() }).eq("id", q.id).is("used_at", null).select("id");
   if (!claimed?.length) throw new HttpError(409, "QUOTE_USED", "This quote was already used.");
@@ -71,6 +75,7 @@ Deno.serve(handler(async (req) => {
 
   if (error) {
     // 23P01 = exclusion violation: someone else booked it a moment ago, or maintenance.
+    if (error.code === "P0001") throw new HttpError(409, "ONE_UNPAID", error.message);
     if (error.code === "23P01") throw new HttpError(409, "JUST_TAKEN", "Sorry, this vehicle was just booked for a time too close to yours. Pick another time or vehicle.");
     throw error;
   }

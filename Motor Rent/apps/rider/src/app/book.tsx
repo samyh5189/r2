@@ -427,11 +427,11 @@ export default function BookScreen() {
                   <ThemedText type="smallBold">How do you want to get it?</ThemedText>
                   <View style={styles.chips}>
                     <Choice label="Pick up at the counter" selected={handover === 'counter'} onPress={() => setHandover('counter')} />
-                    <Choice label="Deliver it to me" selected={handover === 'delivery'} onPress={() => setHandover('delivery')} />
+                    <Choice label="Free delivery to me" selected={handover === 'delivery'} onPress={() => setHandover('delivery')} />
                   </View>
                   {handover === 'delivery' && (
                     <Field label="Where should we bring it?" value={address} onChangeText={setAddress} placeholder="House name, street, landmark"
-                      hint="Anywhere in Kulhudhuffushi. We’ll confirm the time when we call." autoComplete="street-address" />
+                      hint="Free anywhere in Kulhudhuffushi. We’ll bring it at your pickup time." autoComplete="street-address" />
                   )}
                   {!session && (
                     <>
