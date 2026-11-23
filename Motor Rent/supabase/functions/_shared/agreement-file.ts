@@ -70,5 +70,22 @@ export async function makeAgreement(db: SupabaseClient, bookingId: string): Prom
   if (upErr) throw upErr;
   const sha256 = await sha256Hex(pdf);
   await db.from("bookings").update({ contract_path: path, contract_sha256: sha256, contract_signed_at: insp.created_at, agreement_version: AGREEMENT_VERSION }).eq("id", b.id);
+  await queueViberCopy(db, b.id, b.reference, path, pdf.length, sha256).catch((e) => console.error("viber agreement", e));
   return { path, sha256 };
+}
+
+/** Everyone following this booking on Viber gets a note and the PDF (once per version of the file). */
+async function queueViberCopy(db: SupabaseClient, bookingId: string, reference: string, path: string, size: number, sha256: string) {
+  const { data: links } = await db.from("viber_links").select("viber_id, viber_subscribers!inner(subscribed)")
+    .eq("booking_id", bookingId).eq("viber_subscribers.subscribed", true);
+  if (!links?.length) return;
+  const tag = sha256.slice(0, 16);
+  const rows: Record<string, unknown>[] = links.flatMap((l) => [
+    { viber_id: l.viber_id, booking_id: bookingId, dedupe: `agr-txt:${tag}:${l.viber_id}`,
+      body: `Your signed rental agreement for booking ${reference} is below. Keep it: it lists the vehicle, its condition at handover and the terms you agreed to.` },
+    { viber_id: l.viber_id, booking_id: bookingId, dedupe: `agr-pdf:${tag}:${l.viber_id}`, body: `Rental agreement ${reference} (PDF)`,
+      file_bucket: "contracts", file_path: path, file_name: `EasyRide-agreement-${reference}.pdf`, file_size: size },
+  ]);
+  // One at a time, in order, so the note arrives before the file.
+  for (const r of rows) await db.from("viber_outbox").upsert(r, { onConflict: "dedupe", ignoreDuplicates: true });
 }

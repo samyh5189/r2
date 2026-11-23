@@ -26,6 +26,9 @@ async function viber(path: string, body: unknown) {
 const sendText = (receiver: string, text: string, keyboard?: unknown) =>
   viber("send_message", { receiver, min_api_version: 1, sender: { name: NAME }, type: "text", text, ...(keyboard ? { keyboard } : {}) });
 
+const sendFile = (receiver: string, media: string, size: number, fileName: string) =>
+  viber("send_message", { receiver, min_api_version: 1, sender: { name: NAME }, type: "file", media, size, file_name: fileName });
+
 const detailsButton = (code: string) => ({
   Type: "keyboard", DefaultHeight: false,
   Buttons: [{ ActionType: "reply", ActionBody: `booking:${code}`, Text: "<b>Send my booking details</b>", TextSize: "large", BgColor: "#D7192A", Columns: 6, Rows: 1,
@@ -114,11 +117,16 @@ Deno.serve(async (req) => {
     if (!token()) return reply({ sent: 0, reason: "VIBER_AUTH_TOKEN not set" });
     await db.from("viber_outbox").update({ status: "expired", error: "not sent within 2 hours" })
       .eq("status", "queued").lt("created_at", new Date(Date.now() - 2 * 3_600_000).toISOString());
-    const { data: rows } = await db.from("viber_outbox").select("id, viber_id, body, attempts").eq("status", "queued").order("created_at").limit(50);
+    const { data: rows } = await db.from("viber_outbox").select("id, viber_id, body, attempts, file_bucket, file_path, file_name, file_size").eq("status", "queued").order("id").limit(50);
     let sent = 0;
     for (const r of rows ?? []) {
       try {
-        await sendText(r.viber_id, r.body);
+        if (r.file_path) {
+          // Viber downloads the file from this link; it only needs to live for a few minutes.
+          const { data: link, error } = await db.storage.from(r.file_bucket).createSignedUrl(r.file_path, 3600);
+          if (error || !link) throw new Error(`file link: ${error?.message ?? "missing"}`);
+          await sendFile(r.viber_id, link.signedUrl, r.file_size, r.file_name);
+        } else await sendText(r.viber_id, r.body);
         await db.from("viber_outbox").update({ status: "sent", sent_at: new Date().toISOString(), error: null }).eq("id", r.id);
         sent++;
       } catch (e) {
