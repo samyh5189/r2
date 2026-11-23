@@ -210,7 +210,6 @@ export function TransferPayment({ booking, onChange, guest }: { booking: Payable
 
       <Card style={{ gap: Spacing.three }}>
         <ThemedText type="heading">Upload your transfer slip</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">A screenshot of the receipt from your bank app works best. We check the amount, reference and account.</ThemedText>
         {preview && <Image source={{ uri: preview }} style={[styles.preview, { borderColor: t.border }]} contentFit="contain" />}
         {check && <OcrSummary check={check} total={booking.total} currency={booking.currency} />}
         <ErrorText>{error}</ErrorText>
