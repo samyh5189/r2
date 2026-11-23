@@ -7,7 +7,7 @@ export async function GET(req: Request) {
   if (user.role === "staff") return new Response("Forbidden", { status: 403 });
   const period = periodFor(new URL(req.url).searchParams.get("p") ?? "month");
   const { data } = await db.from("payments")
-    .select("created_at, updated_at, kind, provider, status, amount, currency, bookings(reference, guest_name, profiles(full_name), vehicles(plate))")
+    .select("created_at, updated_at, kind, provider, status, amount, currency, bookings(reference, guest_name, profiles!bookings_rider_id_fkey(full_name), vehicles(plate))")
     .gte("updated_at", period.from.toISOString()).lt("updated_at", period.to.toISOString()).order("updated_at");
   const esc = (v: unknown) => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const mv = (iso: string) => new Date(new Date(iso).getTime() + 5 * 3_600_000).toISOString().replace("T", " ").slice(0, 16);

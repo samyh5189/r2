@@ -19,7 +19,7 @@ export default function BookingScreen() {
 
   useFocusEffect(useCallback(() => {
     supabase.from('bookings')
-      .select('id, reference, status, period, total, deposit, currency, guest_name, guest_phone, handover, delivery_address, counter_licence_categories, counter_licence_expires_on, vehicles(kind, make, model, plate, odometer_km, engine_hours), profiles(full_name, phone, kyc_status, licence_expires_on, licence_categories)')
+      .select('id, reference, status, period, total, deposit, currency, guest_name, guest_phone, handover, delivery_address, counter_licence_categories, counter_licence_expires_on, vehicles(kind, make, model, plate, odometer_km, engine_hours), profiles!bookings_rider_id_fkey(full_name, phone, kyc_status, licence_expires_on, licence_categories)')
       .eq('reference', ref).single()
       .then(({ data, error }) => { setB(data as unknown as StaffBooking); setError(error ? 'Could not load booking.' : null); });
   }, [ref]));

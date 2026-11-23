@@ -27,14 +27,14 @@ async function Today() {
 
   const [live, payments, toCall] = await Promise.all([
     db.from("bookings")
-      .select("id, reference, status, period, guest_name, guest_phone, handover, vehicles(plate, model), profiles(full_name, phone)")
+      .select("id, reference, status, period, guest_name, guest_phone, handover, vehicles(plate, model), profiles!bookings_rider_id_fkey(full_name, phone)")
       .in("status", ["held", "confirmed", "active", "overdue"])
       .overlaps("period", today)
       .order("period"),
     db.from("payments").select("amount, currency, kind").eq("status", "succeeded").gte("created_at", dayStart.toISOString()),
     // Unpaid bookings made without an account: the office calls to confirm and take payment.
     db.from("bookings")
-      .select("id, reference, status, period, guest_name, guest_phone, handover, vehicles(plate, model), profiles(full_name, phone)")
+      .select("id, reference, status, period, guest_name, guest_phone, handover, vehicles(plate, model), profiles!bookings_rider_id_fkey(full_name, phone)")
       .eq("status", "held").is("rider_id", null).order("held_until"),
   ]);
 

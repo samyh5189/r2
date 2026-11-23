@@ -37,9 +37,9 @@ async function Accounting({ searchParams }: { searchParams: Promise<{ p?: string
   const period = periodFor(p ?? "month");
   const [{ data, error }, unpaid, refunds] = await Promise.all([
     db.rpc("finance_report", { p_from: period.from.toISOString(), p_to: period.to.toISOString() }),
-    db.from("payments").select("id, amount, currency, created_at, bookings(id, reference, guest_name, profiles(full_name))")
+    db.from("payments").select("id, amount, currency, created_at, bookings(id, reference, guest_name, profiles!bookings_rider_id_fkey(full_name))")
       .eq("status", "pending").eq("kind", "charge").neq("provider", "stripe").order("created_at", { ascending: false }).limit(50),
-    db.from("payments").select("id, amount, currency, created_at, bookings(id, reference, guest_name, profiles(full_name))")
+    db.from("payments").select("id, amount, currency, created_at, bookings(id, reference, guest_name, profiles!bookings_rider_id_fkey(full_name))")
       .eq("status", "pending").eq("kind", "refund").neq("provider", "stripe").order("created_at").limit(50),
   ]);
   if (error || !data) return <p role="alert" className="text-red-600">Could not load the report.</p>;

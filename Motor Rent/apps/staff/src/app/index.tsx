@@ -23,7 +23,7 @@ export default function LookupScreen() {
     if (phone && !/^[0-9A-F]{8}$/.test(q)) {
       // The rider's account number, or the number a booking without an account was made with.
       const [acc, guest] = await Promise.all([
-        supabase.from('bookings').select('reference, created_at, profiles!inner(phone)').eq('profiles.phone', phone)
+        supabase.from('bookings').select('reference, created_at, profiles!bookings_rider_id_fkey!inner(phone)').eq('profiles.phone', phone)
           .in('status', ['confirmed', 'active', 'overdue']).order('created_at', { ascending: false }).limit(1),
         supabase.from('bookings').select('reference, created_at').eq('guest_phone', phone)
           .in('status', ['confirmed', 'active', 'overdue']).order('created_at', { ascending: false }).limit(1),

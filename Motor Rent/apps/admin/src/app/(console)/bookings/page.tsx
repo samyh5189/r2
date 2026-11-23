@@ -22,7 +22,7 @@ async function BookingsTable() {
   const { db } = await requireStaff();
   const { data, error } = await db
     .from("bookings")
-    .select("id, reference, status, period, total, currency, created_at, rider_id, guest_name, guest_phone, handover, vehicles(id, plate, model), profiles(full_name, phone), booking_messages(from_staff, created_at)")
+    .select("id, reference, status, period, total, currency, created_at, rider_id, guest_name, guest_phone, handover, vehicles(id, plate, model), profiles!bookings_rider_id_fkey(full_name, phone), booking_messages(from_staff, created_at)")
     .order("created_at", { ascending: false })
     .order("created_at", { referencedTable: "booking_messages", ascending: false })
     .limit(1, { referencedTable: "booking_messages" })
