@@ -52,6 +52,14 @@ Deno.serve(handler(async (req) => {
   // One unpaid booking at a time (the database enforces it too); paid, confirmed ones don't count.
   const { count: unpaid } = await db.from("bookings").select("id", { count: "exact", head: true }).eq("rider_id", user.id).eq("status", "held");
   if (unpaid) throw new HttpError(409, "ONE_UNPAID", "You already have a booking waiting for payment. Pay or cancel it first, then book again.");
+  // An unpaid booking made without signing in, with this mobile number, counts too. It isn't in My rentals, so name it.
+  const { data: myPhone } = await db.from("profiles").select("phone").eq("id", user.id).single();
+  if (myPhone?.phone) {
+    const { data: g } = await db.from("bookings").select("reference").is("rider_id", null).eq("guest_phone", myPhone.phone).eq("status", "held").limit(1).maybeSingle();
+    if (g) {
+      throw new HttpError(409, "ONE_UNPAID", `Booking ${g.reference}, made without signing in with your mobile number, is waiting for payment. Open "Find my booking" with that reference and your number to pay or cancel it, then book again.`);
+    }
+  }
 
   const { data: claimed } = await db.from("quotes")
     .update({ used_at: new Date().toISOString() }).eq("id", q.id).is("used_at", null).select("id");
