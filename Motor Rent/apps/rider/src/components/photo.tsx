@@ -104,14 +104,14 @@ export function BikeImage({ vehicle, style, faded, surface, fit = 'cover' }: {
   if (!cutout) {
     return (
       <View style={[{ overflow: 'hidden' }, style, faded && { opacity: 0.55 }]}>
-        <Image source={source} style={StyleSheet.absoluteFill} contentFit={fit} transition={300} />
+        <Image source={source} style={StyleSheet.absoluteFill} contentFit={fit} transition={300} alt={[vehicle.make, vehicle.model].filter(Boolean).join(' ')} />
       </View>
     );
   }
   return (
     <View style={[styles.stage, { backgroundColor: surface ?? t.backgroundSelected }, style, faded && { opacity: 0.55 }]}>
       <View style={styles.floor} />
-      <Image source={source} style={styles.cutout} contentFit="contain" transition={300} accessibilityIgnoresInvertColors />
+      <Image source={source} style={styles.cutout} contentFit="contain" transition={300} accessibilityIgnoresInvertColors alt={[vehicle.make, vehicle.model].filter(Boolean).join(' ')} />
     </View>
   );
 }
@@ -160,7 +160,7 @@ export function KenBurns({
   return (
     <View style={[{ height, overflow: 'hidden' }, style]}>
       <Animated.View style={[StyleSheet.absoluteFill, a]}>
-        <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={focus} transition={600} priority="high" />
+        <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={focus} transition={600} priority="high" alt="" />
       </Animated.View>
       {scrim && <Scrim top={scrimTop} to={scrimBottom} />}
       {children}
@@ -179,7 +179,7 @@ export function ZoomPhoto({ source, active, style }: { source: ImageProps['sourc
           transitionDuration: 600,
           transitionTimingFunction: 'ease-out',
         }]}>
-        <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" transition={400} />
+        <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" transition={400} alt="" />
       </Animated.View>
     </View>
   );

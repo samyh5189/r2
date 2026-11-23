@@ -138,7 +138,7 @@ export default function AccountScreen() {
     <ThemedView style={styles.flex}>
       <SafeAreaView style={styles.flex} edges={['top']}>
         {pull.indicator}
-        <ScrollView ref={pull.ref} contentContainerStyle={styles.body}
+        <ScrollView ref={pull.attach} contentContainerStyle={styles.body}
           refreshControl={Platform.OS !== 'web' ? <RefreshControl refreshing={refreshing} onRefresh={refresh} /> : undefined}>
           <Animated.View>
             <ThemedText type="subtitle">My account</ThemedText>

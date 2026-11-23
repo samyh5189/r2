@@ -179,14 +179,15 @@ export function ModelCard({ m }: { m: Model }) {
               </View>
             )}
             <View style={[styles.shot, { transform: [{ translateX: hover ? -stageW * 0.025 : 0 }, { scale: hover ? 1.03 : 1 }] }, tr('transform', 700)]}>
-              <Image source={source} style={StyleSheet.absoluteFill} contentFit="contain" contentPosition="bottom" transition={300} />
+              <Image source={source} style={StyleSheet.absoluteFill} contentFit="contain" contentPosition="bottom" transition={300}
+                alt={`${m.make} ${m.model}${chosen ? `, ${VEHICLE_COLOURS[chosen.colour].label.toLowerCase()}` : ''}`} />
             </View>
             <View style={[styles.line, redLine(t.accent)]} />
           </>
         ) : (
           <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
             <View style={[StyleSheet.absoluteFill, { transform: [{ scale: hover ? 1.03 : 1 }] }, tr('transform', 700)]}>
-              <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" transition={300} />
+              <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" transition={300} alt={`${m.make} ${m.model}`} />
             </View>
           </View>
         )}

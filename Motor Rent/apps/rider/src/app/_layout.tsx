@@ -4,6 +4,7 @@ import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { webHeaderOption } from '@/components/web-header';
+import { WebMeta } from '@/components/web-meta';
 import { Colors, Fonts } from '@/constants/theme';
 import { supabaseConfigured } from '@/lib/supabase';
 import { SessionProvider } from '@/lib/session';
@@ -31,6 +32,7 @@ export default function RootLayout() {
     <SessionProvider>
       <ThemeProvider value={navTheme}>
         <AnimatedSplashOverlay />
+        <WebMeta />
         <Stack screenOptions={{
           headerShadowVisible: false,
           headerTitleStyle: { fontFamily: Fonts?.display, fontWeight: '700' },
@@ -46,6 +48,7 @@ export default function RootLayout() {
           <Stack.Screen name="terms" options={{ title: 'Rental terms', ...webHeaderOption }} />
           <Stack.Screen name="privacy" options={{ title: 'Privacy policy', ...webHeaderOption }} />
           <Stack.Screen name="reset-password" options={{ title: 'New password', ...webHeaderOption }} />
+          <Stack.Screen name="+not-found" options={{ headerShown: false }} />
         </Stack>
       </ThemeProvider>
     </SessionProvider>

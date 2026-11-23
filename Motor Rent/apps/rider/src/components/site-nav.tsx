@@ -1,7 +1,7 @@
 import { router, usePathname, type Href } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, Radius, Spacing } from '@/constants/theme';
@@ -122,17 +122,19 @@ export function MenuDrawer({ open, onClose }: { open: boolean; onClose: () => vo
   const [closing, setClosing] = useState(false);
   useEffect(() => {
     if (!closing) {
-      if (open) p.value = withTiming(1, { duration: DURATION, easing: EASE_OUT });
+      if (open) { p.value = 0; p.value = withTiming(1, { duration: DURATION * 2.6, easing: Easing.bezier(0.22, 1, 0.36, 1) }); }
       return;
     }
-    p.value = withTiming(0, { duration: DURATION, easing: EASE_OUT });
-    const id = setTimeout(() => { setClosing(false); onClose(); }, DURATION);
+    // Closing runs the opening in reverse: links fade out, then the panel slides away.
+    p.value = withTiming(0, { duration: DURATION * 1.6, easing: Easing.in(Easing.cubic) });
+    const id = setTimeout(() => { setClosing(false); onClose(); }, DURATION * 1.6);
     return () => clearTimeout(id);
   }, [open, closing, onClose, p]);
   const close = () => setClosing(true);
 
-  const backdrop = useAnimatedStyle(() => ({ opacity: p.value }));
-  const panel = useAnimatedStyle(() => ({ transform: [{ translateX: (1 - p.value) * panelWidth }] }));
+  const backdrop = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value / 0.4) }));
+  // The panel finishes its slide in the first ~40 % of p; the links stagger in over the rest.
+  const panel = useAnimatedStyle(() => ({ transform: [{ translateX: (1 - Math.min(1, p.value / 0.4)) * panelWidth }] }));
 
   const pick = (href: Href) => { close(); go(href); };
   const phone = site?.support_phone;
@@ -156,11 +158,11 @@ export function MenuDrawer({ open, onClose }: { open: boolean; onClose: () => vo
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.panelBody}>
-          {LINKS.map((l) => (
-            <DrawerLink key={String(l.href)} label={l.label} active={path === l.href} onPress={() => pick(l.href)} />
+          {LINKS.map((l, i) => (
+            <DrawerLink key={String(l.href)} label={l.label} active={path === l.href} onPress={() => pick(l.href)} p={p} index={i} />
           ))}
           {phone && (
-            <DrawerLink label="Contact" active={false}
+            <DrawerLink label="Contact" active={false} p={p} index={LINKS.length}
               onPress={() => { close(); Linking.openURL(`https://wa.me/${phone.replace(/\D/g, '').replace(/^(\d{7})$/, '960$1')}`); }} />
           )}
         </ScrollView>
@@ -176,13 +178,24 @@ export function MenuDrawer({ open, onClose }: { open: boolean; onClose: () => vo
   );
 }
 
-function DrawerLink({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function DrawerLink({ label, active, onPress, p, index }: { label: string; active: boolean; onPress: () => void; p: SharedValue<number>; index: number }) {
   const t = useTheme();
+  const [hover, setHover] = useState(false);
+  // Each link starts a little after the one above it, sliding in from the right as it fades up.
+  const a = useAnimatedStyle(() => {
+    const start = 0.3 + index * 0.06;
+    const k = interpolate(p.value, [start, Math.min(1, start + 0.35)], [0, 1], 'clamp');
+    return { opacity: k, transform: [{ translateX: (1 - k) * 28 }] };
+  });
   return (
-    <Pressable onPress={onPress} accessibilityRole="link"
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.drawerLink, (hovered || pressed) && { backgroundColor: t.backgroundElement }]}>
-      <ThemedText style={[styles.drawerText, { color: active ? t.accent : t.text }]}>{label}</ThemedText>
-    </Pressable>
+    <Animated.View style={a}>
+      <Pressable onPress={onPress} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)} accessibilityRole="link"
+        style={({ pressed }) => [styles.drawerLink, (hover || pressed) && { backgroundColor: t.backgroundElement }]}>
+        {active && <View style={[styles.activeBar, { backgroundColor: t.accent }]} />}
+        <ThemedText style={[styles.drawerText, { color: active ? t.accent : t.text, transform: [{ translateX: hover ? 6 : 0 }] },
+          Platform.OS === 'web' && ({ transitionProperty: 'transform', transitionDuration: '300ms' } as object)]}>{label}</ThemedText>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -205,7 +218,8 @@ const styles = StyleSheet.create({
   panelRaised: { borderLeftWidth: 1, boxShadow: '0 10px 40px rgba(0,0,0,0.18)' } as object,
   panelHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.three, paddingVertical: Spacing.three, borderBottomWidth: 1 },
   panelBody: { padding: Spacing.three, gap: 4 },
-  drawerLink: { paddingHorizontal: Spacing.two + 4, paddingVertical: Spacing.two + 4, borderRadius: Radius.md },
+  drawerLink: { paddingHorizontal: Spacing.two + 4, paddingVertical: Spacing.two + 4, borderRadius: Radius.md, flexDirection: 'row', alignItems: 'center' },
+  activeBar: { position: 'absolute', left: 0, top: 14, bottom: 14, width: 3, borderRadius: 2 },
   drawerText: { fontFamily: Fonts?.display, fontSize: 24, lineHeight: 30, fontWeight: '600' },
   panelFoot: { padding: Spacing.three, borderTopWidth: 1 },
   accountBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two, paddingVertical: 10, borderRadius: Radius.md },

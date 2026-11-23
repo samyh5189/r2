@@ -60,7 +60,7 @@ export default function BookingsScreen() {
       {pull.indicator}
       <SafeAreaView style={styles.flex} edges={['top']}>
         <FlatList
-          ref={pull.ref}
+          ref={pull.attach}
           data={rows}
           keyExtractor={(r) => r.id}
           contentContainerStyle={styles.list}
@@ -132,7 +132,8 @@ function RideProgress({ start, end, color }: { start: Date; end: Date; color: st
   const t = useTheme();
   const reduce = useReducedMotion();
   const [w, setW] = useState(0);
-  const pct = Math.min(1, Math.max(0, (Date.now() - start.getTime()) / (end.getTime() - start.getTime())));
+  const [now] = useState(() => Date.now());
+  const pct = Math.min(1, Math.max(0, (now - start.getTime()) / (end.getTime() - start.getTime())));
   const p = useSharedValue(0);
   useEffect(() => {
     p.value = reduce ? pct : withTiming(pct, { duration: 1200, easing: Easing.out(Easing.cubic) });

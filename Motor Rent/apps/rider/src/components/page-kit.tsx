@@ -140,12 +140,12 @@ export function SectionTitle({ title, kicker, sub }: { title: string; kicker?: s
 }
 
 /** Page shell for inner pages: scrolls under the floating header, ends with the footer. */
-export function Page({ children, cta = true }: { children: ReactNode; cta?: boolean }) {
+export function Page({ children, cta = true, underHeader = true }: { children: ReactNode; cta?: boolean; underHeader?: boolean }) {
   const { width } = useWindowDimensions();
   const gutter = width >= 640 ? Spacing.five : Spacing.three;
   return (
     <ThemedView style={styles.flex}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={[styles.scroll, !underHeader && { paddingTop: Spacing.four }]}>
         <View style={[styles.body, { paddingHorizontal: gutter }]}>
           {children}
           {cta && <ReadyToRide />}

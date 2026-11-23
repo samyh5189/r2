@@ -122,7 +122,7 @@ export default function BookingDetail() {
   return (
     <ThemedView style={styles.flex}>
       {pull.indicator}
-      <ScrollView ref={pull.ref} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled"
+      <ScrollView ref={pull.attach} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled"
         refreshControl={Platform.OS !== 'web' ? <RefreshControl refreshing={loading} onRefresh={load} /> : undefined}>
         <ErrorText>{error}</ErrorText>
         {booking && s && (

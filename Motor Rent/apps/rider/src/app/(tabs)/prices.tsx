@@ -1,8 +1,8 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { planPrice, useModels, type Model } from '@/components/fleet-cards';
 import { ArrowRightIcon, ClockIcon, MinusIcon, PlusIcon, ShieldIcon } from '@/components/icons';
@@ -94,7 +94,7 @@ function DayRow({ m, first }: { m: Model; first: boolean }) {
   return (
     <View style={[styles.dayRow, !first && { borderTopWidth: 1, borderColor: t.border }]}>
       <View style={[styles.thumb, !cutout && { borderRadius: 10, overflow: 'hidden' }]}>
-        <Image source={source} style={StyleSheet.absoluteFill} contentFit={cutout ? 'contain' : 'cover'} />
+        <Image source={source} style={StyleSheet.absoluteFill} contentFit={cutout ? 'contain' : 'cover'} alt={`${m.make} ${m.model}`} />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <ThemedText style={[pageStyles.display, { fontSize: 19, lineHeight: 24, color: t.text }]}>{m.make} {m.model}</ThemedText>
@@ -135,7 +135,7 @@ function Calculator({ models }: { models: Model[] }) {
                 <Pressable key={x.key} onPress={() => setKey(x.key)} accessibilityRole="radio" accessibilityState={{ checked: on }}
                   style={[styles.pick, { borderColor: on ? t.accent : t.border, borderWidth: on ? 2 : 1, backgroundColor: t.background }, tr('border-color', 200)]}>
                   <View style={{ width: '100%', aspectRatio: 4 / 3 }}>
-                    <Image source={source} style={StyleSheet.absoluteFill} contentFit={cutout ? 'contain' : 'cover'} />
+                    <Image source={source} style={StyleSheet.absoluteFill} contentFit={cutout ? 'contain' : 'cover'} alt="" />
                   </View>
                   <ThemedText type="smallBold" numberOfLines={1}>{x.model}</ThemedText>
                 </Pressable>
@@ -153,7 +153,7 @@ function Calculator({ models }: { models: Model[] }) {
       </View>
       <View style={[styles.totalRow, { borderColor: t.border }]}>
         <ThemedText themeColor="textSecondary" style={{ fontSize: 15 }}>Total</ThemedText>
-        <ThemedText style={[pageStyles.display, { fontSize: 40, lineHeight: 44, letterSpacing: -1.2, color: t.text }]}>{money(total, m.currency)}</ThemedText>
+        <CountUp value={total} currency={m.currency} style={[pageStyles.display, { fontSize: 40, lineHeight: 44, letterSpacing: -1.2, color: t.text }]} />
       </View>
       <Pressable onPress={() => router.push({ pathname: '/book', params: { bike: m.first.id } })} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)}
         accessibilityRole="link"
@@ -164,6 +164,27 @@ function Calculator({ models }: { models: Model[] }) {
       <ThemedText themeColor="textSecondary" style={[styles.note, { textAlign: 'center' }]}>You choose the exact times when you book.</ThemedText>
     </Panel>
   );
+}
+
+/** A price that rolls to its new value (about 0.45 s, easing out) instead of jumping. */
+function CountUp({ value, currency, style }: { value: number; currency: 'MVR' | 'USD'; style: StyleProp<TextStyle> }) {
+  const reduce = useReducedMotion();
+  const [shown, setShown] = useState(value);
+  const from = useRef(value);
+  useEffect(() => {
+    if (reduce) { from.current = value; return; }
+    const start = from.current, t0 = Date.now(), dur = 450;
+    let raf = 0;
+    const tick = () => {
+      const k = Math.min(1, (Date.now() - t0) / dur);
+      const v = Math.round(start + (value - start) * (1 - Math.pow(1 - k, 3)));
+      setShown(v); from.current = v;
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, reduce]);
+  return <ThemedText style={style} accessibilityLiveRegion="polite">{money(reduce ? value : shown, currency)}</ThemedText>;
 }
 
 /** Two-way switch with a sliding thumb. */

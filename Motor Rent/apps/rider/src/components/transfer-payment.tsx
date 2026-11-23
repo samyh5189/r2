@@ -54,7 +54,7 @@ export function TransferPayment({ booking, onChange }: { booking: PayableBooking
   const [check, setCheck] = useState<SlipCheck | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
 
   const refresh = useCallback(async () => {
     const [acc, s] = await Promise.all([

@@ -13,7 +13,7 @@ const MAX = 120;
 
 /**
  * Pull-to-refresh for the web build (React Native's RefreshControl does nothing in browsers).
- * Attach `ref` to a ScrollView / FlatList and render `indicator` next to it. No-op on iOS/Android,
+ * Pass `attach` as the `ref` of a ScrollView / FlatList and render `indicator` next to it. No-op on iOS/Android,
  * where RefreshControl already handles this.
  */
 export function useWebPullToRefresh(onRefresh: () => Promise<unknown> | void) {
@@ -21,12 +21,12 @@ export function useWebPullToRefresh(onRefresh: () => Promise<unknown> | void) {
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const cb = useRef(onRefresh);
-  cb.current = onRefresh;
+  useEffect(() => { cb.current = onRefresh; }, [onRefresh]);
   const busy = useRef(false);
 
   // Typed loosely so it fits ScrollView and FlatList refs alike; on web both expose getScrollableNode().
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ref = useCallback((r: any) => {
+  const attach = useCallback((r: any) => {
     if (Platform.OS !== 'web') return;
     const el = typeof r?.getScrollableNode === 'function' ? r.getScrollableNode() : r;
     setNode(el && typeof el.addEventListener === 'function' ? (el as HTMLElement) : null);
@@ -83,7 +83,7 @@ export function useWebPullToRefresh(onRefresh: () => Promise<unknown> | void) {
   const indicator = Platform.OS === 'web' && (pull > 0 || refreshing)
     ? <PullIndicator progress={Math.min(1, pull / TRIGGER)} refreshing={refreshing} offset={pull} />
     : null;
-  return { ref, indicator };
+  return { attach, indicator };
 }
 
 function PullIndicator({ progress, refreshing, offset }: { progress: number; refreshing: boolean; offset: number }) {
