@@ -132,6 +132,8 @@ export function Reserved({ booking, bankTransfer, vehicle, title, guest }: {
           <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>
             Want your rentals in one place? Create an account and verify it with this mobile number; this booking joins it.
           </ThemedText>
+          <CancelBooking id={booking.id} reference={reference} guestPhone={guest.phone}
+            onCancelled={() => router.replace({ pathname: '/find', params: { ref: reference, phone: guest.phone } })} />
         </ScrollView>
       </ThemedView>
     );

@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { BikeImage, type VehicleKind } from '@/components/photo';
 import { ThemedText } from '@/components/themed-text';
+import { CancelBooking } from '@/components/cancel-booking';
 import { TransferPayment } from '@/components/transfer-payment';
 import { ViberButton } from '@/components/viber-button';
 import { ThemedView } from '@/components/themed-view';
@@ -85,8 +86,10 @@ export default function FindBooking() {
               </ThemedText>
             )}
             {found.status === 'expired' && <ThemedText themeColor="textSecondary">The hold ran out before payment. Book again, or call us.</ThemedText>}
+            {found.status === 'cancelled' && <ThemedText themeColor="textSecondary">This booking is cancelled. If you already sent a bank transfer, we’ll refund it to the account you paid from.</ThemedText>}
             {found.status === 'held' && mobile && <TransferPayment booking={found} guest={{ phone: mobile }} onChange={look} />}
             {['held', 'confirmed', 'active', 'overdue'].includes(found.status) && <ViberButton code={found.viber_token} />}
+            {found.status === 'held' && mobile && <CancelBooking id={found.id} reference={found.reference} guestPhone={mobile} onCancelled={look} />}
             {found.linked ? (
               <Button variant="secondary" title="Open in my account" onPress={() => router.push('/bookings')} />
             ) : (

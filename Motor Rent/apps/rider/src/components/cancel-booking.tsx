@@ -4,6 +4,7 @@ import { Alert, Platform, View } from 'react-native';
 import { ThemedText } from './themed-text';
 import { Button, ErrorText } from './ui';
 import { Spacing } from '@/constants/theme';
+import { ApiError, callFunction } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 
 const NOTE = 'Your payment isn’t confirmed yet, so nothing is charged. If you already sent a bank transfer, we’ll refund it.';
@@ -17,14 +18,25 @@ function confirmCancel(reference: string): Promise<boolean> {
 }
 
 /** Lets the rider cancel a booking whose payment is not confirmed yet (status "held"). */
-export function CancelBooking({ id, reference, onCancelled, hint = true }: {
+export function CancelBooking({ id, reference, onCancelled, hint = true, guestPhone }: {
   id: string; reference: string; onCancelled: () => void; hint?: boolean;
+  /** Booked without an account: cancel through guest-booking, matched by reference and mobile number. */ guestPhone?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function cancel() {
     if (!(await confirmCancel(reference))) return;
     setBusy(true); setError(null);
+    if (guestPhone) {
+      try {
+        await callFunction('guest-booking', { action: 'cancel', reference, phone: guestPhone });
+      } catch (err) {
+        setBusy(false);
+        return setError(err instanceof ApiError ? err.message : 'Could not cancel. Check your connection and try again.');
+      }
+      setBusy(false);
+      return onCancelled();
+    }
     const { error: e } = await supabase.rpc('cancel_my_booking', { b: id });
     setBusy(false);
     if (e) return setError(e.message.replace(/^.*?ERROR:\s*/i, ''));

@@ -66,6 +66,20 @@ Deno.serve(handler(async (req) => {
     return json({ ok: true });
   }
 
+  // Cancel while payment isn't confirmed (same rule as riders with an account).
+  if (body.action === "cancel") {
+    const parsed = GuestLookupRequest.safeParse(body);
+    if (!parsed.success) throw new HttpError(422, "VALIDATION", parsed.error.issues.map((i) => i.message).join("; "));
+    await rateLimit(db, "cancel", ip, 10, 60);
+    const phone = await normPhone(db, parsed.data.phone);
+    const { data: b } = await db.from("bookings").select("id")
+      .eq("reference", parsed.data.reference).eq("guest_phone", phone).is("rider_id", null).maybeSingle();
+    if (!b) throw new HttpError(404, "NOT_FOUND", "No booking with that reference and mobile number.");
+    const { error } = await db.rpc("cancel_guest_booking", { p_booking: b.id });
+    if (error) throw new HttpError(409, "NOT_CANCELLABLE", error.message);
+    return json({ ok: true });
+  }
+
   if (body.action === "lookup") {
     const parsed = GuestLookupRequest.safeParse(body);
     if (!parsed.success) throw new HttpError(422, "VALIDATION", parsed.error.issues.map((i) => i.message).join("; "));
