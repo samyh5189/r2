@@ -9,6 +9,7 @@ import { CancelBooking } from '@/components/cancel-booking';
 import { DateTimePicker } from '@/components/date-time-picker';
 import { ThemedText } from '@/components/themed-text';
 import { TransferPayment } from '@/components/transfer-payment';
+import { ViberButton } from '@/components/viber-button';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, PressableScale } from '@/components/ui';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
@@ -125,7 +126,8 @@ export function Reserved({ booking, bankTransfer, vehicle, title, guest }: {
               {guest.handover === 'delivery' ? ` We’ll bring it to ${guest.address}.` : ' Show it at the counter with your licence and ID.'}
             </ThemedText>
           </Card>
-          <Button title="Check my booking" onPress={() => router.replace({ pathname: '/find', params: { ref: reference, phone: guest.phone } })} />
+          <ViberButton code={booking.viber_token} />
+          <Button variant="secondary" title="Check my booking" onPress={() => router.replace({ pathname: '/find', params: { ref: reference, phone: guest.phone } })} />
           <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>
             Want your rentals in one place? Create an account and verify it with this mobile number; this booking joins it.
           </ThemedText>
@@ -164,6 +166,7 @@ export function Reserved({ booking, bankTransfer, vehicle, title, guest }: {
         <Animated.View>
           <Button variant={bankTransfer ? 'secondary' : 'primary'} title="View my rentals" onPress={() => router.replace('/bookings')} />
         </Animated.View>
+        <ViberButton code={booking.viber_token} />
         <CancelBooking id={booking.id} reference={reference} onCancelled={() => router.replace('/bookings')} />
       </ScrollView>
     </ThemedView>

@@ -9,6 +9,7 @@ import { BikeImage, type VehicleKind } from '@/components/photo';
 import { useWebPullToRefresh } from '@/components/pull-to-refresh';
 import { RefTag } from '@/components/brand';
 import { type Claim, ClaimCard, type Extension, HandoverPhotos, type Inspection, MoreTime } from '@/components/rental-extras';
+import { ViberButton } from '@/components/viber-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, ErrorText, Pill } from '@/components/ui';
@@ -20,7 +21,7 @@ import { useSession } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
 
 type Booking = {
-  id: string; reference: string; status: string; period: string; total: number; deposit: number | null; currency: 'MVR' | 'USD'; created_at: string;
+  id: string; reference: string; status: string; period: string; total: number; deposit: number | null; currency: 'MVR' | 'USD'; created_at: string; viber_token: string;
   vehicles: { make: string; model: string; plate: string; kind: VehicleKind; photos: string[]; price_plans: { hourly: number; daily: number; weekly: number } | null } | null;
   branches: { name: string } | null;
 };
@@ -58,7 +59,7 @@ export default function BookingDetail() {
     if (!uid) return;
     setLoading(true);
     const [b, ev, sl, p, pay, ex, cl, ins] = await Promise.all([
-      supabase.from('bookings').select('id, reference, status, period, total, deposit, currency, created_at, vehicles(make, model, plate, kind, photos, colour, price_plans(hourly, daily, weekly)), branches(name)').eq('id', id).maybeSingle(),
+      supabase.from('bookings').select('id, reference, status, period, total, deposit, currency, created_at, viber_token, vehicles(make, model, plate, kind, photos, colour, price_plans(hourly, daily, weekly)), branches(name)').eq('id', id).maybeSingle(),
       supabase.from('booking_events').select('id, from_status, to_status, actor, note, at').eq('booking_id', id).order('at'),
       supabase.from('transfer_slips').select('id, status, amount, reject_reason, created_at, reviewed_at').eq('booking_id', id),
       supabase.from('profiles').select('full_name, avatar_path').eq('id', uid).single(),
@@ -186,6 +187,9 @@ export default function BookingDetail() {
             )}
             {refunded > 0 && refundDue === 0 && (
               <Notice tone="success" title={`Refunded ${money(refunded, booking.currency)}`} body="The refund has been paid back to you." />
+            )}
+            {['held', 'confirmed', 'active', 'overdue'].includes(booking.status) && (
+              <View style={{ marginTop: Spacing.two }}><ViberButton code={booking.viber_token} /></View>
             )}
             {booking.status === 'held' && (
               <View style={{ marginTop: Spacing.two }}>

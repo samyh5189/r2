@@ -358,3 +358,7 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 
 [functions.stripe-webhook]
 verify_jwt = false
+
+# Called by Viber (signed with the bot token) and by pg_cron (cron secret); checks its own callers.
+[functions.viber-bot]
+verify_jwt = false

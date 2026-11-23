@@ -33,10 +33,10 @@ export type QuoteResponse = {
 };
 
 export type GuestBookingResponse = {
-  booking: { id: string; reference: string; status: string; held_until: string | null; total: number; currency: string };
+  booking: { id: string; reference: string; status: string; held_until: string | null; total: number; currency: string; viber_token?: string };
 };
 
 export type CreateBookingResponse = {
-  booking: { id: string; reference: string; status: string; held_until: string | null; total: number; currency: string };
+  booking: { id: string; reference: string; status: string; held_until: string | null; total: number; currency: string; viber_token?: string };
   payment: { provider: 'stripe'; clientSecret: string; heldUntil: string } | { provider: 'bank_transfer'; heldUntil: string };
 };

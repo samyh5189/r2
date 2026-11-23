@@ -46,7 +46,7 @@ Deno.serve(handler(async (req) => {
     await rateLimit(db, "lookup", ip, 20, 60);
     const phone = await normPhone(db, parsed.data.phone);
     const { data: b } = await db.from("bookings")
-      .select("reference, status, period, total, currency, held_until, handover, delivery_address, guest_name, rider_id, vehicles(make, model, plate, kind), branches(name)")
+      .select("reference, status, period, total, currency, held_until, handover, delivery_address, guest_name, rider_id, viber_token, vehicles(make, model, plate, kind), branches(name)")
       .eq("reference", parsed.data.reference).eq("guest_phone", phone).maybeSingle();
     if (!b) throw new HttpError(404, "NOT_FOUND", "No booking with that reference and mobile number.");
     const { rider_id, ...rest } = b;
@@ -60,7 +60,7 @@ Deno.serve(handler(async (req) => {
   const phone = await normPhone(db, input.phone);
 
   // Retry after a dropped connection: same quote, same number → same booking.
-  const { data: existing } = await db.from("bookings").select("id, reference, status, held_until, total, currency, guest_phone").eq("quote_id", input.quoteId).maybeSingle();
+  const { data: existing } = await db.from("bookings").select("id, reference, status, held_until, total, currency, viber_token, guest_phone").eq("quote_id", input.quoteId).maybeSingle();
   if (existing) {
     if (existing.guest_phone !== phone) throw new HttpError(404, "QUOTE_NOT_FOUND", "Quote not found.");
     const { guest_phone: _, ...booking } = existing;
@@ -104,7 +104,7 @@ Deno.serve(handler(async (req) => {
     currency: q.currency,
     terms_version: input.acceptedTermsVersion,
     held_until: holdUntil(start).toISOString(),
-  }).select("id, reference, status, held_until, total, currency").single();
+  }).select("id, reference, status, held_until, total, currency, viber_token").single();
   if (error) {
     if (error.code === "23P01") throw new HttpError(409, "JUST_TAKEN", "Sorry, this vehicle was just booked for a time too close to yours. Pick another time or vehicle.");
     throw error;

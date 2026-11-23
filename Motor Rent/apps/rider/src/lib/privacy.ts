@@ -13,13 +13,13 @@ export const PRIVACY: TermsSection[] = [
     'Rentals: bookings, pickup and return times, the vehicle, inspection photos, odometer and fuel readings, signatures, messages with our staff and payment records (bank transfer slips or card payment references; we never see or store full card numbers).',
   ] },
   { title: 'How we use it', body: [
-    'To create your account, verify your identity, take bookings and payments, hand over and collect vehicles, and send you booking updates and sign-in codes by email or WhatsApp.',
+    'To create your account, verify your identity, take bookings and payments, hand over and collect vehicles, and send you booking updates and sign-in codes by email, WhatsApp or, if you open our Viber chat, Viber. On Viber we keep your Viber ID and name to send you updates; stop them by leaving the chat.',
     'To keep records the law requires, to settle damage or unpaid charges, and to keep an internal blocklist described in our rental terms.',
     'We do not sell your data or use it for advertising.',
   ] },
   { title: 'Who can see it', body: [
     'Only our staff who need it for your rental. Identity documents are visible to managers who check them.',
-    'Service providers that run the app for us: Supabase (database, sign-in and file storage), Vercel (website hosting), Meta (WhatsApp messages) and our payment providers. They process data only on our instructions.',
+    'Service providers that run the app for us: Supabase (database, sign-in and file storage), Vercel (website hosting), Meta (WhatsApp messages), Rakuten Viber (Viber messages, only if you open our chat) and our payment providers. They process data only on our instructions.',
     'Police or other authorities when the law requires it, for example after an accident or a traffic offence.',
   ] },
   { title: 'How long we keep it', body: [

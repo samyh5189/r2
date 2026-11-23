@@ -1,0 +1,8 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2",
+    "stripe": "npm:stripe@17",
+    "zod": "npm:zod@^4.1.0",
+    "@shared/": "../../../packages/shared/src/"
+  }
+}

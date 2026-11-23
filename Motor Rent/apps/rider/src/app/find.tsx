@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { BikeImage, type VehicleKind } from '@/components/photo';
 import { ThemedText } from '@/components/themed-text';
+import { ViberButton } from '@/components/viber-button';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, ErrorText, Field, Pill } from '@/components/ui';
 import { MaxContentWidth, Radius, Spacing } from '@/constants/theme';
@@ -15,7 +16,7 @@ import { dateTime, money, parseRange } from '@/lib/format';
 
 type Found = {
   reference: string; status: string; period: string; total: number; currency: 'MVR' | 'USD'; held_until: string | null;
-  handover: 'counter' | 'delivery'; delivery_address: string | null; guest_name: string; linked: boolean;
+  handover: 'counter' | 'delivery'; delivery_address: string | null; guest_name: string; linked: boolean; viber_token: string;
   vehicles: { make: string; model: string; plate: string; kind: VehicleKind } | null; branches: { name: string } | null;
 };
 
@@ -82,6 +83,7 @@ export default function FindBooking() {
               </ThemedText>
             )}
             {found.status === 'expired' && <ThemedText themeColor="textSecondary">The hold ran out before payment. Book again, or call us.</ThemedText>}
+            {['held', 'confirmed', 'active', 'overdue'].includes(found.status) && <ViberButton code={found.viber_token} />}
             {found.linked ? (
               <Button variant="secondary" title="Open in my account" onPress={() => router.push('/bookings')} />
             ) : (
