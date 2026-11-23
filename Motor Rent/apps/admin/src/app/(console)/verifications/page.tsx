@@ -25,13 +25,14 @@ type Row = {
   licence_number: string; licence_expires_on: string; status: "pending" | "approved" | "rejected"; note: string | null;
   created_at: string; reviewed_at: string | null;
   kyc_documents: { doc_type: string; file_path: string }[];
+  phone: string | null;
   profile: { phone: string | null } | null;
 };
 
 async function List() {
   const { db } = await requireStaff();
   const { data, error } = await db.from("kyc_submissions")
-    .select("id, profile_id, full_name, date_of_birth, id_type, id_number, licence_number, licence_expires_on, status, note, created_at, reviewed_at, kyc_documents(doc_type, file_path), profile:profiles!kyc_submissions_profile_id_fkey(phone)")
+    .select("id, profile_id, full_name, date_of_birth, id_type, id_number, licence_number, licence_expires_on, status, note, created_at, reviewed_at, phone, kyc_documents(doc_type, file_path), profile:profiles!kyc_submissions_profile_id_fkey(phone)")
     .order("created_at", { ascending: false }).limit(80);
   if (error) return <p role="alert" className="text-red-600">Could not load verifications.</p>;
   const rows = (data ?? []) as unknown as Row[];
@@ -41,6 +42,13 @@ async function List() {
   const paths = pending.flatMap((r) => r.kyc_documents.map((d) => d.file_path));
   const { data: signed } = paths.length ? await db.storage.from("kyc").createSignedUrls(paths, 60 * 20) : { data: [] };
   const urlOf = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
+  // Bookings made without an account on the same mobile number: they join the account on approval.
+  const phones = [...new Set(pending.map((r) => r.phone).filter((p): p is string => !!p))];
+  const { data: guestRows } = phones.length
+    ? await db.from("bookings").select("id, reference, guest_name, guest_phone, status, period").is("rider_id", null).in("guest_phone", phones).order("created_at")
+    : { data: [] };
+  const guestsOf = (p: string | null) => (guestRows ?? []).filter((g) => p && g.guest_phone === p)
+    .map((g) => ({ id: g.id, reference: g.reference, name: g.guest_name ?? "", status: g.status }));
 
   return (
     <>
@@ -53,7 +61,7 @@ async function List() {
               <Link href={`/riders/${r.profile_id}`} className="text-xs font-semibold text-accent hover:underline">Rider history ›</Link>
               <KycReview sub={{
                 id: r.id, fullName: r.full_name, dob: r.date_of_birth, idType: r.id_type, idNumber: r.id_number,
-                licenceNumber: r.licence_number, licenceExpires: r.licence_expires_on, createdAt: r.created_at, phone: r.profile?.phone ?? null,
+                licenceNumber: r.licence_number, licenceExpires: r.licence_expires_on, createdAt: r.created_at, phone: r.phone ?? r.profile?.phone ?? null, guestBookings: guestsOf(r.phone),
                 docs: r.kyc_documents.map((d) => ({ type: d.doc_type, url: urlOf.get(d.file_path) ?? null })),
               } satisfies PendingKyc} />
             </li>

@@ -2,19 +2,19 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInRight } from 'react-native-reanimated';
-import { baseRental, billableHours, LICENCE_CATEGORIES, licenceCategoryFor, licenceCovers } from '@motor-rent/shared';
+import { baseRental, billableHours, LICENCE_CATEGORIES, licenceCategoryFor, licenceCovers, normPhone, phoneLabel } from '@motor-rent/shared';
 
-import { DURATIONS, MAX_RENTAL_DAYS, MIN_RENTAL_HOURS, Reserved, lengthLabel } from '@/components/booking-parts';
+import { DURATIONS, MAX_RENTAL_DAYS, MIN_RENTAL_HOURS, Reserved, lengthLabel, type GuestDetails } from '@/components/booking-parts';
 import { DateTimePicker, firstSlot } from '@/components/date-time-picker';
 import { Plate } from '@/components/plate';
 import { BikeImage, showsCutout, type VehicleKind } from '@/components/photo';
 import { BrandMark } from '@/components/brand';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Button, Card, ErrorText, Pill, PressableScale } from '@/components/ui';
+import { Button, Card, ErrorText, Field, Pill, PressableScale } from '@/components/ui';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { ApiError, callFunction, type CreateBookingResponse, type QuoteResponse } from '@/lib/api';
+import { ApiError, callFunction, type CreateBookingResponse, type GuestBookingResponse, type QuoteResponse } from '@/lib/api';
 import { dateTime, money } from '@/lib/format';
 import { useSession } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
@@ -112,16 +112,24 @@ export default function BookScreen() {
     return Math.round(baseRental(billableHours(start, end), p) * (Number(p.multiplier) || 1));
   };
 
-  // Server price for the exact selection (needs sign-in).
+  // Server price for the exact selection (signed in or not).
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [booking, setBooking] = useState(false);
   const [result, setResult] = useState<CreateBookingResponse | null>(null);
-  useEffect(() => { setQuote(null); setAccepted(false); }, [startIso, endIso, bikeId, helmets]);
+  const [guestResult, setGuestResult] = useState<(GuestBookingResponse & { guest: GuestDetails }) | null>(null);
+  // A visitor's price can't be used after signing in (and the other way round), so price again.
+  const who = session?.user.id ?? null;
+  useEffect(() => { setQuote(null); setAccepted(false); }, [startIso, endIso, bikeId, helmets, who]);
+  // How the rider gets the vehicle, and who to call (asked on the last step).
+  const [handover, setHandover] = useState<'counter' | 'delivery'>('counter');
+  const [address, setAddress] = useState('');
+  const [guestName, setGuestName] = useState('');
+  const [phone, setPhone] = useState('');
   useEffect(() => {
-    if (step < 4 || !bikeId || !session || quote) return;
+    if (step < 4 || !bikeId || quote) return;
     let live = true;
     setQuoting(true); setError(null);
     callFunction<QuoteResponse>('quote', { vehicleId: bikeId, start: startIso, end: endIso, extras: helmets ? [{ code: 'helmet', quantity: helmets }] : [] })
@@ -129,7 +137,7 @@ export default function BookScreen() {
       .catch((e) => live && setError(e instanceof ApiError ? e.message : 'Could not get a price.'))
       .finally(() => live && setQuoting(false));
     return () => { live = false; };
-  }, [step, bikeId, session, quote, startIso, endIso, helmets]);
+  }, [step, bikeId, quote, startIso, endIso, helmets]);
 
   // Identity check status, shown before the last step instead of failing at "Book".
   const [kyc, setKyc] = useState<'verified' | 'pending' | 'none' | null>(null);
@@ -152,13 +160,29 @@ export default function BookScreen() {
 
   const here = `/book?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}${bikeId ? `&bike=${bikeId}` : ''}&helmets=${helmets}&step=${step}`;
 
+  // A number to call: the account's, or typed here.
+  const needPhone = !session || (me != null && !me.phone);
+  const mobile = normPhone(phone);
+  const detailsOk = (!needPhone || !!mobile) && (!!session || guestName.trim().length >= 2)
+    && (handover === 'counter' || address.trim().length >= 5);
+
   async function book() {
     if (!quote) return;
     setBooking(true); setError(null);
+    const delivery = { handover, deliveryAddress: handover === 'delivery' ? address.trim() : undefined };
     try {
-      setResult(await callFunction<CreateBookingResponse>('create-booking', { quoteId: quote.quoteId, acceptedTermsVersion: TERMS_VERSION }));
+      if (!session) {
+        const r = await callFunction<GuestBookingResponse>('guest-booking', {
+          action: 'book', quoteId: quote.quoteId, acceptedTermsVersion: TERMS_VERSION, name: guestName.trim(), phone: mobile, ...delivery,
+        });
+        setGuestResult({ ...r, guest: { phone: mobile!, handover, address: delivery.deliveryAddress ?? null } });
+        return;
+      }
+      setResult(await callFunction<CreateBookingResponse>('create-booking', {
+        quoteId: quote.quoteId, acceptedTermsVersion: TERMS_VERSION, ...delivery, ...(needPhone && mobile ? { phone: mobile } : {}),
+      }));
     } catch (e) {
-      if (e instanceof ApiError && (e.code === 'KYC_REQUIRED' || e.code === 'LICENCE_EXPIRES')) {
+      if (e instanceof ApiError && e.code === 'LICENCE_EXPIRES') {
         setError(e.message);
         return router.push({ pathname: '/verify', params: { next: here } });
       }
@@ -169,6 +193,9 @@ export default function BookScreen() {
 
   if (result && bike) {
     return <Reserved booking={result.booking} bankTransfer={result.payment.provider === 'bank_transfer'} vehicle={bike} title={`${bike.make} ${bike.model}`} />;
+  }
+  if (guestResult && bike) {
+    return <Reserved booking={guestResult.booking} bankTransfer={false} guest={guestResult.guest} vehicle={bike} title={`${bike.make} ${bike.model}`} />;
   }
 
   const price = quote ? money(quote.total, quote.currency)
@@ -213,8 +240,8 @@ export default function BookScreen() {
         <ThemedText type="small" themeColor="textSecondary">{step >= 2 ? lengthLabel(hours) : 'Return time next'}{step >= 4 && !isCar ? (helmets ? `, ${helmets} helmet${helmets > 1 ? 's' : ''}` : ', no helmet') : ''}</ThemedText>
       </View>
       <View style={[styles.ticketPad, styles.dashed, styles.rowBetween, { borderColor: t.border }]}>
-        <View style={styles.flex}><ThemedText type="small" themeColor="textSecondary">Rider</ThemedText><ThemedText type="smallBold">{me?.full_name || (session ? '—' : 'Sign in at the extras step')}</ThemedText></View>
-        <View style={[styles.flex, { alignItems: 'flex-end' }]}><ThemedText type="small" themeColor="textSecondary">Mobile</ThemedText><ThemedText type="smallBold">{me?.whatsapp || me?.phone || '—'}</ThemedText></View>
+        <View style={styles.flex}><ThemedText type="small" themeColor="textSecondary">Rider</ThemedText><ThemedText type="smallBold">{me?.full_name || guestName.trim() || '—'}</ThemedText></View>
+        <View style={[styles.flex, { alignItems: 'flex-end' }]}><ThemedText type="small" themeColor="textSecondary">Mobile</ThemedText><ThemedText type="smallBold">{phoneLabel(me?.phone || me?.whatsapp) || (mobile ? phoneLabel(mobile) : '—')}</ThemedText></View>
       </View>
       <View style={[styles.ticketPad, { backgroundColor: t.backgroundSelected }]}>
         <ThemedText type="small" themeColor="textSecondary">{quote ? 'Total' : 'Estimated total'}</ThemedText>
@@ -336,11 +363,6 @@ export default function BookScreen() {
                   </ThemedText>
                   <Button variant="secondary" title="Choose another vehicle" onPress={() => go(3)} />
                 </View>
-              ) : !session ? (
-                <View style={{ gap: Spacing.two }}>
-                  <ThemedText>Sign in to see your exact price and book. Your choices are kept.</ThemedText>
-                  <Button title="Sign in to continue" onPress={() => router.push({ pathname: '/sign-in', params: { next: here } })} />
-                </View>
               ) : (
                 <Button title={quoting ? 'Getting your price…' : 'Continue'} onPress={() => go(5)} disabled={!quote} loading={quoting} />
               )}
@@ -373,17 +395,48 @@ export default function BookScreen() {
                   </View>
                 </Card>
               )}
-              {kyc && kyc !== 'verified' && (
+              {quote && (
+                <Card style={{ gap: Spacing.three }}>
+                  <ThemedText type="smallBold">How do you want to get it?</ThemedText>
+                  <View style={styles.chips}>
+                    <Choice label="Pick up at the counter" selected={handover === 'counter'} onPress={() => setHandover('counter')} />
+                    <Choice label="Deliver it to me" selected={handover === 'delivery'} onPress={() => setHandover('delivery')} />
+                  </View>
+                  {handover === 'delivery' && (
+                    <Field label="Where should we bring it?" value={address} onChangeText={setAddress} placeholder="House name, street, landmark"
+                      hint="Anywhere in Kulhudhuffushi. We’ll confirm the time when we call." autoComplete="street-address" />
+                  )}
+                  {!session && (
+                    <>
+                      <Field label="Your name" value={guestName} onChangeText={setGuestName} autoComplete="name" textContentType="name" />
+                      <ThemedText type="small" themeColor="textSecondary">
+                        No account needed.{' '}
+                        <ThemedText type="small" themeColor="accent" onPress={() => router.push({ pathname: '/sign-in', params: { next: here } })}
+                          accessibilityRole="link" style={{ textDecorationLine: 'underline' }}>Sign in</ThemedText> instead to pay by transfer in the app and see your rentals.
+                      </ThemedText>
+                    </>
+                  )}
+                  {needPhone && (
+                    <Field label="Mobile number" value={phone} onChangeText={setPhone} placeholder="777 1234" keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber"
+                      hint={phone && !mobile ? '7 digits, or with the country code (+44…) if it isn’t a Maldivian number.' : 'We call this number to confirm and take payment.'} />
+                  )}
+                </Card>
+              )}
+              {!session ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  Your booking is held while we call you to confirm and take payment (by transfer or at the counter). Bring your driving licence and ID at pickup.
+                </ThemedText>
+              ) : kyc && kyc !== 'verified' && (
                 <Card style={{ borderColor: t.warning, gap: Spacing.two }}>
-                  <Pill label={kyc === 'pending' ? 'Verification under review' : 'Verification needed'} tone="warning" />
+                  <Pill label={kyc === 'pending' ? 'Verification under review' : 'Not verified yet'} tone="warning" />
                   <ThemedText type="small">{kyc === 'pending'
-                    ? 'We’re checking your documents. You can book as soon as you’re verified (usually within an hour).'
-                    : 'Before your first rental, upload your driving licence, ID and a selfie. It takes about 2 minutes, and your choices are kept.'}</ThemedText>
+                    ? 'We’re checking your documents. You can book now; we’ll finish before pickup.'
+                    : 'You can book now. Verify your licence and ID before pickup to save time at the counter, or bring them with you.'}</ThemedText>
                   {kyc === 'none' && <Button variant="secondary" title="Verify my identity" onPress={() => router.push({ pathname: '/verify', params: { next: here } })} />}
                 </Card>
               )}
               <ErrorText>{quote ? error : null}</ErrorText>
-              {quote && <Button title={`Book for ${money(quote.total, quote.currency)}`} onPress={book} disabled={!accepted || kyc === 'pending'} loading={booking} />}
+              {quote && <Button title={`${session ? 'Book' : 'Request booking'} for ${money(quote.total, quote.currency)}`} onPress={book} disabled={!accepted || !detailsOk} loading={booking} />}
             </>,
           )}
 

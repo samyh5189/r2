@@ -37,9 +37,9 @@ async function Accounting({ searchParams }: { searchParams: Promise<{ p?: string
   const period = periodFor(p ?? "month");
   const [{ data, error }, unpaid, refunds] = await Promise.all([
     db.rpc("finance_report", { p_from: period.from.toISOString(), p_to: period.to.toISOString() }),
-    db.from("payments").select("id, amount, currency, created_at, bookings(id, reference, profiles(full_name))")
+    db.from("payments").select("id, amount, currency, created_at, bookings(id, reference, guest_name, profiles(full_name))")
       .eq("status", "pending").eq("kind", "charge").neq("provider", "stripe").order("created_at", { ascending: false }).limit(50),
-    db.from("payments").select("id, amount, currency, created_at, bookings(id, reference, profiles(full_name))")
+    db.from("payments").select("id, amount, currency, created_at, bookings(id, reference, guest_name, profiles(full_name))")
       .eq("status", "pending").eq("kind", "refund").neq("provider", "stripe").order("created_at").limit(50),
   ]);
   if (error || !data) return <p role="alert" className="text-red-600">Could not load the report.</p>;
@@ -50,7 +50,7 @@ async function Accounting({ searchParams }: { searchParams: Promise<{ p?: string
   const maxVehicle = Math.max(1, ...r.by_vehicle.map((v) => v.amount));
   const outstanding = r.unpaid_charges + r.awaiting_payment + r.blocklist_owed;
   const qs = (k: string) => `/accounting?p=${k}`;
-  type Unpaid = { id: string; amount: number; currency: string; created_at: string; bookings: { id: string; reference: string; profiles: { full_name: string | null } | null } | null };
+  type Unpaid = { id: string; amount: number; currency: string; created_at: string; bookings: { id: string; reference: string; guest_name: string | null; profiles: { full_name: string | null } | null } | null };
 
   return (
     <>
@@ -158,7 +158,7 @@ async function Accounting({ searchParams }: { searchParams: Promise<{ p?: string
               {(unpaid.data as unknown as Unpaid[]).map((u) => (
                 <li key={u.id} className="flex flex-wrap items-center gap-2 py-2">
                   {u.bookings && <Link href={`/bookings/${u.bookings.id}`} className="plate text-xs">{u.bookings.reference}</Link>}
-                  <span>{u.bookings?.profiles?.full_name ?? "Rider"}</span>
+                  <span>{u.bookings?.profiles?.full_name ?? u.bookings?.guest_name ?? "Rider"}</span>
                   <span className="text-muted">{dt(new Date(u.created_at))}</span>
                   <span className="ml-auto font-semibold tabular-nums">{money(u.amount, u.currency)}</span>
                   <MarkCollected id={u.id} />
@@ -176,7 +176,7 @@ async function Accounting({ searchParams }: { searchParams: Promise<{ p?: string
               {(refunds.data as unknown as Unpaid[]).map((u) => (
                 <li key={u.id} className="flex flex-wrap items-center gap-2 py-2">
                   {u.bookings && <Link href={`/bookings/${u.bookings.id}`} className="plate text-xs">{u.bookings.reference}</Link>}
-                  <span>{u.bookings?.profiles?.full_name ?? "Rider"}</span>
+                  <span>{u.bookings?.profiles?.full_name ?? u.bookings?.guest_name ?? "Rider"}</span>
                   <span className="text-muted">{dt(new Date(u.created_at))}</span>
                   <span className="ml-auto font-semibold tabular-nums">{money(u.amount, u.currency)}</span>
                   <MarkCollected id={u.id} label="Mark refunded" />

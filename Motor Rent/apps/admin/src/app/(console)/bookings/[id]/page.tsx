@@ -10,7 +10,7 @@ import { baseRental, billableHours, LICENCE_CATEGORIES, lateFee, licenceCategory
 import { CloseRental } from "./close-rental";
 import { CAR_CHECKS } from "./checks";
 import { Handover } from "./handover";
-import { type Claim, DamageClaimCard, DepositCard, type Extension, ExtensionRequest, ReportDamage } from "./rental-ops";
+import { type Claim, ConfirmPaid, CounterCheck, DamageClaimCard, DepositCard, type Extension, ExtensionRequest, ReportDamage } from "./rental-ops";
 
 export const metadata = { title: "Booking" };
 
@@ -44,18 +44,20 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 }
 
 type B = {
-  id: string; reference: string; status: string; period: string; total: number; deposit: number; currency: string; created_at: string; rider_id: string;
+  id: string; reference: string; status: string; period: string; total: number; deposit: number; currency: string; created_at: string; rider_id: string | null;
+  guest_name: string | null; guest_phone: string | null; handover: string; delivery_address: string | null; held_until: string | null;
+  counter_licence_categories: string[] | null; counter_licence_expires_on: string | null;
   vehicles: { id: string; kind: string; plate: string; make: string; model: string; odometer_km: number; engine_hours: number | null;
     price_plans: { late_fee_per_hour: number; late_grace_minutes: number; hourly: number; daily: number; weekly: number } | null } | null;
   branches: { name: string } | null;
-  rider: { full_name: string | null; phone: string | null; avatar_path: string | null; kyc_status: string; licence_categories: string[] | null } | null;
+  rider: { full_name: string | null; phone: string | null; avatar_path: string | null; kyc_status: string; licence_categories: string[] | null; licence_expires_on: string | null } | null;
 };
 
 async function Booking({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { db } = await requireStaff();
   const { data: b } = await db.from("bookings")
-    .select("id, reference, status, period, total, deposit, currency, created_at, rider_id, vehicles(id, kind, plate, make, model, odometer_km, engine_hours, price_plans(late_fee_per_hour, late_grace_minutes, hourly, daily, weekly)), branches(name), rider:profiles!bookings_rider_id_fkey(full_name, phone, avatar_path, kyc_status, licence_categories)")
+    .select("id, reference, status, period, total, deposit, currency, created_at, rider_id, guest_name, guest_phone, handover, delivery_address, held_until, counter_licence_categories, counter_licence_expires_on, vehicles(id, kind, plate, make, model, odometer_km, engine_hours, price_plans(late_fee_per_hour, late_grace_minutes, hourly, daily, weekly)), branches(name), rider:profiles!bookings_rider_id_fkey(full_name, phone, avatar_path, kyc_status, licence_categories, licence_expires_on)")
     .eq("id", id).maybeSingle<B>();
   if (!b) return <p role="alert" className="text-red-600">Booking not found (or not at your branch).</p>;
 
@@ -77,7 +79,7 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
   pays.data?.forEach((p) => p.recorded_by && ids.add(p.recorded_by));
   const { data: people } = ids.size ? await db.from("profiles").select("id, full_name, role, avatar_path").in("id", [...ids]) : { data: [] };
   const person = new Map((people ?? []).map((p) => [p.id, p]));
-  const riderName = b.rider?.full_name ?? "Rider";
+  const riderName = b.rider?.full_name ?? b.guest_name ?? "Rider";
   const who = (uid: string | null): TimelineEntry["who"] => {
     if (!uid) return { name: "System", tag: "System" };
     if (uid === b.rider_id) return { name: riderName, tag: "Rider", avatarUrl: avatarPublicUrl(b.rider?.avatar_path) };
@@ -130,10 +132,17 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
 
   const r = parseRange(b.period);
   const now = Date.now();
-  // The rider's licence must cover this vehicle (A two-wheelers, B cars), set at the ID check.
+  // The licence must cover this vehicle (A two-wheelers, B cars): from the rider's verified account, or checked
+  // by staff at the counter for this rental (riders without an account, or not verified yet).
   const need = b.vehicles ? licenceCategoryFor(b.vehicles.kind) : null;
-  const licenceProblem = need && b.rider?.kyc_status === "approved" && !licenceCovers(b.rider.licence_categories, b.vehicles!.kind)
-    ? `${riderName}'s licence is verified for ${(b.rider.licence_categories ?? []).join(", ") || "no categories"}; this vehicle needs category ${LICENCE_CATEGORIES[need].label}. If their licence has it, add it on their rider page.`
+  const endDay = r ? r.end.toISOString().slice(0, 10) : "";
+  const accountOk = !!need && b.rider?.kyc_status === "approved" && licenceCovers(b.rider.licence_categories, b.vehicles!.kind)
+    && !!b.rider.licence_expires_on && b.rider.licence_expires_on >= endDay;
+  const counterOk = !!need && (b.counter_licence_categories ?? []).includes(need) && !!b.counter_licence_expires_on && b.counter_licence_expires_on >= endDay;
+  const licenceProblem = need && !accountOk && !counterOk
+    ? b.rider?.kyc_status === "approved"
+      ? `${riderName}'s verified licence covers ${(b.rider.licence_categories ?? []).join(", ") || "no categories"} until ${b.rider.licence_expires_on ?? "—"}; this rental needs category ${LICENCE_CATEGORIES[need].label}. Check the licence at the counter, or add the category on their rider page.`
+      : `${riderName} has no verified licence. Check their licence (category ${LICENCE_CATEGORIES[need].label}) and ID at the counter first.`
     : null;
   const plan = b.vehicles?.price_plans;
   // Live warnings: missed pickup, and how late an overdue bike is (with the fee so far and who is waiting for it).
@@ -172,8 +181,15 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
           </div>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted">Rider</dt>
-            <dd><Link href={`/riders/${b.rider_id}`} className="font-medium hover:underline">{riderName}</Link> <span className="text-muted">{b.rider?.phone}</span>
-              {b.rider?.kyc_status !== "approved" && <span className="ml-2 text-xs text-amber-700">not verified</span>}</dd>
+            <dd>{b.rider_id
+              ? <><Link href={`/riders/${b.rider_id}`} className="font-medium hover:underline">{riderName}</Link> <span className="text-muted">{b.rider?.phone}</span>
+                  {b.rider?.kyc_status !== "approved" && <span className="ml-2 text-xs text-amber-700">not verified</span>}</>
+              : <><span className="font-medium">{riderName}</span> <span className="ml-1 text-xs text-amber-700">no account</span>
+                  <div className="mt-0.5 flex flex-wrap gap-3"><a href={`tel:${b.guest_phone}`} className="font-semibold text-accent">{b.guest_phone}</a>
+                    <a href={`https://wa.me/${(b.guest_phone ?? "").replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="text-accent hover:underline">WhatsApp</a></div>
+                  <div className="text-xs text-muted">Joins their account when they verify one with this number.</div></>}</dd>
+            <dt className="text-muted">Handover</dt>
+            <dd>{b.handover === "delivery" ? <><span className="font-medium">Delivery</span> to {b.delivery_address}</> : "Pickup at the counter"}</dd>
             <dt className="text-muted">Vehicle</dt>
             <dd>{b.vehicles ? <Link href={`/fleet/${b.vehicles.id}`} className="hover:underline">{b.vehicles.plate} · {b.vehicles.make} {b.vehicles.model}</Link> : "—"}</dd>
             <dt className="text-muted">Pickup</dt><dd className="tabular-nums">{r ? dt(r.start) : "—"}</dd>
@@ -201,6 +217,11 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
             <p className="text-muted">Due back {r ? dt(r.end) : "—"}. The rider has been sent a WhatsApp reminder.</p>
             {nextUp && <p className="mt-1">Next rental on this bike: <Link href={`/bookings/${nextUp.id}`} className="font-semibold underline">{nextUp.reference}</Link>{nextRange ? `, pickup ${dt(nextRange.start)}` : ""}. Warn that rider or move them to another bike.</p>}
           </div>
+        )}
+        {b.status === "held" && <ConfirmPaid id={b.id} total={b.total} currency={b.currency} heldUntil={b.held_until} guest={!b.rider_id} />}
+        {(b.status === "held" || b.status === "confirmed") && need && r && !accountOk && (
+          <CounterCheck id={b.id} need={need} needLabel={LICENCE_CATEGORIES[need].label} rentalEnds={r.end.toISOString()}
+            done={b.counter_licence_categories?.length && b.counter_licence_expires_on ? { categories: b.counter_licence_categories, expires: b.counter_licence_expires_on } : null} />
         )}
         {ask && r && <ExtensionRequest ext={ask} currentEnd={r.end.toISOString()} quoted={askPrice} currency={b.currency} />}
         {claim && <DamageClaimCard id={b.id} claim={claim} currency={b.currency} />}

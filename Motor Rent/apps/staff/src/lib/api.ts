@@ -39,6 +39,8 @@ export type CreateBookingResponse = {
 
 export type StaffBooking = {
   id: string; reference: string; status: string; period: string; total: number; deposit: number; currency: 'MVR' | 'USD';
-  vehicles: { make: string; model: string; plate: string; odometer_km: number; engine_hours: number | null } | null;
-  profiles: { full_name: string | null; phone: string | null; kyc_status: string; licence_expires_on: string | null } | null;
+  guest_name: string | null; guest_phone: string | null; handover: 'counter' | 'delivery'; delivery_address: string | null;
+  counter_licence_categories: string[] | null; counter_licence_expires_on: string | null;
+  vehicles: { kind: string; make: string; model: string; plate: string; odometer_km: number; engine_hours: number | null } | null;
+  profiles: { full_name: string | null; phone: string | null; kyc_status: string; licence_expires_on: string | null; licence_categories: string[] | null } | null;
 };

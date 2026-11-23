@@ -31,15 +31,20 @@ Deno.serve(handler(async (req) => {
   const { data: blocked } = await db.rpc("is_blocked", { u: user.id });
   if (blocked) throw new HttpError(403, "ACCOUNT_BLOCKED", "This account cannot make bookings. Please contact the rental office.");
 
-  // Identity gate: approved KYC, adult, licence valid for the whole rental.
+  // Verification isn't needed to book (payment is confirmed by the office and the licence is checked at the
+  // latest at pickup), but a verified rider's documents must cover the whole rental, and we need a number to call.
   const { data: profile } = await db.from("profiles")
-    .select("kyc_status, date_of_birth, licence_expires_on").eq("id", user.id).single();
-  if (profile?.kyc_status !== "approved") throw new HttpError(403, "KYC_REQUIRED", "Verify your licence and ID first.");
+    .select("kyc_status, date_of_birth, licence_expires_on, phone").eq("id", user.id).single();
   const rentalEnd = parseTstzRange(q.period).end;
-  if (!profile.licence_expires_on || new Date(profile.licence_expires_on) < rentalEnd) {
+  if (profile?.kyc_status === "approved" && (!profile.licence_expires_on || new Date(profile.licence_expires_on) < rentalEnd)) {
     throw new HttpError(403, "LICENCE_EXPIRES", "Your licence expires before the rental ends.");
   }
-  if (profile.date_of_birth) {
+  if (!profile?.phone) {
+    const { data: phone } = input.phone ? await db.rpc("norm_phone", { p: input.phone }) : { data: null };
+    if (!phone) throw new HttpError(422, "PHONE_REQUIRED", "Add your mobile number so we can reach you about the booking.");
+    await db.from("profiles").update({ phone }).eq("id", user.id);
+  }
+  if (profile?.date_of_birth) {
     const age = (Date.now() - new Date(profile.date_of_birth).getTime()) / (365.25 * 24 * 3_600_000);
     if (age < MIN_AGE) throw new HttpError(403, "TOO_YOUNG", `Riders must be at least ${MIN_AGE}.`);
   }
@@ -59,12 +64,14 @@ Deno.serve(handler(async (req) => {
     deposit: q.deposit,
     currency: q.currency,
     terms_version: input.acceptedTermsVersion,
+    handover: input.handover,
+    delivery_address: input.handover === "delivery" ? input.deliveryAddress : null,
     held_until: new Date(Date.now() + (stripeClient() ? HOLD_MINUTES_CARD : HOLD_MINUTES_TRANSFER) * 60_000).toISOString(),
   }).select("*").single();
 
   if (error) {
     // 23P01 = exclusion violation: someone else booked it a moment ago, or maintenance.
-    if (error.code === "23P01") throw new HttpError(409, "JUST_TAKEN", "Sorry, this bike was just booked for a time too close to yours. Pick another time or bike.");
+    if (error.code === "23P01") throw new HttpError(409, "JUST_TAKEN", "Sorry, this vehicle was just booked for a time too close to yours. Pick another time or vehicle.");
     throw error;
   }
   return json(await withPayment(db, booking, user), 201);

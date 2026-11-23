@@ -9,6 +9,8 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 export type PendingKyc = {
   id: string; fullName: string; dob: string; idType: string; idNumber: string; licenceNumber: string; licenceExpires: string;
   createdAt: string; phone: string | null; docs: { type: string; url: string | null }[];
+  /** Bookings made without an account on the same mobile number. */
+  guestBookings: { id: string; reference: string; name: string; status: string }[];
 };
 
 const LABEL: Record<string, string> = {
@@ -31,6 +33,7 @@ export function KycReview({ sub }: { sub: PendingKyc }) {
   const [reason, setReason] = useState("");
   const [cats, setCats] = useState<LicenceCategory[]>([]);
   const [rejecting, setRejecting] = useState(false);
+  const [link, setLink] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState<string | null>(null);
@@ -39,7 +42,7 @@ export function KycReview({ sub }: { sub: PendingKyc }) {
     setBusy(true); setError(null);
     const { error } = await supabase.rpc("review_kyc", {
       p_submission: sub.id, p_approve: approve, p_licence_expires_on: approve ? expires : null, p_date_of_birth: approve ? dob : null,
-      p_note: approve ? null : reason, p_categories: approve ? cats : null,
+      p_note: approve ? null : reason, p_categories: approve ? cats : null, p_link_guest: link,
     });
     setBusy(false);
     if (error) return setError(error.message);
@@ -51,7 +54,7 @@ export function KycReview({ sub }: { sub: PendingKyc }) {
     <article className="space-y-4 rounded-2xl border border-line bg-panel p-4">
       <div className="flex flex-wrap items-baseline gap-x-3">
         <span className="text-lg font-semibold">{sub.fullName}</span>
-        {sub.phone && <span className="text-sm text-muted">{sub.phone}</span>}
+        {sub.phone ? <a href={`tel:${sub.phone}`} className="text-sm font-medium text-accent">{sub.phone}</a> : <span className="text-sm text-amber-700">no mobile number (sent before it was required)</span>}
         <span className="ml-auto text-sm text-muted">sent {dt(new Date(sub.createdAt))}</span>
       </div>
 
@@ -105,6 +108,20 @@ export function KycReview({ sub }: { sub: PendingKyc }) {
         </div>
       </fieldset>
 
+      {sub.guestBookings.length > 0 && (
+        <div className="space-y-2 rounded-xl border border-line p-3 text-sm">
+          <p className="font-semibold">{sub.guestBookings.length} booking{sub.guestBookings.length === 1 ? "" : "s"} made without an account on {sub.phone}</p>
+          <ul className="flex flex-wrap gap-2">
+            {sub.guestBookings.map((g) => (
+              <li key={g.id}><a href={`/bookings/${g.id}`} target="_blank" rel="noreferrer" className="plate text-xs hover:opacity-80">{g.reference}</a> <span className="text-muted">{g.name} · {g.status}</span></li>
+            ))}
+          </ul>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={link} onChange={(e) => setLink(e.target.checked)} />
+            Add them to this rider’s account when I approve (check the names match)
+          </label>
+        </div>
+      )}
       {error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
       {!rejecting ? (
         <div className="flex flex-wrap gap-2">

@@ -32,6 +32,10 @@ export type QuoteResponse = {
   deposit: number;
 };
 
+export type GuestBookingResponse = {
+  booking: { id: string; reference: string; status: string; held_until: string | null; total: number; currency: string };
+};
+
 export type CreateBookingResponse = {
   booking: { id: string; reference: string; status: string; held_until: string | null; total: number; currency: string };
   payment: { provider: 'stripe'; clientSecret: string; heldUntil: string } | { provider: 'bank_transfer'; heldUntil: string };

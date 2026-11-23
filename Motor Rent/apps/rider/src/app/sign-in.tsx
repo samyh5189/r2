@@ -144,6 +144,7 @@ function EmailForm({ onBusy, next }: { onBusy: (b: boolean) => void; next?: stri
         <Button variant="ghost" title={mode === 'signin' ? 'New here? Create an account' : 'Have an account? Sign in'}
           onPress={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(null); setInfo(null); }} />
         {mode === 'signin' && <Button variant="ghost" title="Forgot password?" onPress={forgot} />}
+        <Button variant="ghost" title="Booked without an account? Find your booking" onPress={() => router.push('/find')} />
       </View>
     </>
   );

@@ -25,16 +25,21 @@ async function Today() {
   const dayEnd = new Date(dayStart.getTime() + 86_400_000);
   const today = `[${dayStart.toISOString()},${dayEnd.toISOString()})`;
 
-  const [live, payments] = await Promise.all([
+  const [live, payments, toCall] = await Promise.all([
     db.from("bookings")
-      .select("id, reference, status, period, vehicles(plate, model), profiles(full_name, phone)")
+      .select("id, reference, status, period, guest_name, guest_phone, handover, vehicles(plate, model), profiles(full_name, phone)")
       .in("status", ["held", "confirmed", "active", "overdue"])
       .overlaps("period", today)
       .order("period"),
     db.from("payments").select("amount, currency, kind").eq("status", "succeeded").gte("created_at", dayStart.toISOString()),
+    // Unpaid bookings made without an account: the office calls to confirm and take payment.
+    db.from("bookings")
+      .select("id, reference, status, period, guest_name, guest_phone, handover, vehicles(plate, model), profiles(full_name, phone)")
+      .eq("status", "held").is("rider_id", null).order("held_until"),
   ]);
 
-  type Row = { id: string; reference: string; status: string; period: string; vehicles: { plate: string; model: string } | null; profiles: { full_name: string | null; phone: string | null } | null };
+  type Row = { id: string; reference: string; status: string; period: string; guest_name: string | null; guest_phone: string | null; handover: string;
+    vehicles: { plate: string; model: string } | null; profiles: { full_name: string | null; phone: string | null } | null };
   const rows = (live.data ?? []) as unknown as Row[];
   const inDay = (d: Date | undefined) => !!d && d >= dayStart && d < dayEnd;
   const pickups = rows.filter((r) => r.status === "confirmed" && inDay(parseRange(r.period)?.start));
@@ -60,6 +65,7 @@ async function Today() {
           </div>
         ))}
       </div>
+      {!!toCall.data?.length && <BookingList title="Booked without an account: call to confirm and take payment" rows={toCall.data as unknown as Row[]} empty="" />}
       <BookingList title="Overdue: call these riders" rows={overdue} empty="Nothing overdue." />
       <BookingList title="Pickups" rows={pickups} empty="No pickups scheduled today." />
       <BookingList title="Returns" rows={returns} empty="No returns due today." />
@@ -78,8 +84,9 @@ async function Today() {
                 <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
                   <Link href={`/bookings/${r.id}#handover`} className="plate text-xs">{r.reference}</Link>
                   <span>{r.vehicles?.plate} {r.vehicles?.model}</span>
-                  <span className="text-muted">{r.profiles?.full_name ?? "—"}</span>
-                  {r.profiles?.phone && <a href={`tel:${r.profiles.phone.replace(/\s/g, "")}`} className="font-medium text-accent">{r.profiles.phone}</a>}
+                  <span className="text-muted">{r.profiles?.full_name ?? r.guest_name ?? "—"}{!r.profiles && r.guest_name && <span className="ml-1 text-xs text-amber-700">no account</span>}</span>
+                  {(r.profiles?.phone ?? r.guest_phone) && <a href={`tel:${(r.profiles?.phone ?? r.guest_phone)!.replace(/\s/g, "")}`} className="font-medium text-accent">{r.profiles?.phone ?? r.guest_phone}</a>}
+                  {r.handover === "delivery" && <span className="rounded bg-sky-500/15 px-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300">Delivery</span>}
                   {p && <span className="tabular-nums text-muted">{dt(p.start)} to {dt(p.end)}</span>}
                   <span className="ml-auto flex items-center gap-3">
                     <StatusBadge status={r.status} />

@@ -267,7 +267,7 @@ export function OpenNow({ light = false }: { light?: boolean }) {
 
 const FOOT: { title: string; links: { label: string; href: Href }[] }[] = [
   { title: 'Explore', links: [{ label: 'Fleet', href: '/fleet' }, { label: 'Prices', href: '/prices' }, { label: 'Our counter', href: '/counter' }, { label: 'Book a ride', href: '/book' }] },
-  { title: 'Help', links: [{ label: 'Questions', href: '/help' }, { label: 'Rental terms', href: '/terms' }, { label: 'Privacy', href: '/privacy' }, { label: 'My account', href: '/account' }] },
+  { title: 'Help', links: [{ label: 'Questions', href: '/help' }, { label: 'Find my booking', href: '/find' }, { label: 'Rental terms', href: '/terms' }, { label: 'Privacy', href: '/privacy' }, { label: 'My account', href: '/account' }] },
 ];
 
 /** Site footer: brand, links, opening hours and where to find us. */

@@ -17,7 +17,7 @@ Deno.serve(handler(async (req) => {
   if (!staff || staff.role === "rider") throw new HttpError(403, "FORBIDDEN", "Staff only.");
 
   const { data: b } = await db.from("bookings")
-    .select("id, status, period, branch_id, vehicle_id, rider_id, currency, vehicles!inner(kind, odometer_km, engine_hours, price_plans!inner(late_fee_per_hour, late_grace_minutes, daily))")
+    .select("id, status, period, branch_id, vehicle_id, rider_id, currency, counter_licence_categories, counter_licence_expires_on, vehicles!inner(kind, odometer_km, engine_hours, price_plans!inner(late_fee_per_hour, late_grace_minutes, daily))")
     .eq("id", input.bookingId).single();
   if (!b) throw new HttpError(404, "NOT_FOUND", "Booking not found.");
   if (staff.role === "staff" && staff.branch_id !== b.branch_id) throw new HttpError(403, "WRONG_BRANCH", "This booking belongs to another branch.");
@@ -48,14 +48,18 @@ Deno.serve(handler(async (req) => {
   if (input.phase === "pickup") {
     if (b.status !== "confirmed") throw new HttpError(409, "NOT_CONFIRMED", "Booking is not paid / confirmed.");
     if (now.getTime() < start.getTime() - EARLY_PICKUP_MINUTES * 60_000) throw new HttpError(409, "TOO_EARLY", "Too early for pickup.");
-    const { data: rider } = await db.from("profiles").select("kyc_status, licence_expires_on, licence_categories").eq("id", b.rider_id).single();
-    if (rider?.kyc_status !== "approved" || !rider.licence_expires_on || new Date(rider.licence_expires_on) < end) {
-      throw new HttpError(403, "KYC_REQUIRED", "Rider ID / licence not verified for this rental.");
-    }
-    // One licence, several categories: A for two-wheelers, B for cars (set by staff at the ID check).
+    // One licence, several categories: A for two-wheelers, B for cars. Either the rider's verified account covers
+    // this vehicle, or staff checked the licence at the counter for this rental (riders without an account).
     const need = vehicle.kind === "car" ? "B" : "A";
-    if (!((rider.licence_categories ?? []) as string[]).includes(need)) {
-      throw new HttpError(403, "LICENCE_CATEGORY", `The rider's licence isn't verified for category ${need}, which this vehicle needs.`);
+    const { data: rider } = b.rider_id
+      ? await db.from("profiles").select("kyc_status, licence_expires_on, licence_categories").eq("id", b.rider_id).single()
+      : { data: null };
+    const account = rider?.kyc_status === "approved" && !!rider.licence_expires_on && new Date(rider.licence_expires_on) >= end
+      && ((rider.licence_categories ?? []) as string[]).includes(need);
+    const counter = ((b.counter_licence_categories ?? []) as string[]).includes(need)
+      && !!b.counter_licence_expires_on && new Date(b.counter_licence_expires_on) >= new Date(end.toISOString().slice(0, 10));
+    if (!account && !counter) {
+      throw new HttpError(403, "LICENCE_CHECK", `Check the rider's licence (category ${need}) at the counter first, or verify their account.`);
     }
   } else if (b.status !== "active" && b.status !== "overdue") {
     throw new HttpError(409, "NOT_ON_RENT", "This bike is not currently rented out.");

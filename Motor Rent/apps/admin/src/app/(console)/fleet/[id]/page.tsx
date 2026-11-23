@@ -29,7 +29,7 @@ async function Vehicle({ params }: { params: Promise<{ id: string }> }) {
 
   const [audit, bookings] = await Promise.all([
     db.from("audit_log").select("id, actor, action, before, after, at").eq("entity", "vehicles").eq("entity_id", id), // managers/owners (RLS)
-    db.from("bookings").select("id, reference, status, total, currency, created_at, rider:profiles!bookings_rider_id_fkey(full_name)").eq("vehicle_id", id).order("created_at", { ascending: false }).limit(100),
+    db.from("bookings").select("id, reference, status, total, currency, created_at, guest_name, rider:profiles!bookings_rider_id_fkey(full_name)").eq("vehicle_id", id).order("created_at", { ascending: false }).limit(100),
   ]);
   const ids = [...new Set((audit.data ?? []).flatMap((a) => (a.actor ? [a.actor] : [])))];
   const { data: people } = ids.length ? await db.from("profiles").select("id, full_name, avatar_path").in("id", ids) : { data: [] };
@@ -46,8 +46,8 @@ async function Vehicle({ params }: { params: Promise<{ id: string }> }) {
     const changes = diff(before, after, FIELDS, (f, x) => (x == null ? "" : f === "photos" ? `${(x as unknown[]).length} photo(s)` : f.endsWith("_id") ? "changed" : String(x)));
     if (changes.length) entries.push({ key: `a${a.id}`, at: new Date(a.at), who: who(a.actor), kind: "log", title: "Updated vehicle", changes });
   }
-  for (const b of (bookings.data ?? []) as unknown as { id: string; reference: string; status: string; total: number; currency: string; created_at: string; rider: { full_name: string | null } | null }[]) {
-    entries.push({ key: `b${b.id}`, at: new Date(b.created_at), who: { name: b.rider?.full_name ?? "Rider", tag: "Rider" }, kind: "log", href: `/bookings/${b.id}`,
+  for (const b of (bookings.data ?? []) as unknown as { id: string; reference: string; status: string; total: number; currency: string; created_at: string; guest_name: string | null; rider: { full_name: string | null } | null }[]) {
+    entries.push({ key: `b${b.id}`, at: new Date(b.created_at), who: { name: b.rider?.full_name ?? b.guest_name ?? "Rider", tag: "Rider" }, kind: "log", href: `/bookings/${b.id}`,
       title: `Booking ${b.reference} · ${money(b.total, b.currency)} · ${b.status}` });
   }
   if (!audit.data?.length) entries.push({ key: "created", at: new Date(v.created_at), who: { name: "System", tag: "System" }, kind: "log", title: "Added to the fleet" });

@@ -2,6 +2,7 @@ import { Stack, router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
+import { phoneLabel } from '@motor-rent/shared';
 
 import { BikeImage, type VehicleKind } from '@/components/photo';
 import { CancelBooking } from '@/components/cancel-booking';
@@ -84,12 +85,54 @@ export function TripPlanner({ start, end, earliest, minEnd, hours, onStart, onEn
   );
 }
 
-/** Success: the vehicle photo with a confirmation check popping in. */
-export function Reserved({ booking, bankTransfer, vehicle, title }: {
+/** What a rider without an account told us, for the confirmation screen. */
+export type GuestDetails = { phone: string; handover: 'counter' | 'delivery'; address: string | null };
+
+/** Success: the vehicle photo with a confirmation check popping in. Riders without an account get a call. */
+export function Reserved({ booking, bankTransfer, vehicle, title, guest }: {
   booking: CreateBookingResponse['booking']; bankTransfer: boolean; vehicle: { photos?: string[] | null; kind?: VehicleKind | null; make?: string | null; model?: string | null }; title: string;
+  guest?: GuestDetails;
 }) {
   const t = useTheme();
   const reference = booking.reference;
+  if (guest) {
+    return (
+      <ThemedView style={styles.flex}>
+        <Stack.Screen options={{ title: 'Booking received' }} />
+        <ScrollView contentContainerStyle={styles.body}>
+          <View style={[styles.gallery, { borderColor: t.border }]}>
+            <BikeImage vehicle={vehicle} style={StyleSheet.absoluteFill} />
+            <View style={styles.reservedCaption}>
+              <ThemedText type="eyebrow" style={{ color: t.accent }}>Your ride</ThemedText>
+              <ThemedText type="heading">{title}</ThemedText>
+            </View>
+          </View>
+          <Animated.View entering={ZoomIn.delay(250).springify()} style={[styles.check, { backgroundColor: t.success, borderColor: t.background }]}>
+            <ThemedText style={{ color: '#fff', fontSize: 30, lineHeight: 34, fontWeight: 800 }}>✓</ThemedText>
+          </Animated.View>
+          <View style={{ alignItems: 'center', gap: Spacing.one }}>
+            <ThemedText type="subtitle" style={{ textAlign: 'center' }}>We’ve got your booking</ThemedText>
+            <ThemedText themeColor="textSecondary" style={{ textAlign: 'center' }}>
+              We’ll call {phoneLabel(guest.phone)} to confirm and take payment
+              {booking.held_until ? `. We hold the ${vehicle.kind === 'car' ? 'car' : 'bike'} for you until ${dateTime(new Date(booking.held_until))}.` : '.'}
+            </ThemedText>
+          </View>
+          <Card style={{ alignItems: 'center' }}>
+            <ThemedText type="eyebrow" themeColor="textSecondary">Booking reference</ThemedText>
+            <ThemedText type="subtitle" selectable style={{ letterSpacing: 2 }}>{reference}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>
+              Keep it: with your mobile number it finds this booking again.
+              {guest.handover === 'delivery' ? ` We’ll bring it to ${guest.address}.` : ' Show it at the counter with your licence and ID.'}
+            </ThemedText>
+          </Card>
+          <Button title="Check my booking" onPress={() => router.replace({ pathname: '/find', params: { ref: reference, phone: guest.phone } })} />
+          <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>
+            Want your rentals in one place? Create an account and verify it with this mobile number; this booking joins it.
+          </ThemedText>
+        </ScrollView>
+      </ThemedView>
+    );
+  }
   return (
     <ThemedView style={styles.flex}>
       <Stack.Screen options={{ title: 'Reserved' }} />

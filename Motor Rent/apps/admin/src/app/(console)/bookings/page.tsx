@@ -22,13 +22,13 @@ async function BookingsTable() {
   const { db } = await requireStaff();
   const { data, error } = await db
     .from("bookings")
-    .select("id, reference, status, period, total, currency, created_at, rider_id, vehicles(id, plate, model), profiles(full_name, phone), booking_messages(from_staff, created_at)")
+    .select("id, reference, status, period, total, currency, created_at, rider_id, guest_name, guest_phone, handover, vehicles(id, plate, model), profiles(full_name, phone), booking_messages(from_staff, created_at)")
     .order("created_at", { ascending: false })
     .order("created_at", { referencedTable: "booking_messages", ascending: false })
     .limit(1, { referencedTable: "booking_messages" })
     .limit(200);
   if (error) return <p role="alert" className="text-red-600">Could not load bookings.</p>;
-  type Row = { id: string; reference: string; status: string; period: string; total: number; currency: string; rider_id: string; booking_messages: { from_staff: boolean }[]; vehicles: { id: string; plate: string; model: string } | null; profiles: { full_name: string | null; phone: string | null } | null };
+  type Row = { id: string; reference: string; status: string; period: string; total: number; currency: string; rider_id: string | null; guest_name: string | null; guest_phone: string | null; handover: string; booking_messages: { from_staff: boolean }[]; vehicles: { id: string; plate: string; model: string } | null; profiles: { full_name: string | null; phone: string | null } | null };
   const rows = (data ?? []) as unknown as Row[];
   if (!rows.length) return <p className="text-muted">No bookings yet.</p>;
   const action = (r: Row) => r.status === "confirmed" ? "Hand over" : r.status === "active" || r.status === "overdue" ? "Collect" : null;
@@ -49,7 +49,7 @@ async function BookingsTable() {
                 {unread && <span className="rounded bg-sky-500/15 px-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300">New message</span>}
                 <span className="ml-auto text-sm font-semibold tabular-nums">{money(r.total, r.currency)}</span>
               </div>
-              <div className="text-sm"><span className="font-medium">{r.profiles?.full_name ?? "—"}</span> <span className="text-muted">{r.vehicles?.plate} {r.vehicles?.model}</span></div>
+              <div className="text-sm"><span className="font-medium">{r.profiles?.full_name ?? r.guest_name ?? "—"}</span>{!r.rider_id && <span className="ml-1 text-xs text-amber-700">no account</span>}{r.handover === "delivery" && <span className="ml-1 text-xs text-sky-700">delivery</span>} <span className="text-muted">{r.vehicles?.plate} {r.vehicles?.model}</span></div>
               {p && <div className="text-sm tabular-nums text-muted">{dt(p.start)} to {dt(p.end)}</div>}
               {act && <div className="pt-1 text-sm font-semibold text-accent">{act}</div>}
             </Link>
@@ -71,7 +71,7 @@ async function BookingsTable() {
                   <Link href={`/bookings/${r.id}`} className="plate text-xs hover:opacity-80">{r.reference}</Link>
                   {r.booking_messages?.[0] && !r.booking_messages[0].from_staff && <div className="mt-0.5 w-fit rounded bg-sky-500/15 px-1.5 text-[11px] font-semibold text-sky-700 dark:text-sky-300">New message</div>}
                 </td>
-                <td className="px-3 py-2"><Link href={`/riders/${r.rider_id}`} className="hover:underline">{r.profiles?.full_name ?? "—"}</Link><div className="text-muted">{r.profiles?.phone}</div></td>
+                <td className="px-3 py-2">{r.rider_id ? <Link href={`/riders/${r.rider_id}`} className="hover:underline">{r.profiles?.full_name ?? "—"}</Link> : <span>{r.guest_name} <span className="text-xs text-amber-700">no account</span></span>}<div className="text-muted">{r.profiles?.phone ?? r.guest_phone}{r.handover === "delivery" ? " · delivery" : ""}</div></td>
                 <td className="px-3 py-2">{r.vehicles ? <Link href={`/fleet/${r.vehicles.id}`} className="hover:underline">{r.vehicles.plate}</Link> : null}<div className="text-muted">{r.vehicles?.model}</div></td>
                 <td className="whitespace-nowrap px-3 py-2 tabular-nums">{p ? `${dt(p.start)} → ${dt(p.end)}` : "—"}</td>
                 <td className="px-3 py-2 tabular-nums">{money(r.total, r.currency)}</td>

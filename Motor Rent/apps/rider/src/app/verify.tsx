@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
+import { normPhone, phoneLabel } from '@motor-rent/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -50,6 +51,7 @@ export default function VerifyScreen() {
   const [idType, setIdType] = useState<'national_id' | 'passport'>('national_id');
   const [idNumber, setIdNumber] = useState('');
   const [licenceNo, setLicenceNo] = useState('');
+  const [phone, setPhone] = useState('');
   const [licenceExp, setLicenceExp] = useState('');
   const [files, setFiles] = useState<Partial<Record<DocType, Picked>>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -60,13 +62,14 @@ export default function VerifyScreen() {
     const [{ data: sub }, { data: prof }] = await Promise.all([
       supabase.from('kyc_submissions').select('id, status, note, created_at').eq('profile_id', session.user.id)
         .order('created_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('profiles').select('full_name, kyc_status, licence_expires_on').eq('id', session.user.id).single(),
+      supabase.from('profiles').select('full_name, kyc_status, licence_expires_on, phone, whatsapp').eq('id', session.user.id).single(),
     ]);
     setLatest((sub as Submission | null) ?? null);
     if (prof?.kyc_status === 'approved' && prof.licence_expires_on && new Date(prof.licence_expires_on) > new Date()) {
       setVerified({ until: prof.licence_expires_on });
     }
     setFullName((n) => n || prof?.full_name || session.user.user_metadata?.full_name || '');
+    setPhone((p) => p || phoneLabel(prof?.phone ?? prof?.whatsapp ?? session.user.phone ?? ''));
   }, [session]);
 
   useEffect(() => { load(); }, [load]);
@@ -89,7 +92,8 @@ export default function VerifyScreen() {
   const dobIso = parseDate(dob);
   const expIso = parseDate(licenceExp);
   const required: DocType[] = ['licence_front', idType, 'selfie'];
-  const ready = fullName.trim().length >= 2 && !!dobIso && !!expIso && idNumber.trim().length >= 3 && licenceNo.trim().length >= 3
+  const mobile = normPhone(phone);
+  const ready = !!mobile && fullName.trim().length >= 2 && !!dobIso && !!expIso && idNumber.trim().length >= 3 && licenceNo.trim().length >= 3
     && required.every((d) => files[d]);
 
   async function submit() {
@@ -112,7 +116,7 @@ export default function VerifyScreen() {
       setBusy('Submitting…');
       const { error } = await supabase.rpc('submit_kyc', {
         p_full_name: fullName.trim(), p_date_of_birth: dobIso, p_id_type: idType, p_id_number: idNumber.trim(),
-        p_licence_number: licenceNo.trim(), p_licence_expires_on: expIso, p_docs: docs,
+        p_licence_number: licenceNo.trim(), p_licence_expires_on: expIso, p_docs: docs, p_phone: mobile,
       });
       if (error) throw new Error(friendly(error.message));
       await load();
@@ -162,6 +166,8 @@ export default function VerifyScreen() {
         <Card style={{ gap: Spacing.three }}>
           <ThemedText type="heading">Your details</ThemedText>
           <Field label="Full name (as on your ID)" value={fullName} onChangeText={setFullName} autoComplete="name" />
+          <Field label="Mobile number" value={phone} onChangeText={setPhone} placeholder="777 1234" keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber"
+            hint={phone && !mobile ? '7 digits, or with the country code (+44…) if it isn’t a Maldivian number.' : 'We call this number about your bookings. Rentals you booked without an account on this number join your account once you’re verified.'} />
           <Field label="Date of birth (DD/MM/YYYY)" value={dob} onChangeText={setDob} placeholder="21/04/1995" keyboardType="numbers-and-punctuation"
             hint={dob && !dobIso ? 'Use DD/MM/YYYY' : undefined} />
           <View style={styles.segment}>

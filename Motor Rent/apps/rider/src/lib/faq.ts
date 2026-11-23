@@ -1,7 +1,9 @@
 /** Answers to common questions, drawn from how booking actually works and the rental terms. */
 export const FAQ: { q: string; a: string }[] = [
-  { q: 'What do I need to rent?', a: 'You must be 18 or over with a driving licence whose categories cover the vehicle (A for motorcycles and scooters, B for cars). Before your first rental you upload your licence, your ID card or passport, and a selfie. We check them once.' },
-  { q: 'How do I pay?', a: 'By bank transfer. Your vehicle is held while you pay; upload the transfer slip in the app and we confirm it. Unpaid reservations expire on their own.' },
+  { q: 'What do I need to rent?', a: 'You must be 18 or over with a driving licence whose categories cover the vehicle (A for motorcycles and scooters, B for cars). With an account you upload your licence, ID card or passport, a selfie and your mobile number once; otherwise bring your licence and ID to the counter.' },
+  { q: 'Do I need an account?', a: 'No. Book with your name and mobile number and we call you to confirm and take payment. With an account you can pay by transfer in the app and see all your rentals; verify it with the same mobile number and your earlier bookings join it.' },
+  { q: 'How do I pay?', a: 'By bank transfer or at the counter. Your vehicle is held while you pay: with an account, upload the transfer slip in the app; without one, we call you. Unpaid reservations expire on their own.' },
+  { q: 'Can you deliver the vehicle?', a: 'Yes. Choose delivery on the last step and tell us where, anywhere in Kulhudhuffushi. We confirm the time when we call.' },
   { q: 'Is a helmet included?', a: 'No. Helmets aren’t required in Kulhudhuffushi, so bikes come without one. If you want one, add it when you book, for a small daily charge. (Cars don’t need one.)' },
   { q: 'Can I cancel?', a: 'Yes, at no cost, until your payment is confirmed: open the rental and tap Cancel booking. If you already sent a transfer we refund it. For a paid booking, message us from the rental.' },
   { q: 'Can I rent by the hour?', a: 'Yes, from one hour. Every started hour counts, and you never pay more than the day price for a day.' },

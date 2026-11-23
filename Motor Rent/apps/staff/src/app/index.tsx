@@ -1,3 +1,4 @@
+import { normPhone } from '@motor-rent/shared';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -18,11 +19,17 @@ export default function LookupScreen() {
     setBusy(true); setError(null);
     const q = query.trim().toUpperCase();
     let ref: string | null = null;
-    if (/^\+?\d{7,15}$/.test(q)) {
-      const { data } = await supabase.from('bookings')
-        .select('reference, profiles!inner(phone)').eq('profiles.phone', q.startsWith('+') ? q : `+${q}`)
-        .in('status', ['confirmed', 'active', 'overdue']).order('created_at', { ascending: false }).limit(1);
-      ref = (data?.[0] as { reference: string } | undefined)?.reference ?? null;
+    const phone = normPhone(q);
+    if (phone && !/^[0-9A-F]{8}$/.test(q)) {
+      // The rider's account number, or the number a booking without an account was made with.
+      const [acc, guest] = await Promise.all([
+        supabase.from('bookings').select('reference, created_at, profiles!inner(phone)').eq('profiles.phone', phone)
+          .in('status', ['confirmed', 'active', 'overdue']).order('created_at', { ascending: false }).limit(1),
+        supabase.from('bookings').select('reference, created_at').eq('guest_phone', phone)
+          .in('status', ['confirmed', 'active', 'overdue']).order('created_at', { ascending: false }).limit(1),
+      ]);
+      const hits = [...(acc.data ?? []), ...(guest.data ?? [])] as { reference: string; created_at: string }[];
+      ref = hits.sort((x, y) => y.created_at.localeCompare(x.created_at))[0]?.reference ?? null;
     } else {
       const { data } = await supabase.from('bookings').select('reference').eq('reference', q).maybeSingle();
       ref = data?.reference ?? null;

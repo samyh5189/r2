@@ -19,7 +19,7 @@ export default function BookingScreen() {
 
   useFocusEffect(useCallback(() => {
     supabase.from('bookings')
-      .select('id, reference, status, period, total, deposit, currency, vehicles(make, model, plate, odometer_km, engine_hours), profiles(full_name, phone, kyc_status, licence_expires_on)')
+      .select('id, reference, status, period, total, deposit, currency, guest_name, guest_phone, handover, delivery_address, counter_licence_categories, counter_licence_expires_on, vehicles(kind, make, model, plate, odometer_km, engine_hours), profiles(full_name, phone, kyc_status, licence_expires_on, licence_categories)')
       .eq('reference', ref).single()
       .then(({ data, error }) => { setB(data as unknown as StaffBooking); setError(error ? 'Could not load booking.' : null); });
   }, [ref]));
@@ -27,8 +27,13 @@ export default function BookingScreen() {
   if (!b) return <ThemedView style={[styles.flex, styles.body]}><ErrorText>{error}</ErrorText></ThemedView>;
 
   const range = parseRange(b.period);
-  const kycOk = b.profiles?.kyc_status === 'approved'
-    && !!b.profiles.licence_expires_on && range && new Date(b.profiles.licence_expires_on) >= range.end;
+  // Licence category this vehicle needs (A two-wheelers, B cars): verified on the account, or checked at the counter.
+  const need = b.vehicles?.kind === 'car' ? 'B' : 'A';
+  const endDay = range ? range.end.toISOString().slice(0, 10) : '';
+  const accountOk = b.profiles?.kyc_status === 'approved' && !!b.profiles.licence_expires_on && b.profiles.licence_expires_on >= endDay
+    && (b.profiles.licence_categories ?? []).includes(need);
+  const counterOk = (b.counter_licence_categories ?? []).includes(need) && !!b.counter_licence_expires_on && b.counter_licence_expires_on >= endDay;
+  const kycOk = !!range && (accountOk || counterOk);
   const canPickup = b.status === 'confirmed' && kycOk;
   const canReturn = b.status === 'active' || b.status === 'overdue';
 
@@ -43,9 +48,12 @@ export default function BookingScreen() {
           <ThemedText type="small">Paid {money(b.total, b.currency)} · Deposit {money(b.deposit, b.currency)}</ThemedText>
         </Card>
         <Card>
-          <ThemedText type="smallBold">{b.profiles?.full_name ?? 'Rider'} · {b.profiles?.phone}</ThemedText>
+          <ThemedText type="smallBold">{b.profiles?.full_name ?? b.guest_name ?? 'Rider'} · {b.profiles?.phone ?? b.guest_phone}{b.profiles ? '' : ' · no account'}</ThemedText>
+          {b.handover === 'delivery' && <ThemedText type="small">Delivery to {b.delivery_address}</ThemedText>}
           <ThemedText type="small" style={{ color: kycOk ? t.success : t.danger }}>
-            {kycOk ? `ID verified · licence valid to ${b.profiles?.licence_expires_on}` : 'ID NOT verified or licence expires during rental — do not hand over keys'}
+            {accountOk ? `ID verified · licence valid to ${b.profiles?.licence_expires_on}`
+              : counterOk ? `Licence checked at the counter (${(b.counter_licence_categories ?? []).join(', ')}) · valid to ${b.counter_licence_expires_on}`
+              : `Licence not checked for category ${need}: record the check on the booking in the admin before handing over keys`}
           </ThemedText>
         </Card>
         <View style={{ gap: Spacing.two }}>

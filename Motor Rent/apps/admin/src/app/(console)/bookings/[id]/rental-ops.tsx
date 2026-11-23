@@ -162,3 +162,74 @@ export function DepositCard({ id, deposit, currency, held, settled, canReturn, o
     </Card>
   );
 }
+
+// ── Unpaid bookings: payment taken by phone or at the counter ─────────────────────────────────────────
+
+/** Held booking: record the payment the rider made (transfer, cash or card) and confirm it, or hold longer. */
+export function ConfirmPaid({ id, total, currency, heldUntil, guest }: { id: string; total: number; currency: string; heldUntil: string | null; guest: boolean }) {
+  const { busy, error, run } = useRpc();
+  const [method, setMethod] = useState<"bank" | "cash" | "card">("bank");
+  const [amount, setAmount] = useState(major(total));
+  const [note, setNote] = useState("");
+  return (
+    <Card title="Awaiting payment" tone="warn">
+      <p className="text-sm text-muted">
+        {guest ? "Booked without an account. Call the rider to confirm, then record the payment here. " : "The rider can upload a transfer slip in the app, or you can record a payment taken another way. "}
+        {heldUntil ? `Held until ${dt(new Date(heldUntil))}; it expires after that.` : ""}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {(["bank", "cash", "card"] as const).map((m) => (
+          <button key={m} type="button" onClick={() => setMethod(m)} aria-pressed={method === m}
+            className={`rounded-full border-[1.5px] px-3 py-1.5 text-sm font-semibold ${method === m ? "border-accent bg-accent text-white" : "border-line"}`}>
+            {m === "bank" ? "Bank transfer" : m === "cash" ? "Cash" : "Card"}
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="space-y-1 text-sm"><span className="text-muted">Amount received ({currency})</span>
+          <input className={field} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+        <label className="space-y-1 text-sm"><span className="text-muted">Reference or note (optional)</span>
+          <input className={field} value={note} onChange={(e) => setNote(e.target.value)} placeholder={method === "bank" ? "Transfer reference" : ""} /></label>
+      </div>
+      <Err e={error} />
+      <div className="flex flex-wrap gap-2">
+        <button type="button" disabled={busy || toMinor(amount) < total} onClick={() => run("confirm_booking_paid", { b: id, p_method: method, p_amount: toMinor(amount), p_note: note || null })}
+          className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Paid {money(toMinor(amount), currency)}: confirm booking</button>
+        <button type="button" disabled={busy} onClick={() => run("extend_hold", { b: id, p_hours: 3 })}
+          className="rounded-xl border-[1.5px] border-line px-4 py-2 text-sm font-semibold disabled:opacity-50">Hold 3 hours longer</button>
+      </div>
+    </Card>
+  );
+}
+
+/** Before pickup, for riders without a verified account (or whose account lacks the category): check the licence in person. */
+export function CounterCheck({ id, need, needLabel, rentalEnds, done }: {
+  id: string; need: "A" | "B"; needLabel: string; rentalEnds: string; done: { categories: string[]; expires: string } | null;
+}) {
+  const { busy, error, run } = useRpc();
+  const [cats, setCats] = useState<string[]>(done?.categories ?? [need]);
+  const [expires, setExpires] = useState(done?.expires ?? "");
+  const ok = done && done.categories.includes(need) && done.expires >= rentalEnds.slice(0, 10);
+  return (
+    <Card title="Licence check at the counter" tone={ok ? undefined : "warn"}>
+      {ok ? (
+        <p className="text-sm">Checked: categories {done.categories.join(", ")}, valid until {done.expires}. The rider can be handed the vehicle.</p>
+      ) : (
+        <p className="text-sm text-muted">This rider has no verified licence for this vehicle. Look at their driving licence and ID card or passport, then record what the licence shows. It needs category {needLabel} and must be valid until the rental ends.</p>
+      )}
+      <div className="flex flex-wrap gap-4 text-sm">
+        {(["A", "B"] as const).map((c) => (
+          <label key={c} className="flex items-center gap-2">
+            <input type="checkbox" checked={cats.includes(c)} onChange={(e) => setCats(e.target.checked ? [...cats, c] : cats.filter((x) => x !== c))} />
+            {c === "A" ? "A · Motorcycle and scooter" : "B · Car"}
+          </label>
+        ))}
+      </div>
+      <label className="block max-w-xs space-y-1 text-sm"><span className="text-muted">Licence valid until</span>
+        <input className={field} type="date" value={expires} onChange={(e) => setExpires(e.target.value)} /></label>
+      <Err e={error} />
+      <button type="button" disabled={busy || !cats.length || !expires} onClick={() => run("record_counter_check", { b: id, p_categories: cats, p_licence_expires_on: expires })}
+        className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{done ? "Update licence check" : "Licence checked"}</button>
+    </Card>
+  );
+}

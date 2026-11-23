@@ -2,7 +2,7 @@
 import { quote } from "@shared/pricing.ts";
 import { QuoteRequest } from "@shared/schemas.ts";
 import { handler, HttpError, json } from "../_shared/http.ts";
-import { adminClient, parseJson, requireUser } from "../_shared/supabase.ts";
+import { adminClient, clientIp, optionalUser, parseJson, rateLimit } from "../_shared/supabase.ts";
 
 const MAX_DAYS = 30;
 const MAX_AHEAD_DAYS = 60;
@@ -12,7 +12,9 @@ const HOUR = 3_600_000;
 
 Deno.serve(handler(async (req) => {
   const db = adminClient();
-  const user = await requireUser(req, db);
+  // Visitors can price a rental too (booking without an account); they're rate limited by address.
+  const user = await optionalUser(req, db);
+  if (!user) await rateLimit(db, "quote", clientIp(req), 60, 60);
   const input = await parseJson(req, QuoteRequest);
 
   const start = new Date(input.start);
@@ -68,7 +70,7 @@ Deno.serve(handler(async (req) => {
   const { data: saved, error } = await db
     .from("quotes")
     .insert({
-      rider_id: user.id, vehicle_id: input.vehicleId, period, extras: input.extras,
+      rider_id: user?.id ?? null, vehicle_id: input.vehicleId, period, extras: input.extras,
       lines: q.lines, total: q.total, deposit: q.deposit, currency: plan.currency,
     })
     .select("id, expires_at")
