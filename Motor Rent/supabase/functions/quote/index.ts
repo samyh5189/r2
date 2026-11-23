@@ -34,7 +34,7 @@ Deno.serve(handler(async (req) => {
 
   const { data: vehicle } = await db
     .from("vehicles")
-    .select("id, status, price_plans!inner(hourly, daily, weekly, deposit, multiplier, currency, active)")
+    .select("id, status, kind, price_plans!inner(hourly, daily, weekly, deposit, multiplier, currency, active)")
     .eq("id", input.vehicleId)
     .single();
   if (!vehicle || vehicle.status !== "active") throw new HttpError(404, "VEHICLE_UNAVAILABLE", "This bike is not available.");
@@ -51,6 +51,10 @@ Deno.serve(handler(async (req) => {
   const { data: extraRows } = codes.length
     ? await db.from("extras").select("code, label, per_day, max_quantity").in("code", codes).eq("active", true)
     : { data: [] as { code: string; label: string; per_day: number; max_quantity: number }[] };
+  // Helmets are for two-wheelers only.
+  if (vehicle.kind === "car" && input.extras.some((e) => e.code === "helmet" && e.quantity > 0)) {
+    throw new HttpError(422, "EXTRA_NOT_FOR_VEHICLE", "Helmets aren't offered with cars.");
+  }
   const extras = input.extras.map((e) => {
     const row = extraRows?.find((r) => r.code === e.code);
     if (!row) throw new HttpError(422, "UNKNOWN_EXTRA", `Unknown extra: ${e.code}`);

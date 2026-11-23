@@ -4,3 +4,4 @@ export * from "./pricing.ts";
 export * from "./schemas.ts";
 export * from "./slip.ts";
 export * from "./colours.ts";
+export * from "./licence.ts";

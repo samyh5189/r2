@@ -19,7 +19,7 @@ type Picked = { uri: string; mime: string; ext: string };
 
 const DOCS: { type: DocType; label: string; hint: string; optional?: boolean; selfie?: boolean }[] = [
   { type: 'licence_front', label: 'Driving licence — front', hint: 'All four corners visible, no glare' },
-  { type: 'licence_back', label: 'Driving licence — back', hint: 'Optional', optional: true },
+  { type: 'licence_back', label: 'Driving licence — back', hint: 'Add it if your categories (A motorcycle, B car) are printed on the back', optional: true },
   { type: 'national_id', label: 'ID card', hint: 'Front side with your photo' },
   { type: 'selfie', label: 'Selfie', hint: 'Your face, clearly lit, no sunglasses', selfie: true },
 ];

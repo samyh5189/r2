@@ -6,8 +6,9 @@ import { requireStaff } from "@/lib/auth";
 import { dt, money, parseRange } from "@/lib/format";
 import { StatusBadge } from "../../status-badge";
 import { CancelBooking } from "../cancel-booking";
-import { baseRental, billableHours, lateFee } from "@motor-rent/shared";
+import { baseRental, billableHours, LICENCE_CATEGORIES, lateFee, licenceCategoryFor, licenceCovers } from "@motor-rent/shared";
 import { CloseRental } from "./close-rental";
+import { CAR_CHECKS } from "./checks";
 import { Handover } from "./handover";
 import { type Claim, DamageClaimCard, DepositCard, type Extension, ExtensionRequest, ReportDamage } from "./rental-ops";
 
@@ -21,6 +22,11 @@ const PAY: Record<string, string> = {
   charge: "Charge", deposit_hold: "Deposit taken", deposit_capture: "Deposit kept", deposit_release: "Deposit returned",
   refund: "Refund", cash: "Cash payment", bank_transfer: "Bank transfer",
 };
+function checklistSummary(c: Record<string, string> | null) {
+  if (!c) return null;
+  const issues = CAR_CHECKS.filter((x) => c[x.key] === "issue").map((x) => x.label.toLowerCase());
+  return issues.length ? `Checklist issues: ${issues.join(", ")}` : "Car checklist all OK";
+}
 function payLabel(kind: string, key: string | null) {
   if (kind !== "charge" || !key) return PAY[kind] ?? kind;
   if (key.endsWith(":late-fee")) return "Late return fee";
@@ -39,17 +45,17 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 
 type B = {
   id: string; reference: string; status: string; period: string; total: number; deposit: number; currency: string; created_at: string; rider_id: string;
-  vehicles: { id: string; plate: string; make: string; model: string; odometer_km: number; engine_hours: number | null;
+  vehicles: { id: string; kind: string; plate: string; make: string; model: string; odometer_km: number; engine_hours: number | null;
     price_plans: { late_fee_per_hour: number; late_grace_minutes: number; hourly: number; daily: number; weekly: number } | null } | null;
   branches: { name: string } | null;
-  rider: { full_name: string | null; phone: string | null; avatar_path: string | null; kyc_status: string } | null;
+  rider: { full_name: string | null; phone: string | null; avatar_path: string | null; kyc_status: string; licence_categories: string[] | null } | null;
 };
 
 async function Booking({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { db } = await requireStaff();
   const { data: b } = await db.from("bookings")
-    .select("id, reference, status, period, total, deposit, currency, created_at, rider_id, vehicles(id, plate, make, model, odometer_km, engine_hours, price_plans(late_fee_per_hour, late_grace_minutes, hourly, daily, weekly)), branches(name), rider:profiles!bookings_rider_id_fkey(full_name, phone, avatar_path, kyc_status)")
+    .select("id, reference, status, period, total, deposit, currency, created_at, rider_id, vehicles(id, kind, plate, make, model, odometer_km, engine_hours, price_plans(late_fee_per_hour, late_grace_minutes, hourly, daily, weekly)), branches(name), rider:profiles!bookings_rider_id_fkey(full_name, phone, avatar_path, kyc_status, licence_categories)")
     .eq("id", id).maybeSingle<B>();
   if (!b) return <p role="alert" className="text-red-600">Booking not found (or not at your branch).</p>;
 
@@ -57,7 +63,7 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
     db.from("booking_events").select("id, from_status, to_status, actor, note, at").eq("booking_id", id),
     db.from("booking_messages").select("id, author, from_staff, author_name, author_avatar, body, created_at").eq("booking_id", id),
     db.from("transfer_slips").select("id, path, status, amount, reject_reason, created_at, reviewed_at, reviewed_by").eq("booking_id", id),
-    db.from("inspections").select("id, phase, odometer_km, engine_hours, fuel_level, notes, staff_id, created_at, photo_paths").eq("booking_id", id),
+    db.from("inspections").select("id, phase, odometer_km, engine_hours, fuel_level, notes, staff_id, created_at, photo_paths, checklist").eq("booking_id", id),
     db.from("payments").select("id, kind, provider, amount, currency, status, recorded_by, created_at, idempotency_key, raw").eq("booking_id", id),
     db.from("damage_claims").select("items, amount, status, rider_note").eq("booking_id", id).maybeSingle<Claim>(),
     db.from("booking_extensions").select("id, new_end, status, amount, created_at").eq("booking_id", id).order("created_at"),
@@ -113,7 +119,7 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
         ...(i.engine_hours != null ? [{ field: "Engine hours", from: "", to: `${i.engine_hours} h` }] : []),
         { field: "Fuel", from: "", to: `${i.fuel_level}/8` },
       ],
-      note: i.notes,
+      note: [i.notes, checklistSummary(i.checklist as Record<string, string> | null)].filter(Boolean).join(" · ") || null,
       images: (i.photo_paths as string[]).slice(0, 4).flatMap((p) => (signed.get(p) ? [{ url: signed.get(p)!, label: `${i.phase} photo` }] : [])) });
   }
   for (const p of pays.data ?? []) {
@@ -124,6 +130,11 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
 
   const r = parseRange(b.period);
   const now = Date.now();
+  // The rider's licence must cover this vehicle (A two-wheelers, B cars), set at the ID check.
+  const need = b.vehicles ? licenceCategoryFor(b.vehicles.kind) : null;
+  const licenceProblem = need && b.rider?.kyc_status === "approved" && !licenceCovers(b.rider.licence_categories, b.vehicles!.kind)
+    ? `${riderName}'s licence is verified for ${(b.rider.licence_categories ?? []).join(", ") || "no categories"}; this vehicle needs category ${LICENCE_CATEGORIES[need].label}. If their licence has it, add it on their rider page.`
+    : null;
   const plan = b.vehicles?.price_plans;
   // Live warnings: missed pickup, and how late an overdue bike is (with the fee so far and who is waiting for it).
   const pickupMissed = b.status === "confirmed" && r && now > r.start.getTime() + 60 * 60_000;
@@ -201,7 +212,8 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
         )}
         {(b.status === "confirmed" || b.status === "active" || b.status === "overdue") && (
           <Handover bookingId={b.id} phase={b.status === "confirmed" ? "pickup" : "return"} currency={b.currency} riderName={riderName}
-            lastOdometer={b.vehicles?.odometer_km ?? null} lastEngineHours={b.vehicles?.engine_hours != null ? Number(b.vehicles.engine_hours) : null} />
+            lastOdometer={b.vehicles?.odometer_km ?? null} lastEngineHours={b.vehicles?.engine_hours != null ? Number(b.vehicles.engine_hours) : null}
+            isCar={b.vehicles?.kind === "car"} licenceProblem={licenceProblem} />
         )}
         <h2 className="text-lg font-semibold">History &amp; messages</h2>
         <MessageComposer bookingId={b.id} />

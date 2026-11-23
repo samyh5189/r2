@@ -22,12 +22,12 @@ import { changeAvatar, removeAvatar } from '@/lib/avatar';
 import { useSession } from '@/lib/session';
 import { useSiteSettings } from '@/lib/site';
 import { supabase } from '@/lib/supabase';
-import { formatMoney } from '@motor-rent/shared';
+import { formatMoney, LICENCE_CATEGORIES, type LicenceCategory } from '@motor-rent/shared';
 
 type Ride = { id: string; reference: string; status: string; period: string; vehicles: { make: string; model: string; kind: VehicleKind; photos: string[] } | null };
 const LIVE = ['held', 'confirmed', 'active', 'overdue'];
 
-type Profile = { avatar_path: string | null; full_name: string | null; phone: string | null; kyc_status: 'pending' | 'approved' | 'rejected'; licence_expires_on: string | null; whatsapp: string | null; whatsapp_verified: boolean };
+type Profile = { avatar_path: string | null; full_name: string | null; phone: string | null; kyc_status: 'pending' | 'approved' | 'rejected'; licence_expires_on: string | null; licence_categories: string[] | null; whatsapp: string | null; whatsapp_verified: boolean };
 
 
 export default function AccountScreen() {
@@ -48,7 +48,7 @@ export default function AccountScreen() {
   const load = useCallback(async () => {
     if (!session) return;
     const [p, k, bl, r] = await Promise.all([
-      supabase.from('profiles').select('avatar_path, full_name, phone, kyc_status, licence_expires_on, whatsapp, whatsapp_verified').eq('id', session.user.id).single(),
+      supabase.from('profiles').select('avatar_path, full_name, phone, kyc_status, licence_expires_on, licence_categories, whatsapp, whatsapp_verified').eq('id', session.user.id).single(),
       supabase.from('kyc_submissions').select('status, note').eq('profile_id', session.user.id)
         .order('created_at', { ascending: false }).limit(1).maybeSingle(),
       // Only ever the rider's own entry (row-level security).
@@ -103,7 +103,7 @@ export default function AccountScreen() {
   const kyc = {
     none: { pill: 'Not verified', tone: 'warning' as const, text: 'Upload your driving licence, ID and a selfie once. We review within about an hour during opening times.', cta: 'Verify my identity' },
     review: { pill: 'Under review', tone: 'warning' as const, text: 'Thanks! We’re checking your documents. You can book as soon as you’re verified.', cta: null },
-    approved: { pill: 'Verified', tone: 'success' as const, text: `Licence valid until ${profile?.licence_expires_on ?? '—'}.`, cta: null },
+    approved: { pill: 'Verified', tone: 'success' as const, text: `Licence valid until ${profile?.licence_expires_on ?? '—'}. You can rent: ${(profile?.licence_categories ?? []).map((c) => LICENCE_CATEGORIES[c as LicenceCategory]?.short.toLowerCase() + 's').filter(Boolean).join(' and ') || 'ask us to confirm your categories'}.`, cta: null },
     rejected: { pill: 'Needs attention', tone: 'danger' as const, text: submission?.note ?? 'Verification failed. Please upload clear photos again.', cta: 'Upload again' },
     expired: { pill: 'Licence expired', tone: 'danger' as const, text: 'Your licence on file has expired. Upload your renewed licence to keep booking.', cta: 'Update documents' },
   }[status];

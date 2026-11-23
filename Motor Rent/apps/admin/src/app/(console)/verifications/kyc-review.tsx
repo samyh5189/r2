@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { LICENCE_CATEGORIES, type LicenceCategory } from "@motor-rent/shared";
 import { useState } from "react";
 import { dt } from "@/lib/format";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -28,6 +29,7 @@ export function KycReview({ sub }: { sub: PendingKyc }) {
   const [expires, setExpires] = useState(sub.licenceExpires);
   const [dob, setDob] = useState(sub.dob);
   const [reason, setReason] = useState("");
+  const [cats, setCats] = useState<LicenceCategory[]>([]);
   const [rejecting, setRejecting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export function KycReview({ sub }: { sub: PendingKyc }) {
     setBusy(true); setError(null);
     const { error } = await supabase.rpc("review_kyc", {
       p_submission: sub.id, p_approve: approve, p_licence_expires_on: approve ? expires : null, p_date_of_birth: approve ? dob : null,
-      p_note: approve ? null : reason,
+      p_note: approve ? null : reason, p_categories: approve ? cats : null,
     });
     setBusy(false);
     if (error) return setError(error.message);
@@ -87,10 +89,27 @@ export function KycReview({ sub }: { sub: PendingKyc }) {
       </dl>
       <p className="text-xs text-muted">Correct the dates if they differ from the documents. The rider is approved with what you enter.</p>
 
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-semibold">Licence categories on the licence</legend>
+        <p className="text-xs text-muted">Tick every category printed on the licence. The rider can only book vehicles their categories cover.</p>
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(LICENCE_CATEGORIES) as LicenceCategory[]).map((c) => {
+            const on = cats.includes(c);
+            return (
+              <label key={c} className={`flex cursor-pointer items-center gap-2 rounded-xl border-[1.5px] px-3 py-2 text-sm transition ${on ? "border-accent bg-accent/10 font-semibold" : "border-line"}`}>
+                <input type="checkbox" checked={on} onChange={() => setCats(on ? cats.filter((x) => x !== c) : [...cats, c])} className="accent-[var(--accent)]" />
+                {LICENCE_CATEGORIES[c].label}
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
       {error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
       {!rejecting ? (
         <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={busy} onClick={() => decide(true)} className="btn btn-primary">
+          <button type="button" disabled={busy || cats.length === 0} onClick={() => decide(true)} className="btn btn-primary"
+            title={cats.length === 0 ? "Tick the licence categories first" : undefined}>
             {busy ? "…" : "Approve rider"}</button>
           <button type="button" disabled={busy} onClick={() => setRejecting(true)} className="btn btn-secondary">Reject</button>
         </div>

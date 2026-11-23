@@ -65,7 +65,7 @@ export default function BookingDetail() {
       supabase.from('payments').select('id, kind, amount, currency, status, idempotency_key').eq('booking_id', id).in('kind', ['charge', 'refund']).in('status', ['pending', 'succeeded']),
       supabase.from('booking_extensions').select('id, new_end, status, amount, reason, created_at').eq('booking_id', id).order('created_at'),
       supabase.from('damage_claims').select('items, amount, status, rider_note').eq('booking_id', id).maybeSingle(),
-      supabase.from('inspections').select('phase, photo_paths, odometer_km, fuel_level, created_at').eq('booking_id', id).order('created_at'),
+      supabase.from('inspections').select('phase, photo_paths, odometer_km, fuel_level, created_at, checklist').eq('booking_id', id).order('created_at'),
       loadMessages(),
     ]);
     setOwed((pay.data as Owed[]) ?? []);

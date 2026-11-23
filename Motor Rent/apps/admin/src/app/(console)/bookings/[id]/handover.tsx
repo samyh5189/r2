@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SignatureCanvas } from "@/components/signature-canvas";
 import { money } from "@/lib/format";
+import { CAR_CHECKS } from "./checks";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 const ANGLES = [
@@ -11,6 +12,7 @@ const ANGLES = [
   { key: "right", label: "Right side" }, { key: "dashboard", label: "Dashboard (odometer)" }, { key: "close-ups", label: "Scratches / damage" },
 ] as const;
 type Angle = (typeof ANGLES)[number]["key"];
+type Check = "ok" | "issue";
 const field = "w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none focus:border-accent";
 
 /** Shrink phone photos to ≤1600px JPEG before upload. */
@@ -27,9 +29,11 @@ async function compress(file: File): Promise<Blob> {
  * Vehicle handover (pickup) and collection (return) at the counter: 6 photos, odometer, engine running hours,
  * fuel, notes, rider + staff signatures. Same server checks as the staff app (submit-inspection).
  */
-export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineHours, riderName }: {
+export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineHours, riderName, isCar = false, licenceProblem = null }: {
   bookingId: string; phase: "pickup" | "return"; currency: string;
   lastOdometer: number | null; lastEngineHours: number | null; riderName: string;
+  /** Cars get the extra checklist. */ isCar?: boolean;
+  /** Set when the rider's licence doesn't cover this vehicle: handover is blocked. */ licenceProblem?: string | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -39,6 +43,7 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
   const [noMeter, setNoMeter] = useState(false);
   const [fuel, setFuel] = useState(8);
   const [notes, setNotes] = useState("");
+  const [checks, setChecks] = useState<Partial<Record<string, Check>>>({});
   const [riderSig, setRiderSig] = useState<string | null>(null);
   const [staffSig, setStaffSig] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -56,6 +61,8 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
     !noMeter && lastEngineHours != null && hours && hrs < lastEngineHours && `engine hours of at least ${lastEngineHours}`,
     !riderSig && "rider signature",
     !staffSig && "staff signature",
+    isCar && CAR_CHECKS.some((c) => !checks[c.key]) && "the car checklist",
+    isCar && CAR_CHECKS.some((c) => checks[c.key] === "issue") && !notes.trim() && "a note about the checklist issues",
   ].filter(Boolean) as string[];
 
   async function submit() {
@@ -88,6 +95,12 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
         const body = ctx ? await ctx.json().catch(() => null) : null;
         throw new Error(body?.error?.message ?? body?.message ?? "The server refused this inspection.");
       }
+      if (isCar) {
+        // Saved with the inspection just recorded; a failure here must not undo the handover.
+        await db.rpc("save_inspection_checklist", { b: bookingId, p_phase: phase, p_items: checks }).then(({ error }) => {
+          if (error) console.warn("checklist not saved", error.message);
+        });
+      }
       setDone(isPickup ? "Handed over. The rental is now on the road."
         : data?.lateFee ? `Collected. Returned late: collect a late fee of ${money(data.lateFee, currency)}.` : "Collected. Rental closed for inspection.");
       router.refresh();
@@ -96,6 +109,14 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
     } finally { setBusy(null); }
   }
 
+  if (isPickup && licenceProblem) {
+    return (
+      <div role="alert" className="space-y-1 rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm">
+        <p className="font-semibold">Can’t hand over: licence category missing</p>
+        <p className="text-muted">{licenceProblem}</p>
+      </div>
+    );
+  }
   if (done) return <p role="status" className="rounded-xl bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">{done}</p>;
   if (!open) {
     return (
@@ -140,6 +161,27 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
             {[8, 7, 6, 5, 4, 3, 2, 1, 0].map((n) => <option key={n} value={n}>{n === 8 ? "Full" : n === 0 ? "Empty" : n === 4 ? "Half" : `${n}/8`}</option>)}
           </select></label>
       </div>
+      {isCar && (
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-semibold">Car checklist</legend>
+          <ul className="divide-y divide-line rounded-xl border border-line">
+            {CAR_CHECKS.map((c) => (
+              <li key={c.key} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                <span>{c.label}</span>
+                <span className="flex gap-1">
+                  {(["ok", "issue"] as const).map((v) => (
+                    <button key={v} type="button" aria-pressed={checks[c.key] === v} onClick={() => setChecks((x) => ({ ...x, [c.key]: v }))}
+                      className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${checks[c.key] === v
+                        ? (v === "ok" ? "border-emerald-600 bg-emerald-600 text-white" : "border-red-600 bg-red-600 text-white") : "border-line text-muted"}`}>
+                      {v === "ok" ? "OK" : "Issue"}</button>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {CAR_CHECKS.some((c) => checks[c.key] === "issue") && <p className="text-xs text-amber-700">Describe each issue in the notes below.</p>}
+        </fieldset>
+      )}
       <label className="block space-y-1"><span className="text-xs font-medium text-muted">Notes (existing scratches, helmet count, anything agreed)</span>
         <textarea className={field} rows={2} maxLength={2000} value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
 

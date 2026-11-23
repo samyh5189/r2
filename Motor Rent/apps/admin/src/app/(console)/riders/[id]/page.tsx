@@ -5,6 +5,7 @@ import { requireStaff } from "@/lib/auth";
 import { dt, money, parseRange } from "@/lib/format";
 import { StatusBadge } from "../../status-badge";
 import { DeleteRider, EditRider } from "./edit-rider";
+import { LicenceCategories } from "./licence-categories";
 
 export const metadata = { title: "Rider" };
 
@@ -24,7 +25,7 @@ async function Rider({ params }: { params: Promise<{ id: string }> }) {
   const { db, user } = await requireStaff();
   const canEdit = user.role === "manager" || user.role === "owner";
   const { data: p } = await db.from("profiles")
-    .select("id, full_name, phone, whatsapp, whatsapp_verified, role, date_of_birth, kyc_status, licence_expires_on, avatar_path, created_at").eq("id", id).maybeSingle();
+    .select("id, full_name, phone, whatsapp, whatsapp_verified, role, date_of_birth, kyc_status, licence_expires_on, licence_categories, avatar_path, created_at").eq("id", id).maybeSingle();
   if (!p) return <p role="alert" className="text-red-600">Rider not found.</p>;
 
   const [subs, bookings, audit, blocks] = await Promise.all([
@@ -97,6 +98,9 @@ async function Rider({ params }: { params: Promise<{ id: string }> }) {
             <dt className="text-muted">Verification</dt><dd><StatusBadge status={p.kyc_status} /></dd>
             <dt className="text-muted">Date of birth</dt><dd>{p.date_of_birth ?? "—"}</dd>
             <dt className="text-muted">Licence until</dt><dd>{p.licence_expires_on ?? "—"}</dd>
+            <dt className="text-muted">May ride</dt><dd>{p.kyc_status === "approved"
+              ? <LicenceCategories rider={p.id} current={(p.licence_categories as string[] | null) ?? []} />
+              : <span className="text-muted">set when the ID check is approved</span>}</dd>
             <dt className="text-muted">WhatsApp</dt><dd>{p.whatsapp ? <a className="text-accent hover:underline" href={`https://wa.me/${p.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">{p.whatsapp}</a> : "—"}{p.whatsapp && !p.whatsapp_verified ? <span className="text-muted"> (not confirmed)</span> : null}</dd>
             <dt className="text-muted">Joined</dt><dd>{dt(new Date(p.created_at))}</dd>
             {!!bookings.data?.length && <><dt className="text-muted">Spent</dt><dd className="tabular-nums">{money((bookings.data as { status: string; total: number }[]).filter((b) => !["held", "cancelled", "expired"].includes(b.status)).reduce((a, b) => a + b.total, 0))}</dd></>}

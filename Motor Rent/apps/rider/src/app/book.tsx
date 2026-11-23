@@ -2,7 +2,7 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInRight } from 'react-native-reanimated';
-import { baseRental, billableHours } from '@motor-rent/shared';
+import { baseRental, billableHours, LICENCE_CATEGORIES, licenceCategoryFor, licenceCovers } from '@motor-rent/shared';
 
 import { DURATIONS, MAX_RENTAL_DAYS, MIN_RENTAL_HOURS, Reserved, lengthLabel } from '@/components/booking-parts';
 import { DateTimePicker, firstSlot } from '@/components/date-time-picker';
@@ -116,17 +116,21 @@ export default function BookScreen() {
   // Identity check status, shown before the last step instead of failing at "Book".
   const [kyc, setKyc] = useState<'verified' | 'pending' | 'none' | null>(null);
   const [me, setMe] = useState<{ full_name: string | null; phone: string | null; whatsapp: string | null } | null>(null);
+  const [licence, setLicence] = useState<string[] | null>(null);
   useEffect(() => {
     if (!session) return setKyc(null);
     Promise.all([
-      supabase.from('profiles').select('kyc_status, licence_expires_on, full_name, phone, whatsapp').eq('id', session.user.id).single(),
+      supabase.from('profiles').select('kyc_status, licence_expires_on, licence_categories, full_name, phone, whatsapp').eq('id', session.user.id).single(),
       supabase.from('kyc_submissions').select('status').eq('profile_id', session.user.id).eq('status', 'pending').limit(1),
     ]).then(([p, s]) => {
       setMe(p.data ? { full_name: p.data.full_name, phone: p.data.phone, whatsapp: p.data.whatsapp } : null);
+      setLicence(p.data?.kyc_status === 'approved' ? (p.data.licence_categories as string[] | null) ?? [] : null);
       const ok = p.data?.kyc_status === 'approved' && p.data.licence_expires_on && new Date(p.data.licence_expires_on) > new Date();
       setKyc(ok ? 'verified' : s.data?.length ? 'pending' : 'none');
     });
   }, [session]);
+  // A verified rider whose licence lacks this vehicle's category can't book it (the server refuses too).
+  const notCovered = !!bike && licence != null && !licenceCovers(licence, bike.kind);
 
   const here = `/book?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}${bikeId ? `&bike=${bikeId}` : ''}&helmets=${helmets}&step=${step}`;
 
@@ -278,7 +282,15 @@ export default function BookScreen() {
                   </View>
                 </>
               )}
-              {!session ? (
+              {notCovered ? (
+                <View style={{ gap: Spacing.two }}>
+                  <ThemedText style={{ color: t.danger }}>
+                    Your verified licence doesn’t include category {licenceCategoryFor(bike.kind)} ({LICENCE_CATEGORIES[licenceCategoryFor(bike.kind)].short.toLowerCase()}), which this {isCar ? 'car' : 'bike'} needs.
+                    If your licence has it, message us and we’ll add it after checking.
+                  </ThemedText>
+                  <Button variant="secondary" title="Choose another vehicle" onPress={() => go(2)} />
+                </View>
+              ) : !session ? (
                 <View style={{ gap: Spacing.two }}>
                   <ThemedText>Sign in to see your exact price and book. Your choices are kept.</ThemedText>
                   <Button title="Sign in to continue" onPress={() => router.push({ pathname: '/sign-in', params: { next: here } })} />

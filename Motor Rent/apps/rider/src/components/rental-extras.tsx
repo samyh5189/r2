@@ -15,7 +15,7 @@ type Currency = 'MVR' | 'USD';
 type Rates = { hourly: number; daily: number; weekly: number };
 export type Extension = { id: string; new_end: string; status: 'pending' | 'approved' | 'declined' | 'withdrawn'; amount: number | null; reason: string | null; created_at: string };
 export type Claim = { items: { what: string; amount: number }[]; amount: number; status: 'open' | 'disputed' | 'settled' | 'waived'; rider_note: string | null };
-export type Inspection = { phase: 'pickup' | 'return'; photo_paths: string[]; odometer_km: number; fuel_level: number; created_at: string };
+export type Inspection = { phase: 'pickup' | 'return'; photo_paths: string[]; odometer_km: number; fuel_level: number; created_at: string; checklist?: Record<string, string> | null };
 
 const friendly = (m: string) => m.replace(/^.*?ERROR:\s*/i, '').replace(/^\w/, (c) => c.toUpperCase());
 const HOUR = 3_600_000;
@@ -197,6 +197,13 @@ export function HandoverPhotos({ inspections }: { inspections: Inspection[] }) {
             <ThemedText type="small" themeColor="textSecondary">{dateTime(i.created_at)}</ThemedText>
           </View>
           <ThemedText type="small" themeColor="textSecondary">Odometer {i.odometer_km.toLocaleString()} km · fuel {i.fuel_level}/8</ThemedText>
+          {i.checklist && (
+            <ThemedText type="small" themeColor="textSecondary">
+              {Object.entries(i.checklist).some(([, v]) => v === 'issue')
+                ? `Checklist noted: ${Object.entries(i.checklist).filter(([, v]) => v === 'issue').map(([k]) => k.replace(/_/g, ' ')).join(', ')}`
+                : 'Car checklist: all OK'}
+            </ThemedText>
+          )}
           <View style={styles.grid}>
             {i.photo_paths.map((p, n) => (
               <Pressable key={p} onPress={() => setBig(big === p ? null : p)} accessibilityRole="imagebutton" accessibilityLabel={`${i.phase} photo ${n + 1}`}
