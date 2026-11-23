@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { CancelBooking } from '@/components/cancel-booking';
@@ -21,7 +21,7 @@ import { useSession } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
 
 type Booking = {
-  id: string; reference: string; status: string; period: string; total: number; deposit: number | null; currency: 'MVR' | 'USD'; created_at: string; viber_token: string;
+  id: string; reference: string; status: string; period: string; total: number; deposit: number | null; currency: 'MVR' | 'USD'; created_at: string; viber_token: string; contract_path: string | null; contract_signed_at: string | null;
   vehicles: { make: string; model: string; plate: string; kind: VehicleKind; photos: string[]; price_plans: { hourly: number; daily: number; weekly: number } | null } | null;
   branches: { name: string } | null;
 };
@@ -59,7 +59,7 @@ export default function BookingDetail() {
     if (!uid) return;
     setLoading(true);
     const [b, ev, sl, p, pay, ex, cl, ins] = await Promise.all([
-      supabase.from('bookings').select('id, reference, status, period, total, deposit, currency, created_at, viber_token, vehicles(make, model, plate, kind, photos, colour, price_plans(hourly, daily, weekly)), branches(name)').eq('id', id).maybeSingle(),
+      supabase.from('bookings').select('id, reference, status, period, total, deposit, currency, created_at, viber_token, contract_path, contract_signed_at, vehicles(make, model, plate, kind, photos, colour, price_plans(hourly, daily, weekly)), branches(name)').eq('id', id).maybeSingle(),
       supabase.from('booking_events').select('id, from_status, to_status, actor, note, at').eq('booking_id', id).order('at'),
       supabase.from('transfer_slips').select('id, status, amount, reject_reason, created_at, reviewed_at').eq('booking_id', id),
       supabase.from('profiles').select('full_name, avatar_path').eq('id', uid).single(),
@@ -204,6 +204,7 @@ export default function BookingDetail() {
             currency={booking.currency} pending={pendingExt} lastDeclined={lastDeclined} onChange={load} />
         )}
         {booking && claim && <ClaimCard bookingId={booking.id} claim={claim} currency={booking.currency} onChange={load} />}
+        {booking?.contract_path && <RentalAgreement path={booking.contract_path} signedAt={booking.contract_signed_at} reference={booking.reference} />}
         {booking && <HandoverPhotos inspections={insp} />}
 
         {booking && (
@@ -214,6 +215,34 @@ export default function BookingDetail() {
         )}
       </ScrollView>
     </ThemedView>
+  );
+}
+
+/** The rental agreement the rider signed at handover (PDF, private: a short-lived link is made on tap). */
+function RentalAgreement({ path, signedAt, reference }: { path: string; signedAt: string | null; reference: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function open() {
+    setBusy(true); setError(null);
+    // Open the tab during the tap (phones block tabs opened later), then point it at the PDF.
+    const tab = Platform.OS === 'web' ? window.open('', '_blank') : null;
+    if (tab) tab.opener = null;
+    const { data, error: e } = await supabase.storage.from('contracts').createSignedUrl(path, 600, Platform.OS === 'web' ? undefined : { download: `EasyRide-agreement-${reference}.pdf` });
+    setBusy(false);
+    if (e || !data) { tab?.close(); return setError("Couldn't open the agreement. Pull to refresh and try again."); }
+    if (tab) tab.location.href = data.signedUrl;
+    else if (Platform.OS === 'web') window.location.href = data.signedUrl;
+    else Linking.openURL(data.signedUrl);
+  }
+  return (
+    <Card style={{ gap: Spacing.two }}>
+      <ThemedText type="subtitle">Your rental agreement</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {`Signed by you and EasyRide at handover${signedAt ? ` on ${dateTime(new Date(signedAt))}` : ''}. Keep a copy: it lists the vehicle, its condition and the terms you agreed to.`}
+      </ThemedText>
+      <Button title="Open my rental agreement (PDF)" onPress={open} loading={busy} variant="secondary" />
+      <ErrorText>{error}</ErrorText>
+    </Card>
   );
 }
 

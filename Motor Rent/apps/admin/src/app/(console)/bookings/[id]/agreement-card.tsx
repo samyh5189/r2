@@ -6,9 +6,12 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 
 /** Open the signed rental agreement PDF from the stored file. */
 export async function openAgreement(path: string, download = false) {
+  // Open the tab during the tap (phones block tabs opened after a wait), then point it at the PDF.
+  const tab = download ? null : window.open("", "_blank");
+  if (tab) tab.opener = null;
   const { data, error } = await supabaseBrowser().storage.from("contracts").createSignedUrl(path, 600, download ? { download: true } : undefined);
-  if (error || !data) throw new Error("Couldn't open the agreement.");
-  window.open(data.signedUrl, "_blank", "noopener");
+  if (error || !data) { tab?.close(); throw new Error("Couldn't open the agreement."); }
+  if (tab) tab.location.href = data.signedUrl; else window.location.href = data.signedUrl;
 }
 
 /** The signed rental agreement: open, download, or make again (e.g. after the company details are filled in). */
