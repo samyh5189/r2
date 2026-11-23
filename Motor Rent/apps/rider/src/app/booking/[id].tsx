@@ -25,6 +25,7 @@ type Booking = {
 };
 type Event = { id: number; from_status: string | null; to_status: string; actor: string | null; note: string | null; at: string };
 type Slip = { id: string; status: 'pending' | 'approved' | 'rejected'; amount: number | null; reject_reason: string | null; created_at: string; reviewed_at: string | null };
+type Owed = { id: string; kind: string; amount: number; currency: 'MVR' | 'USD'; status: string; idempotency_key: string | null };
 type Message = { id: number; author: string; from_staff: boolean; author_name: string | null; author_avatar: string | null; body: string; created_at: string };
 
 const OFFICE = { name: 'Rent a Motor', mark: 'RM', staff: true, me: false };
@@ -36,6 +37,7 @@ export default function BookingDetail() {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [slips, setSlips] = useState<Slip[]>([]);
+  const [owed, setOwed] = useState<Owed[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [me, setMe] = useState<{ full_name: string | null; avatar_path: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,13 +53,15 @@ export default function BookingDetail() {
   const load = useCallback(async () => {
     if (!uid) return;
     setLoading(true);
-    const [b, ev, sl, p] = await Promise.all([
+    const [b, ev, sl, p, pay] = await Promise.all([
       supabase.from('bookings').select('id, reference, status, period, total, deposit, currency, created_at, vehicles(make, model, plate, kind, photos, colour), branches(name)').eq('id', id).maybeSingle(),
       supabase.from('booking_events').select('id, from_status, to_status, actor, note, at').eq('booking_id', id).order('at'),
       supabase.from('transfer_slips').select('id, status, amount, reject_reason, created_at, reviewed_at').eq('booking_id', id),
       supabase.from('profiles').select('full_name, avatar_path').eq('id', uid).single(),
+      supabase.from('payments').select('id, kind, amount, currency, status, idempotency_key').eq('booking_id', id).eq('kind', 'charge').eq('status', 'pending'),
       loadMessages(),
     ]);
+    setOwed((pay.data as Owed[]) ?? []);
     setError(b.error || !b.data ? 'We couldn’t find this rental.' : null);
     setBooking(b.data as unknown as Booking | null);
     setEvents((ev.data as Event[]) ?? []);
@@ -119,6 +123,7 @@ export default function BookingDetail() {
 
   const r = booking ? parseRange(booking.period) : null;
   const s = booking ? statusOf(booking.status) : null;
+  const owedTotal = owed.reduce((sum, o) => sum + o.amount, 0);
   return (
     <ThemedView style={styles.flex}>
       {pull.indicator}
@@ -149,6 +154,14 @@ export default function BookingDetail() {
                 <ThemedText type="smallBold">{money(booking.total, booking.currency)}</ThemedText>
               </View>
             </Card>
+            {booking.status === 'overdue' && r && (
+              <Notice tone="danger" title="Please bring the bike back now"
+                body={`It was due back ${dateTime(r.end)}. Each started hour late is charged at your bike’s hourly rate, up to a day’s rent for each day. Running late? Send us a message below.`} />
+            )}
+            {owedTotal > 0 && (
+              <Notice tone="warning" title={`To pay: ${money(owedTotal, owed[0]!.currency)}`}
+                body={owed.some((o) => o.idempotency_key?.endsWith(':late-fee')) ? 'Late return fee. Pay at the counter or by bank transfer; the office will mark it paid.' : 'Please pay at the counter or by bank transfer; the office will mark it paid.'} />
+            )}
             {booking.status === 'held' && (
               <View style={{ marginTop: Spacing.two }}>
                 <CancelBooking id={booking.id} reference={booking.reference} onCancelled={load} />
@@ -165,6 +178,17 @@ export default function BookingDetail() {
         )}
       </ScrollView>
     </ThemedView>
+  );
+}
+
+function Notice({ tone, title, body }: { tone: 'danger' | 'warning'; title: string; body: string }) {
+  const t = useTheme();
+  const c = tone === 'danger' ? t.danger : t.warning;
+  return (
+    <View accessibilityRole="alert" style={[styles.notice, { borderColor: c + '66', backgroundColor: c + '14' }]}>
+      <ThemedText type="smallBold" style={{ color: c, fontSize: 16 }}>{title}</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">{body}</ThemedText>
+    </View>
   );
 }
 
@@ -186,5 +210,6 @@ const styles = StyleSheet.create({
   thumb: { width: 64, height: 64, borderRadius: 14 },
   trip: { gap: Spacing.two, marginTop: Spacing.one },
   dot: { width: 8, height: 8, borderRadius: 4 },
+  notice: { borderWidth: 1, borderRadius: 14, padding: Spacing.three, gap: 4, marginTop: Spacing.two },
   footer: { borderTopWidth: 1, paddingTop: Spacing.two, marginTop: Spacing.one },
 });

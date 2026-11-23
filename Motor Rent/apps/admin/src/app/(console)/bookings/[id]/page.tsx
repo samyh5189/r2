@@ -6,6 +6,8 @@ import { requireStaff } from "@/lib/auth";
 import { dt, money, parseRange } from "@/lib/format";
 import { StatusBadge } from "../../status-badge";
 import { CancelBooking } from "../cancel-booking";
+import { lateFee } from "@motor-rent/shared";
+import { CloseRental } from "./close-rental";
 import { Handover } from "./handover";
 
 export const metadata = { title: "Booking" };
@@ -29,7 +31,8 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 
 type B = {
   id: string; reference: string; status: string; period: string; total: number; deposit: number; currency: string; created_at: string; rider_id: string;
-  vehicles: { id: string; plate: string; make: string; model: string; odometer_km: number; engine_hours: number | null } | null;
+  vehicles: { id: string; plate: string; make: string; model: string; odometer_km: number; engine_hours: number | null;
+    price_plans: { late_fee_per_hour: number; late_grace_minutes: number; daily: number } | null } | null;
   branches: { name: string } | null;
   rider: { full_name: string | null; phone: string | null; avatar_path: string | null; kyc_status: string } | null;
 };
@@ -38,7 +41,7 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { db } = await requireStaff();
   const { data: b } = await db.from("bookings")
-    .select("id, reference, status, period, total, deposit, currency, created_at, rider_id, vehicles(id, plate, make, model, odometer_km, engine_hours), branches(name), rider:profiles!bookings_rider_id_fkey(full_name, phone, avatar_path, kyc_status)")
+    .select("id, reference, status, period, total, deposit, currency, created_at, rider_id, vehicles(id, plate, make, model, odometer_km, engine_hours, price_plans(late_fee_per_hour, late_grace_minutes, daily)), branches(name), rider:profiles!bookings_rider_id_fkey(full_name, phone, avatar_path, kyc_status)")
     .eq("id", id).maybeSingle<B>();
   if (!b) return <p role="alert" className="text-red-600">Booking not found (or not at your branch).</p>;
 
@@ -110,6 +113,20 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
   }
 
   const r = parseRange(b.period);
+  const now = Date.now();
+  const plan = b.vehicles?.price_plans;
+  // Live warnings: missed pickup, and how late an overdue bike is (with the fee so far and who is waiting for it).
+  const pickupMissed = b.status === "confirmed" && r && now > r.start.getTime() + 60 * 60_000;
+  const overdueFee = b.status === "overdue" && r && plan
+    ? lateFee(r.end, new Date(now), { graceMinutes: plan.late_grace_minutes, perStartedHour: plan.late_fee_per_hour, cap: plan.daily }) : 0;
+  const lateHours = r ? Math.max(0, Math.floor((now - r.end.getTime()) / 3_600_000)) : 0;
+  const { data: nextUp } = b.status === "overdue" && b.vehicles && r
+    ? await db.from("bookings").select("id, reference, period").eq("vehicle_id", b.vehicles.id).in("status", ["held", "confirmed"])
+        .rangeGte("period", `[${r.end.toISOString()},${r.end.toISOString()}]`).order("period").limit(1).maybeSingle<{ id: string; reference: string; period: string }>()
+    : { data: null };
+  const nextRange = nextUp ? parseRange(nextUp.period) : null;
+  const pending = (pays.data ?? []).filter((p) => p.status === "pending" && p.kind === "charge");
+  const outstanding = pending.length ? pending.map((p) => money(p.amount, p.currency)).join(" + ") : null;
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
       <section className="space-y-4">
@@ -137,6 +154,20 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
         </div>
       </section>
       <section className="space-y-4">
+        {pickupMissed && (
+          <div role="status" className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+            <p className="font-semibold">Pickup missed</p>
+            <p className="text-muted">The rider was due at {dt(r!.start)}. Contact them; if they aren’t coming, cancel as a no-show so the bike is free again (refund what the policy allows).</p>
+          </div>
+        )}
+        {b.status === "overdue" && (
+          <div role="status" className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm">
+            <p className="font-semibold">Overdue by {lateHours} h{overdueFee ? ` · late fee so far ${money(overdueFee, b.currency)}` : ""}</p>
+            <p className="text-muted">Due back {r ? dt(r.end) : "—"}. The rider has been sent a WhatsApp reminder.</p>
+            {nextUp && <p className="mt-1">Next rental on this bike: <Link href={`/bookings/${nextUp.id}`} className="font-semibold underline">{nextUp.reference}</Link>{nextRange ? `, pickup ${dt(nextRange.start)}` : ""}. Warn that rider or move them to another bike.</p>}
+          </div>
+        )}
+        {(b.status === "returned" || b.status === "damage_claim") && <CloseRental id={b.id} outstanding={outstanding} />}
         {(b.status === "confirmed" || b.status === "active" || b.status === "overdue") && (
           <Handover bookingId={b.id} phase={b.status === "confirmed" ? "pickup" : "return"} currency={b.currency} riderName={riderName}
             lastOdometer={b.vehicles?.odometer_km ?? null} lastEngineHours={b.vehicles?.engine_hours != null ? Number(b.vehicles.engine_hours) : null} />

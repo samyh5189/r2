@@ -50,7 +50,9 @@ describe("lateFee", () => {
   const end = at("2027-01-01T18:00:00Z");
   it("is free inside the grace period", () => expect(lateFee(end, at("2027-01-01T18:15:00Z"), policy)).toBe(0));
   it("charges per started hour after grace", () => expect(lateFee(end, at("2027-01-01T18:16:00Z"), policy)).toBe(5_000));
-  it("is capped", () => expect(lateFee(end, at("2027-01-03T18:00:00Z"), policy)).toBe(30_000));
+  it("is capped at a day's rent for the first day", () => expect(lateFee(end, at("2027-01-02T12:00:00Z"), policy)).toBe(30_000));
+  it("keeps charging for each further day late", () => expect(lateFee(end, at("2027-01-03T18:00:00Z"), policy)).toBe(60_000));
+  it("adds started hours after whole days", () => expect(lateFee(end, at("2027-01-02T20:00:00Z"), policy)).toBe(30_000 + 2 * 5_000));
 });
 
 describe("cancellationRefund", () => {

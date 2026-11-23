@@ -104,14 +104,18 @@ export function quote(input: QuoteInput): Quote {
 export interface LateFeePolicy {
   graceMinutes: number;
   perStartedHour: Minor;
-  /** Late fee never exceeds this (e.g. one extra day). */
+  /** Most charged for any 24 hours of lateness (normally the day price). */
   cap: Minor;
 }
 
 export function lateFee(scheduledEnd: Date, actualReturn: Date, policy: LateFeePolicy): Minor {
   const lateMs = actualReturn.getTime() - scheduledEnd.getTime() - policy.graceMinutes * 60_000;
   if (lateMs <= 0) return 0;
-  return Math.min(Math.ceil(lateMs / HOUR_MS) * policy.perStartedHour, policy.cap);
+  // Every started hour counts, but each 24 hours late never costs more than the cap (a day's rent),
+  // so keeping a bike two extra days costs two days, not one.
+  const hours = Math.ceil(lateMs / HOUR_MS);
+  const days = Math.floor(hours / 24);
+  return days * policy.cap + Math.min((hours % 24) * policy.perStartedHour, policy.cap);
 }
 
 export interface CancellationPolicy {
