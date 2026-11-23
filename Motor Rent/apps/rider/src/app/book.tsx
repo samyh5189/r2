@@ -7,7 +7,7 @@ import { baseRental, billableHours, LICENCE_CATEGORIES, licenceCategoryFor, lice
 import { DURATIONS, MAX_RENTAL_DAYS, MIN_RENTAL_HOURS, Reserved, lengthLabel } from '@/components/booking-parts';
 import { DateTimePicker, firstSlot } from '@/components/date-time-picker';
 import { Plate } from '@/components/plate';
-import { BikeImage, type VehicleKind } from '@/components/photo';
+import { BikeImage, showsCutout, type VehicleKind } from '@/components/photo';
 import { BrandMark } from '@/components/brand';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -25,7 +25,7 @@ type Bike = {
   branches: { name: string } | null;
   price_plans: { hourly: number; daily: number; weekly: number; deposit: number; multiplier: number; currency: 'MVR' | 'USD' } | null;
 };
-const STEPS = ['Pickup', 'Return', 'Vehicle', 'Extras', 'Review'] as const;
+const STEPS = ['Ride', 'Pickup', 'Return', 'Vehicle', 'Extras', 'Review'] as const;
 
 /** What to call a set of vehicles: "bike(s)" or "car(s)" when they're all one kind, else "vehicle(s)". */
 function noun(list: { kind: string }[] | null | undefined, n = 2) {
@@ -41,7 +41,7 @@ const LAST = STEPS.length - 1;
  * All choices live in the URL (?start&end&bike&helmets&step) so Back, refresh and the sign-in round trip keep them.
  */
 export default function BookScreen() {
-  const params = useLocalSearchParams<{ start?: string; end?: string; bike?: string; helmets?: string; step?: string }>();
+  const params = useLocalSearchParams<{ start?: string; end?: string; bike?: string; helmets?: string; step?: string; type?: string }>();
   const { session } = useSession();
   const t = useTheme();
   const { width } = useWindowDimensions();
@@ -52,7 +52,6 @@ export default function BookScreen() {
   const endParam = params.end ? new Date(params.end) : null;
   const end = endParam && +endParam > +start ? endParam : new Date(+start + 24 * 3_600_000);
   const hours = Math.round((+end - +start) / 3_600_000);
-  const step = Math.min(LAST, Math.max(0, Number(params.step ?? 0) || 0));
   const bikeId = params.bike ?? null;
   const askedHelmets = Math.min(2, Math.max(0, Number(params.helmets ?? 0) || 0));
 
@@ -90,6 +89,18 @@ export default function BookScreen() {
   // Helmets are for two-wheelers; a car never carries one into the quote.
   const isCar = bike?.kind === 'car';
   const helmets = isCar ? 0 : askedHelmets;
+
+  // Bike or car: asked first when the fleet has both (skipped when a vehicle was already picked).
+  const kindOf = (v: { kind: string }) => (v.kind === 'car' ? 'car' : 'bike');
+  const hasBoth = !!bikes && new Set(bikes.map(kindOf)).size > 1;
+  const type: 'bike' | 'car' | null = params.type === 'car' || params.type === 'bike' ? params.type : bike ? kindOf(bike) : null;
+  const firstStep = hasBoth && !(bike && !params.type) ? 0 : 1;
+  const asked = Math.min(LAST, Math.max(firstStep, Number(params.step ?? 0) || 0));
+  // Until the fleet loads we don't know if there's a choice to make: hold on the first screen.
+  const step = (!bikes && !type && !params.bike) || (hasBoth && !type) ? 0 : asked;
+  // Only the chosen kind is offered from here on.
+  const shown = bikes && type ? bikes.filter((b) => kindOf(b) === type) : bikes;
+  const pickType = (k: 'bike' | 'car') => set({ type: k, step: '1', ...(bike && kindOf(bike) !== k ? { bike: undefined } : {}) });
   // Helmets are an optional extra (none come with the bike); show the daily price on the extras step.
   const [helmetPrice, setHelmetPrice] = useState<number | null>(null);
   useEffect(() => {
@@ -110,7 +121,7 @@ export default function BookScreen() {
   const [result, setResult] = useState<CreateBookingResponse | null>(null);
   useEffect(() => { setQuote(null); setAccepted(false); }, [startIso, endIso, bikeId, helmets]);
   useEffect(() => {
-    if (step < 3 || !bikeId || !session || quote) return;
+    if (step < 4 || !bikeId || !session || quote) return;
     let live = true;
     setQuoting(true); setError(null);
     callFunction<QuoteResponse>('quote', { vehicleId: bikeId, start: startIso, end: endIso, extras: helmets ? [{ code: 'helmet', quantity: helmets }] : [] })
@@ -163,13 +174,13 @@ export default function BookScreen() {
   const price = quote ? money(quote.total, quote.currency)
     : bike && estimate(bike) != null ? money(estimate(bike)!, bike.price_plans!.currency) : null;
   const firstName = me?.full_name?.trim().split(/\s+/)[0];
-  const freeCount = free?.size ?? 0;
-  const freeList = bikes && free ? bikes.filter((b) => free.has(b.id)) : null;
+  const freeCount = shown && free ? shown.filter((b) => free.has(b.id)).length : 0;
+  const freeList = shown && free ? shown.filter((b) => free.has(b.id)) : null;
 
   /** One screen = one question: a short lead line, a big question, the answer, one button. */
   const screen = (lead: string, question: string, body: React.ReactNode) => (
     <Animated.View key={step} entering={FadeInRight.duration(240)} style={styles.stepBody}>
-      {step > 0 && (
+      {step > firstStep && (
         <Pressable onPress={() => go(step - 1)} accessibilityRole="button" hitSlop={8} style={{ alignSelf: 'flex-start' }}>
           <ThemedText type="smallBold" themeColor="accent">‹ Back</ThemedText>
         </Pressable>
@@ -195,11 +206,11 @@ export default function BookScreen() {
           <View style={styles.connector}>
             <View style={[styles.dot, { backgroundColor: t.accent }]} />
             <View style={[styles.connLine, { backgroundColor: t.accent }]} />
-            <View style={[styles.dot, { backgroundColor: step >= 1 ? t.accent : t.border }]} />
+            <View style={[styles.dot, { backgroundColor: step >= 2 ? t.accent : t.border }]} />
           </View>
-          <View style={{ alignItems: 'flex-end' }}><ThemedText type="small" themeColor="textSecondary">Return</ThemedText><ThemedText type="smallBold">{step >= 1 ? dateTime(end) : '—'}</ThemedText></View>
+          <View style={{ alignItems: 'flex-end' }}><ThemedText type="small" themeColor="textSecondary">Return</ThemedText><ThemedText type="smallBold">{step >= 2 ? dateTime(end) : '—'}</ThemedText></View>
         </View>
-        <ThemedText type="small" themeColor="textSecondary">{step >= 1 ? lengthLabel(hours) : 'Return time next'}{step >= 3 && !isCar ? (helmets ? `, ${helmets} helmet${helmets > 1 ? 's' : ''}` : ', no helmet') : ''}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">{step >= 2 ? lengthLabel(hours) : 'Return time next'}{step >= 4 && !isCar ? (helmets ? `, ${helmets} helmet${helmets > 1 ? 's' : ''}` : ', no helmet') : ''}</ThemedText>
       </View>
       <View style={[styles.ticketPad, styles.dashed, styles.rowBetween, { borderColor: t.border }]}>
         <View style={styles.flex}><ThemedText type="small" themeColor="textSecondary">Rider</ThemedText><ThemedText type="smallBold">{me?.full_name || (session ? '—' : 'Sign in at the extras step')}</ThemedText></View>
@@ -223,28 +234,55 @@ export default function BookScreen() {
           <BrandMark size={30} />
           <ThemedText type="smallBold" style={{ fontSize: 17 }}>EasyRide</ThemedText>
         </Pressable>
-        <ThemedText type="small" themeColor="textSecondary" style={{ marginLeft: 'auto' }}>{step + 1} of {STEPS.length}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" style={{ marginLeft: 'auto' }}>{step - firstStep + 1} of {STEPS.length - firstStep}</ThemedText>
         <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} accessibilityRole="button" accessibilityLabel="Close booking" hitSlop={10} style={styles.close}>
           <ThemedText style={{ fontSize: 24, lineHeight: 26 }}>×</ThemedText>
         </Pressable>
       </View>
-      <View style={[styles.progress, { backgroundColor: t.border }]} accessibilityRole="progressbar" accessibilityValue={{ min: 1, max: STEPS.length, now: step + 1 }}>
-        <View style={{ width: `${((step + 1) / STEPS.length) * 100}%`, height: '100%', backgroundColor: t.accent }} />
+      <View style={[styles.progress, { backgroundColor: t.border }]} accessibilityRole="progressbar" accessibilityValue={{ min: 1, max: STEPS.length - firstStep, now: step - firstStep + 1 }}>
+        <View style={{ width: `${((step - firstStep + 1) / (STEPS.length - firstStep)) * 100}%`, height: '100%', backgroundColor: t.accent }} />
       </View>
 
       <ScrollView contentContainerStyle={[styles.scroll, wide && styles.scrollWide]} keyboardShouldPersistTaps="handled">
         <View style={[styles.main, wide && { flex: 1 }]}>
-          {step === 0 && screen(
+          {step === 0 && hasBoth && screen(
             firstName ? `Hi ${firstName}, let’s get you riding. It takes about a minute.` : 'Let’s get you riding. It takes about a minute.',
+            'What would you like to ride?',
+            <View style={[styles.kindRow, wide && { flexDirection: 'row' }]}>
+              {(['bike', 'car'] as const).map((k) => {
+                const list = (bikes ?? []).filter((b) => kindOf(b) === k);
+                const pic = list.find((b) => showsCutout(b)) ?? list[0];
+                const from = Math.min(...list.map((b) => b.price_plans?.daily ?? Infinity));
+                const blocked = licence != null && !licenceCovers(licence, k === 'car' ? 'car' : 'motorbike');
+                const on = type === k;
+                return (
+                  <Pressable key={k} onPress={() => pickType(k)} accessibilityRole="radio" accessibilityState={{ checked: on }}
+                    style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.kindCard, { borderColor: on || hovered ? t.accent : t.border, backgroundColor: t.backgroundElement, opacity: pressed ? 0.85 : 1 }]}>
+                    {pic && <BikeImage vehicle={pic} style={styles.kindPic} />}
+                    <ThemedText type="heading">{k === 'car' ? 'A car' : 'A bike'}</ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {k === 'car' ? 'For passengers and longer trips.' : 'Scooters and motorbikes, easy to park.'}
+                      {Number.isFinite(from) ? ` From ${money(from, list[0]?.price_plans?.currency ?? 'MVR')} a day.` : ''}
+                    </ThemedText>
+                    {blocked && <ThemedText type="small" style={{ color: t.danger }}>Your verified licence doesn’t include category {k === 'car' ? 'B' : 'A'} yet.</ThemedText>}
+                  </Pressable>
+                );
+              })}
+            </View>,
+          )}
+          {step === 0 && !bikes && <ActivityIndicator color={t.accent} />}
+
+          {step === 1 && screen(
+            type ? `${type === 'car' ? 'A car' : 'A bike'}, good.` : firstName ? `Hi ${firstName}, let’s get you riding. It takes about a minute.` : 'Let’s get you riding. It takes about a minute.',
             'When do you want to pick up?',
             <>
               <DateTimePicker value={start} onChange={setStart} min={earliest} days={MAX_RENTAL_DAYS} />
               <ThemedText type="small" themeColor="textSecondary">Our counter is open 07:00 to 22:00.</ThemedText>
-              <Button title="Continue" onPress={() => go(1)} />
+              <Button title="Continue" onPress={() => go(2)} />
             </>,
           )}
 
-          {step === 1 && screen(
+          {step === 2 && screen(
             `Pickup ${dateTime(start)}.`,
             'When will you bring it back?',
             <>
@@ -254,24 +292,24 @@ export default function BookScreen() {
                 ))}
               </View>
               <DateTimePicker value={end} onChange={(d) => set({ end: d.toISOString() })} min={minEnd} days={MAX_RENTAL_DAYS + 1} />
-              <Button title={free == null ? `See available ${noun(bikes)}` : freeCount ? `See ${freeCount} available ${noun(freeList, freeCount)}` : `See ${noun(bikes)}`}
-                onPress={() => go(2)} disabled={hours > MAX_RENTAL_DAYS * 24} />
+              <Button title={free == null ? `See available ${noun(shown)}` : freeCount ? `See ${freeCount} available ${noun(freeList, freeCount)}` : `See ${noun(shown)}`}
+                onPress={() => go(3)} disabled={hours > MAX_RENTAL_DAYS * 24} />
             </>,
           )}
 
-          {step === 2 && screen(
+          {step === 3 && screen(
             `${dateTime(start)} to ${dateTime(end)}.`,
-            freeList && noun(freeList) === 'vehicles' ? 'What would you like to ride?' : `Which ${noun(freeList ?? bikes, 1)} would you like?`,
+            `Which ${noun(freeList?.length ? freeList : shown, 1)} would you like?`,
             !bikes || !free ? <ActivityIndicator color={t.accent} /> : (
-              <BikeList bikes={bikes} free={free} selected={bikeId} estimate={estimate}
+              <BikeList bikes={shown!} free={free} selected={bikeId} estimate={estimate}
                 nextFree={(b) => (busy ? nextFree(busy.filter((w) => w.id === b.id), start, +end - +start) : null)}
-                onPick={(id) => set({ bike: id, step: '3' })}
-                onPickAt={(id, s) => set({ bike: id, start: s.toISOString(), end: new Date(+s + (+end - +start)).toISOString(), step: '3' })}
-                onChangeTimes={() => go(0)} />
+                onPick={(id) => set({ bike: id, step: '4' })}
+                onPickAt={(id, s) => set({ bike: id, start: s.toISOString(), end: new Date(+s + (+end - +start)).toISOString(), step: '4' })}
+                onChangeTimes={() => go(1)} />
             ),
           )}
 
-          {step === 3 && bike && screen(
+          {step === 4 && bike && screen(
             `${bike.make} ${bike.model}, good choice.`,
             isCar ? 'Ready for your price?' : 'Would you like a helmet?',
             <>
@@ -296,7 +334,7 @@ export default function BookScreen() {
                     Your verified licence doesn’t include category {licenceCategoryFor(bike.kind)} ({LICENCE_CATEGORIES[licenceCategoryFor(bike.kind)].short.toLowerCase()}), which this {isCar ? 'car' : 'bike'} needs.
                     If your licence has it, message us and we’ll add it after checking.
                   </ThemedText>
-                  <Button variant="secondary" title="Choose another vehicle" onPress={() => go(2)} />
+                  <Button variant="secondary" title="Choose another vehicle" onPress={() => go(3)} />
                 </View>
               ) : !session ? (
                 <View style={{ gap: Spacing.two }}>
@@ -304,13 +342,13 @@ export default function BookScreen() {
                   <Button title="Sign in to continue" onPress={() => router.push({ pathname: '/sign-in', params: { next: here } })} />
                 </View>
               ) : (
-                <Button title={quoting ? 'Getting your price…' : 'Continue'} onPress={() => go(4)} disabled={!quote} loading={quoting} />
+                <Button title={quoting ? 'Getting your price…' : 'Continue'} onPress={() => go(5)} disabled={!quote} loading={quoting} />
               )}
               <ErrorText>{error}</ErrorText>
             </>,
           )}
 
-          {step === 4 && bike && screen(
+          {step === 5 && bike && screen(
             'Last step.',
             'Check and book.',
             <>
@@ -349,10 +387,10 @@ export default function BookScreen() {
             </>,
           )}
 
-          {step >= 3 && !bike && bikes && (
+          {step >= 4 && !bike && bikes && (
             <Card style={{ gap: Spacing.two }}>
               <ThemedText>Choose what you’d like to ride first.</ThemedText>
-              <Button variant="secondary" title={`Pick a ${noun(bikes, 1)}`} onPress={() => go(2)} />
+              <Button variant="secondary" title={`Pick a ${noun(bikes, 1)}`} onPress={() => go(3)} />
             </Card>
           )}
 
@@ -490,6 +528,9 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   choice: { borderWidth: 1.5, borderRadius: Radius.md, paddingHorizontal: Spacing.three, paddingVertical: 12, minHeight: 48, justifyContent: 'center' },
   bike: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, padding: Spacing.two, borderRadius: Radius.md, borderWidth: 1.5 },
+  kindRow: { gap: Spacing.three },
+  kindCard: { flex: 1, borderWidth: 1.5, borderRadius: 18, padding: Spacing.three, gap: Spacing.one },
+  kindPic: { width: '100%', height: 140, borderRadius: 12 },
   bikePhoto: { width: 128, height: 96, borderRadius: Radius.sm },
   line: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.two },
   totalLine: { borderTopWidth: 1, paddingTop: Spacing.two, marginTop: Spacing.one },
