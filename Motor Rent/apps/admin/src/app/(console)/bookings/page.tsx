@@ -79,7 +79,7 @@ async function BookingsTable() {
                 <td className="space-y-1 px-3 py-2">
                   {r.status === "confirmed" && <Link href={`/bookings/${r.id}#handover`} className="block whitespace-nowrap text-xs font-semibold text-accent hover:underline">Hand over</Link>}
                   {(r.status === "active" || r.status === "overdue") && <Link href={`/bookings/${r.id}#handover`} className="block whitespace-nowrap text-xs font-semibold text-accent hover:underline">Collect</Link>}
-                  {(r.status === "held" || r.status === "confirmed") && <CancelBooking id={r.id} reference={r.reference} paid={r.status === "confirmed"} />}
+                  {(r.status === "held" || r.status === "confirmed") && <CancelBooking id={r.id} reference={r.reference} paid={r.status === "confirmed"} total={r.total} currency={r.currency} start={parseRange(r.period)?.start.toISOString()} />}
                 </td>
               </tr>
             );

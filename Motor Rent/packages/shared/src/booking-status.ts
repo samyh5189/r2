@@ -19,7 +19,7 @@ export const TRANSITIONS: Readonly<Record<BookingStatus, readonly BookingStatus[
   held: ["confirmed", "expired", "cancelled"],
   confirmed: ["active", "cancelled"],
   active: ["overdue", "returned"],
-  overdue: ["returned"],
+  overdue: ["active", "returned"], // back to active when staff approve an extension
   returned: ["damage_claim", "closed"],
   damage_claim: ["closed"],
   closed: [],

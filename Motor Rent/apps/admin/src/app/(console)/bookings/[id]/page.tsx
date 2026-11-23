@@ -6,9 +6,10 @@ import { requireStaff } from "@/lib/auth";
 import { dt, money, parseRange } from "@/lib/format";
 import { StatusBadge } from "../../status-badge";
 import { CancelBooking } from "../cancel-booking";
-import { lateFee } from "@motor-rent/shared";
+import { baseRental, billableHours, lateFee } from "@motor-rent/shared";
 import { CloseRental } from "./close-rental";
 import { Handover } from "./handover";
+import { type Claim, DamageClaimCard, DepositCard, type Extension, ExtensionRequest, ReportDamage } from "./rental-ops";
 
 export const metadata = { title: "Booking" };
 
@@ -17,9 +18,16 @@ const STAGE: Record<string, string> = {
   damage_claim: "Damage review", closed: "Completed", expired: "Expired", cancelled: "Cancelled",
 };
 const PAY: Record<string, string> = {
-  charge: "Card charge", deposit_hold: "Deposit hold", deposit_capture: "Deposit captured", deposit_release: "Deposit released",
+  charge: "Charge", deposit_hold: "Deposit taken", deposit_capture: "Deposit kept", deposit_release: "Deposit returned",
   refund: "Refund", cash: "Cash payment", bank_transfer: "Bank transfer",
 };
+function payLabel(kind: string, key: string | null) {
+  if (kind !== "charge" || !key) return PAY[kind] ?? kind;
+  if (key.endsWith(":late-fee")) return "Late return fee";
+  if (key.endsWith(":damage")) return "Damage charge";
+  if (key.includes(":ext:")) return "Extra time";
+  return PAY.charge;
+}
 
 export default function BookingPage({ params }: { params: Promise<{ id: string }> }) {
   return (
@@ -32,7 +40,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 type B = {
   id: string; reference: string; status: string; period: string; total: number; deposit: number; currency: string; created_at: string; rider_id: string;
   vehicles: { id: string; plate: string; make: string; model: string; odometer_km: number; engine_hours: number | null;
-    price_plans: { late_fee_per_hour: number; late_grace_minutes: number; daily: number } | null } | null;
+    price_plans: { late_fee_per_hour: number; late_grace_minutes: number; hourly: number; daily: number; weekly: number } | null } | null;
   branches: { name: string } | null;
   rider: { full_name: string | null; phone: string | null; avatar_path: string | null; kyc_status: string } | null;
 };
@@ -41,16 +49,18 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { db } = await requireStaff();
   const { data: b } = await db.from("bookings")
-    .select("id, reference, status, period, total, deposit, currency, created_at, rider_id, vehicles(id, plate, make, model, odometer_km, engine_hours, price_plans(late_fee_per_hour, late_grace_minutes, daily)), branches(name), rider:profiles!bookings_rider_id_fkey(full_name, phone, avatar_path, kyc_status)")
+    .select("id, reference, status, period, total, deposit, currency, created_at, rider_id, vehicles(id, plate, make, model, odometer_km, engine_hours, price_plans(late_fee_per_hour, late_grace_minutes, hourly, daily, weekly)), branches(name), rider:profiles!bookings_rider_id_fkey(full_name, phone, avatar_path, kyc_status)")
     .eq("id", id).maybeSingle<B>();
   if (!b) return <p role="alert" className="text-red-600">Booking not found (or not at your branch).</p>;
 
-  const [ev, msgs, slips, insp, pays] = await Promise.all([
+  const [ev, msgs, slips, insp, pays, claimRes, extRes] = await Promise.all([
     db.from("booking_events").select("id, from_status, to_status, actor, note, at").eq("booking_id", id),
     db.from("booking_messages").select("id, author, from_staff, author_name, author_avatar, body, created_at").eq("booking_id", id),
     db.from("transfer_slips").select("id, path, status, amount, reject_reason, created_at, reviewed_at, reviewed_by").eq("booking_id", id),
     db.from("inspections").select("id, phase, odometer_km, engine_hours, fuel_level, notes, staff_id, created_at, photo_paths").eq("booking_id", id),
-    db.from("payments").select("id, kind, provider, amount, currency, status, recorded_by, created_at").eq("booking_id", id),
+    db.from("payments").select("id, kind, provider, amount, currency, status, recorded_by, created_at, idempotency_key, raw").eq("booking_id", id),
+    db.from("damage_claims").select("items, amount, status, rider_note").eq("booking_id", id).maybeSingle<Claim>(),
+    db.from("booking_extensions").select("id, new_end, status, amount, created_at").eq("booking_id", id).order("created_at"),
   ]);
 
   // Names for everyone who acted on this booking.
@@ -109,7 +119,7 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
   for (const p of pays.data ?? []) {
     entries.push({ key: `p${p.id}`, at: new Date(p.created_at), who: who(p.recorded_by), kind: "log",
       tone: p.status === "succeeded" ? "success" : p.status === "failed" ? "danger" : "warning",
-      title: `${PAY[p.kind] ?? p.kind} · ${money(p.amount, p.currency)} · ${p.status}${p.provider === "manual" ? " (collect in person)" : ""}` });
+      title: `${payLabel(p.kind, p.idempotency_key)} · ${money(p.amount, p.currency)} · ${(p.raw as { paid_from?: string } | null)?.paid_from === "deposit" ? "paid from deposit" : p.status}${p.provider === "manual" && p.status === "pending" ? (p.kind === "refund" ? " (pay back to the rider)" : " (collect in person)") : ""}` });
   }
 
   const r = parseRange(b.period);
@@ -127,6 +137,19 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
   const nextRange = nextUp ? parseRange(nextUp.period) : null;
   const pending = (pays.data ?? []).filter((p) => p.status === "pending" && p.kind === "charge");
   const outstanding = pending.length ? pending.map((p) => money(p.amount, p.currency)).join(" + ") : null;
+  const owed = pending.reduce((s, p) => s + p.amount, 0);
+  const claim = claimRes.data;
+  const exts = (extRes.data ?? []) as Extension[];
+  const ask = exts.find((e) => e.status === "pending");
+  // Price for the extra time: the whole rental at the new length, less what the current length costs.
+  const askPrice = ask && r && plan
+    ? Math.max(0, baseRental(billableHours(r.start, new Date(ask.new_end)), plan) - baseRental(billableHours(r.start, r.end), plan)) : 0;
+  const payKey = (k: string) => (pays.data ?? []).find((p) => p.idempotency_key === `${b.id}:${k}` && p.status === "succeeded");
+  const depHeld = payKey("deposit");
+  const depBack = payKey("deposit-back"); const depKept = payKey("deposit-kept");
+  const depSettled = depBack || depKept
+    ? `Returned ${money(depBack?.amount ?? 0, b.currency)}${depKept ? `, kept ${money(depKept.amount, b.currency)}` : ""}.` : null;
+  const back = ["returned", "damage_claim", "closed", "cancelled"].includes(b.status);
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
       <section className="space-y-4">
@@ -149,7 +172,7 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
             <dt className="text-muted">Booked</dt><dd className="tabular-nums">{dt(new Date(b.created_at))}</dd>
           </dl>
           {(b.status === "held" || b.status === "confirmed") && (
-            <div className="border-t border-line pt-3"><CancelBooking id={b.id} reference={b.reference} paid={b.status === "confirmed"} /></div>
+            <div className="border-t border-line pt-3"><CancelBooking id={b.id} reference={b.reference} paid={b.status === "confirmed"} total={b.total} currency={b.currency} start={r?.start.toISOString()} /></div>
           )}
         </div>
       </section>
@@ -157,7 +180,8 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
         {pickupMissed && (
           <div role="status" className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
             <p className="font-semibold">Pickup missed</p>
-            <p className="text-muted">The rider was due at {dt(r!.start)}. Contact them; if they aren’t coming, cancel as a no-show so the bike is free again (refund what the policy allows).</p>
+            <p className="text-muted">The rider was due at {dt(r!.start)}. Contact them; if they aren’t coming, cancel as a no-show so the bike is free again. The refund follows the policy (nothing after pickup time); raise it if the delay was ours.</p>
+            <div className="mt-2"><CancelBooking id={b.id} reference={b.reference} paid total={b.total} currency={b.currency} start={r!.start.toISOString()} defaultReason="No-show" label="Cancel as no-show" /></div>
           </div>
         )}
         {b.status === "overdue" && (
@@ -167,7 +191,14 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
             {nextUp && <p className="mt-1">Next rental on this bike: <Link href={`/bookings/${nextUp.id}`} className="font-semibold underline">{nextUp.reference}</Link>{nextRange ? `, pickup ${dt(nextRange.start)}` : ""}. Warn that rider or move them to another bike.</p>}
           </div>
         )}
-        {(b.status === "returned" || b.status === "damage_claim") && <CloseRental id={b.id} outstanding={outstanding} />}
+        {ask && r && <ExtensionRequest ext={ask} currentEnd={r.end.toISOString()} quoted={askPrice} currency={b.currency} />}
+        {claim && <DamageClaimCard id={b.id} claim={claim} currency={b.currency} />}
+        {(b.status === "returned" || (b.status === "damage_claim" && claim && claim.status !== "open" && claim.status !== "disputed")) && <CloseRental id={b.id} outstanding={outstanding} />}
+        {b.status === "returned" && !claim && <ReportDamage id={b.id} currency={b.currency} />}
+        {b.deposit > 0 && b.status !== "held" && b.status !== "expired" && (b.status !== "cancelled" || depHeld) && (
+          <DepositCard id={b.id} deposit={b.deposit} currency={b.currency} held={depHeld ? { provider: depHeld.provider } : null}
+            settled={depSettled} canReturn={back} owed={owed} />
+        )}
         {(b.status === "confirmed" || b.status === "active" || b.status === "overdue") && (
           <Handover bookingId={b.id} phase={b.status === "confirmed" ? "pickup" : "return"} currency={b.currency} riderName={riderName}
             lastOdometer={b.vehicles?.odometer_km ?? null} lastEngineHours={b.vehicles?.engine_hours != null ? Number(b.vehicles.engine_hours) : null} />

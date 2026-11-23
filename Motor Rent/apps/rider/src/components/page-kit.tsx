@@ -7,7 +7,7 @@ import Animated, {
 
 import { BottomTabInset, Fonts, Spacing, TopNavInset } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { useSiteSettings } from '@/lib/site';
+import { clockLabel, useCounter, useSiteSettings } from '@/lib/site';
 
 import { BrandMark } from './brand';
 import { ArrowRightIcon, ChevronDownIcon } from './icons';
@@ -26,10 +26,9 @@ export const redLine = (color: string): ViewStyle =>
   (web ? { backgroundImage: `linear-gradient(90deg, ${color}, ${color}99)` } : { backgroundColor: color }) as ViewStyle;
 
 /** Counter opening hours (Maldives time, every day), as in the rental terms. */
-export const OPENING = { open: 7, close: 22, label: '07:00 – 22:00' };
-export function isOpenNow(now = new Date()) {
+export function isOpenNow(now: Date, hours: { open: number; close: number }) {
   const h = (now.getUTCHours() + 5) % 24 + now.getUTCMinutes() / 60;
-  return h >= OPENING.open && h < OPENING.close;
+  return h >= hours.open && h < hours.close;
 }
 export const whatsappUrl = (phone: string) => `https://wa.me/${phone.replace(/\D/g, '').replace(/^(\d{7})$/, '960$1')}`;
 
@@ -245,7 +244,9 @@ export function Question({ q, a, first, defaultOpen = false }: { q: string; a: s
 export function OpenNow({ light = false }: { light?: boolean }) {
   const t = useTheme();
   const reduce = useReducedMotion();
-  const [open] = useState(isOpenNow);
+  const counter = useCounter();
+  const [now] = useState(() => new Date());
+  const open = isOpenNow(now, counter);
   const p = useSharedValue(0);
   useEffect(() => {
     if (open && !reduce) p.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.bezier(0, 0, 0.58, 1) }), -1, false);
@@ -258,7 +259,7 @@ export function OpenNow({ light = false }: { light?: boolean }) {
         {open && <Animated.View style={[StyleSheet.absoluteFill, styles.dotHalo, { backgroundColor: dot }, halo]} />}
       </View>
       <ThemedText style={{ fontSize: 15, fontWeight: '600', color: light ? 'rgba(255,255,255,0.92)' : t.textSecondary }}>
-        {open ? `Open now · until ${String(OPENING.close).padStart(2, '0')}:00` : `Closed now · opens ${String(OPENING.open).padStart(2, '0')}:00`}
+        {open ? `Open now · until ${clockLabel(counter.close)}` : `Closed now · opens ${clockLabel(counter.open)}`}
       </ThemedText>
     </View>
   );
@@ -273,6 +274,7 @@ const FOOT: { title: string; links: { label: string; href: Href }[] }[] = [
 export function SiteFooter() {
   const t = useTheme();
   const site = useSiteSettings();
+  const counter = useCounter();
   const { width } = useWindowDimensions();
   const wide = width >= 900;
   const gutter = width >= 640 ? Spacing.five : Spacing.three;
@@ -304,8 +306,8 @@ export function SiteFooter() {
         ))}
         <View style={[styles.footCol, wide && { flex: 1.2 }]}>
           <ThemedText style={[styles.footHead, { color: t.textSecondary }]}>Opening hours</ThemedText>
-          <ThemedText style={{ fontSize: 15, lineHeight: 22, color: t.text }}>Every day{'\n'}{OPENING.label}</ThemedText>
-          <ThemedText themeColor="textSecondary" style={{ fontSize: 14, lineHeight: 21, marginTop: Spacing.one }}>Counter in Kulhudhuffushi, Haa Dhaalu Atoll</ThemedText>
+          <ThemedText style={{ fontSize: 15, lineHeight: 22, color: t.text }}>Every day{'\n'}{counter.label}</ThemedText>
+          <ThemedText themeColor="textSecondary" style={{ fontSize: 14, lineHeight: 21, marginTop: Spacing.one }}>{counter.address}</ThemedText>
         </View>
       </View>
       <View style={[styles.footBase, { borderColor: t.border, paddingHorizontal: gutter }]}>

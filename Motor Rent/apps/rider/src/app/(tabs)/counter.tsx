@@ -5,12 +5,12 @@ import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, w
 
 import { ClockIcon, PinIcon } from '@/components/icons';
 import { IslandMap } from '@/components/island-map';
-import { ArrowLink, OPENING, OpenNow, Page, PageHead, Panel, pageStyles, Reveal, whatsappUrl } from '@/components/page-kit';
+import { ArrowLink, OpenNow, Page, PageHead, Panel, pageStyles, Reveal, whatsappUrl } from '@/components/page-kit';
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { useSiteSettings } from '@/lib/site';
+import { useCounter, useSiteSettings } from '@/lib/site';
 import { supabase } from '@/lib/supabase';
 
 type Branch = { name: string; address: string | null; lat: number | null; lng: number | null };
@@ -19,6 +19,7 @@ type Branch = { name: string; address: string | null; lat: number | null; lng: n
 export default function CounterScreen() {
   const t = useTheme();
   const site = useSiteSettings();
+  const counter = useCounter();
   const { width } = useWindowDimensions();
   const wide = width >= 900;
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -33,7 +34,7 @@ export default function CounterScreen() {
         {branches.map((b, i) => (
           <Reveal key={b.name} delay={120 + i * 80} style={wide ? { flex: 1.3 } : undefined}>
             <Panel style={{ gap: Spacing.three, padding: 0, overflow: 'hidden' }}>
-              <MapStage />
+              <MapStage at={b.lat != null && b.lng != null ? { lat: b.lat, lng: b.lng } : undefined} />
               <View style={{ padding: Spacing.four, paddingTop: 0, gap: Spacing.three }}>
                 <ThemedText style={[pageStyles.display, { fontSize: 30, lineHeight: 34, letterSpacing: -1, color: t.text }]}>{b.name}</ThemedText>
                 <View style={styles.line}>
@@ -42,7 +43,7 @@ export default function CounterScreen() {
                 </View>
                 <View style={styles.line}>
                   <ClockIcon color={t.accent} />
-                  <ThemedText themeColor="textSecondary" style={styles.lineText}>Pickup and return every day, {OPENING.label}</ThemedText>
+                  <ThemedText themeColor="textSecondary" style={styles.lineText}>Pickup and return every day, {counter.label}</ThemedText>
                 </View>
                 <Button title="Book a ride" onPress={() => router.push('/book')} />
                 {b.lat != null && b.lng != null && (
@@ -59,7 +60,7 @@ export default function CounterScreen() {
             <View style={styles.hours}>
               <ThemedText themeColor="textSecondary" style={{ fontSize: 15 }}>Every day</ThemedText>
               <View style={[styles.chip, { backgroundColor: t.backgroundElement, borderColor: t.border }]}>
-                <ThemedText type="smallBold">{OPENING.label}</ThemedText>
+                <ThemedText type="smallBold">{counter.label}</ThemedText>
               </View>
             </View>
             <ThemedText themeColor="textSecondary" style={{ fontSize: 15, lineHeight: 22 }}>Times are Maldives time. Bookings start and end inside these hours.</ThemedText>
@@ -73,14 +74,14 @@ export default function CounterScreen() {
 }
 
 /** The animated island map on a soft "sea" with slow ripples, and the OpenStreetMap credit. */
-function MapStage() {
+function MapStage({ at }: { at?: { lat: number; lng: number } }) {
   const t = useTheme();
   const { width } = useWindowDimensions();
   const h = width >= 900 ? 420 : 340;
   return (
     <View style={[styles.stage, { height: h + 40, backgroundColor: t.backgroundSelected }]}>
       <Wave delay={0} /><Wave delay={2000} /><Wave delay={4000} />
-      <IslandMap height={h} />
+      <IslandMap height={h} at={at} />
       <ThemedText themeColor="textSecondary" style={styles.osm}>Map data © OpenStreetMap contributors</ThemedText>
     </View>
   );

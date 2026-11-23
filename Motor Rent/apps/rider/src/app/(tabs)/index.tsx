@@ -15,7 +15,7 @@ import { Button } from '@/components/ui';
 import { Spacing, TopNavInset } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { FAQ } from '@/lib/faq';
-import { useSiteSettings } from '@/lib/site';
+import { useCounter, useSiteSettings } from '@/lib/site';
 
 /** Home: hero, the fleet, how booking works, questions, then book. Rentals and sign-in live under My account. */
 export default function HomeScreen() {
@@ -111,8 +111,9 @@ function ScrollCue() {
 /** Three steps joined by a line, each revealing as it scrolls in. */
 function HowItWorks({ wide }: { wide: boolean }) {
   const t = useTheme();
+  const counter = useCounter();
   const steps = [
-    ['Pick your times', 'Pickup and return at our counter, any time from 07:00 to 22:00.'],
+    ['Pick your times', `Pickup and return at our counter, any time from ${counter.label.replace(' – ', ' to ')}.`],
     ['Choose a bike and pay', 'You only see bikes free for your times, with the full price. Pay by bank transfer to confirm.'],
     ['Collect and ride', 'Verify your licence and ID once, then show your reference at the counter.'],
   ];

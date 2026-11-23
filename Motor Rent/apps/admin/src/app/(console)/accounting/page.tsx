@@ -35,10 +35,12 @@ async function Accounting({ searchParams }: { searchParams: Promise<{ p?: string
   const { db, user } = await requireStaff();
   if (user.role === "staff") return <p className="text-muted">Accounting is for managers and owners.</p>;
   const period = periodFor(p ?? "month");
-  const [{ data, error }, unpaid] = await Promise.all([
+  const [{ data, error }, unpaid, refunds] = await Promise.all([
     db.rpc("finance_report", { p_from: period.from.toISOString(), p_to: period.to.toISOString() }),
     db.from("payments").select("id, amount, currency, created_at, bookings(id, reference, profiles(full_name))")
       .eq("status", "pending").eq("kind", "charge").neq("provider", "stripe").order("created_at", { ascending: false }).limit(50),
+    db.from("payments").select("id, amount, currency, created_at, bookings(id, reference, profiles(full_name))")
+      .eq("status", "pending").eq("kind", "refund").neq("provider", "stripe").order("created_at").limit(50),
   ]);
   if (error || !data) return <p role="alert" className="text-red-600">Could not load the report.</p>;
   const r = data as Report;
@@ -165,6 +167,24 @@ async function Accounting({ searchParams }: { searchParams: Promise<{ p?: string
             </ul>
           )}
         </section>
+
+        {!!refunds.data?.length && (
+          <section className="space-y-3 rounded-2xl border border-amber-500/40 bg-amber-500/5 p-4 lg:col-span-2">
+            <h2 className="font-semibold">Refunds to pay back</h2>
+            <p className="text-sm text-muted">From cancelled paid bookings. Pay the rider back, then mark it refunded.</p>
+            <ul className="divide-y divide-line border-t border-line text-sm">
+              {(refunds.data as unknown as Unpaid[]).map((u) => (
+                <li key={u.id} className="flex flex-wrap items-center gap-2 py-2">
+                  {u.bookings && <Link href={`/bookings/${u.bookings.id}`} className="plate text-xs">{u.bookings.reference}</Link>}
+                  <span>{u.bookings?.profiles?.full_name ?? "Rider"}</span>
+                  <span className="text-muted">{dt(new Date(u.created_at))}</span>
+                  <span className="ml-auto font-semibold tabular-nums">{money(u.amount, u.currency)}</span>
+                  <MarkCollected id={u.id} label="Mark refunded" />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <section className="space-y-3 rounded-2xl border border-line bg-panel p-4">
           <h2 className="font-semibold">Top riders</h2>

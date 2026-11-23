@@ -8,6 +8,7 @@ import { Chatter, type ChatterItem } from '@/components/chatter';
 import { BikeImage, type VehicleKind } from '@/components/photo';
 import { useWebPullToRefresh } from '@/components/pull-to-refresh';
 import { RefTag } from '@/components/brand';
+import { type Claim, ClaimCard, type Extension, HandoverPhotos, type Inspection, MoreTime } from '@/components/rental-extras';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, ErrorText, Pill } from '@/components/ui';
@@ -20,7 +21,7 @@ import { supabase } from '@/lib/supabase';
 
 type Booking = {
   id: string; reference: string; status: string; period: string; total: number; deposit: number | null; currency: 'MVR' | 'USD'; created_at: string;
-  vehicles: { make: string; model: string; plate: string; kind: VehicleKind; photos: string[] } | null;
+  vehicles: { make: string; model: string; plate: string; kind: VehicleKind; photos: string[]; price_plans: { hourly: number; daily: number; weekly: number } | null } | null;
   branches: { name: string } | null;
 };
 type Event = { id: number; from_status: string | null; to_status: string; actor: string | null; note: string | null; at: string };
@@ -38,6 +39,9 @@ export default function BookingDetail() {
   const [events, setEvents] = useState<Event[]>([]);
   const [slips, setSlips] = useState<Slip[]>([]);
   const [owed, setOwed] = useState<Owed[]>([]);
+  const [exts, setExts] = useState<Extension[]>([]);
+  const [claim, setClaim] = useState<Claim | null>(null);
+  const [insp, setInsp] = useState<Inspection[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [me, setMe] = useState<{ full_name: string | null; avatar_path: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,15 +57,21 @@ export default function BookingDetail() {
   const load = useCallback(async () => {
     if (!uid) return;
     setLoading(true);
-    const [b, ev, sl, p, pay] = await Promise.all([
-      supabase.from('bookings').select('id, reference, status, period, total, deposit, currency, created_at, vehicles(make, model, plate, kind, photos, colour), branches(name)').eq('id', id).maybeSingle(),
+    const [b, ev, sl, p, pay, ex, cl, ins] = await Promise.all([
+      supabase.from('bookings').select('id, reference, status, period, total, deposit, currency, created_at, vehicles(make, model, plate, kind, photos, colour, price_plans(hourly, daily, weekly)), branches(name)').eq('id', id).maybeSingle(),
       supabase.from('booking_events').select('id, from_status, to_status, actor, note, at').eq('booking_id', id).order('at'),
       supabase.from('transfer_slips').select('id, status, amount, reject_reason, created_at, reviewed_at').eq('booking_id', id),
       supabase.from('profiles').select('full_name, avatar_path').eq('id', uid).single(),
-      supabase.from('payments').select('id, kind, amount, currency, status, idempotency_key').eq('booking_id', id).eq('kind', 'charge').eq('status', 'pending'),
+      supabase.from('payments').select('id, kind, amount, currency, status, idempotency_key').eq('booking_id', id).in('kind', ['charge', 'refund']).in('status', ['pending', 'succeeded']),
+      supabase.from('booking_extensions').select('id, new_end, status, amount, reason, created_at').eq('booking_id', id).order('created_at'),
+      supabase.from('damage_claims').select('items, amount, status, rider_note').eq('booking_id', id).maybeSingle(),
+      supabase.from('inspections').select('phase, photo_paths, odometer_km, fuel_level, created_at').eq('booking_id', id).order('created_at'),
       loadMessages(),
     ]);
     setOwed((pay.data as Owed[]) ?? []);
+    setExts((ex.data as Extension[]) ?? []);
+    setClaim((cl.data as Claim | null) ?? null);
+    setInsp((ins.data as Inspection[]) ?? []);
     setError(b.error || !b.data ? 'We couldn’t find this rental.' : null);
     setBooking(b.data as unknown as Booking | null);
     setEvents((ev.data as Event[]) ?? []);
@@ -123,7 +133,15 @@ export default function BookingDetail() {
 
   const r = booking ? parseRange(booking.period) : null;
   const s = booking ? statusOf(booking.status) : null;
-  const owedTotal = owed.reduce((sum, o) => sum + o.amount, 0);
+  const due = owed.filter((o) => o.kind === 'charge' && o.status === 'pending');
+  const owedTotal = due.reduce((sum, o) => sum + o.amount, 0);
+  const refundDue = owed.filter((o) => o.kind === 'refund' && o.status === 'pending').reduce((sum, o) => sum + o.amount, 0);
+  const refunded = owed.filter((o) => o.kind === 'refund' && o.status === 'succeeded').reduce((sum, o) => sum + o.amount, 0);
+  const pendingExt = exts.find((e) => e.status === 'pending') ?? null;
+  const lastExt = exts.at(-1);
+  const lastDeclined = lastExt?.status === 'declined' ? lastExt : null;
+  const canExtend = booking && ['confirmed', 'active', 'overdue'].includes(booking.status);
+  const label = (k: string | null) => k?.endsWith(':late-fee') ? 'late return' : k?.endsWith(':damage') ? 'damage' : k?.includes(':ext:') ? 'extra time' : 'fees';
   return (
     <ThemedView style={styles.flex}>
       {pull.indicator}
@@ -159,8 +177,15 @@ export default function BookingDetail() {
                 body={`It was due back ${dateTime(r.end)}. Each started hour late is charged at your bike’s hourly rate, up to a day’s rent for each day. Running late? Send us a message below.`} />
             )}
             {owedTotal > 0 && (
-              <Notice tone="warning" title={`To pay: ${money(owedTotal, owed[0]!.currency)}`}
-                body={owed.some((o) => o.idempotency_key?.endsWith(':late-fee')) ? 'Late return fee. Pay at the counter or by bank transfer; the office will mark it paid.' : 'Please pay at the counter or by bank transfer; the office will mark it paid.'} />
+              <Notice tone="warning" title={`To pay: ${money(owedTotal, booking.currency)}`}
+                body={`For ${[...new Set(due.map((o) => label(o.idempotency_key)))].join(' and ')}. Pay at the counter or by bank transfer; the office will mark it paid.`} />
+            )}
+            {refundDue > 0 && (
+              <Notice tone="success" title={`Refund on its way: ${money(refundDue, booking.currency)}`}
+                body="We pay it back to the account you paid from. Message us below if your bank details have changed." />
+            )}
+            {refunded > 0 && refundDue === 0 && (
+              <Notice tone="success" title={`Refunded ${money(refunded, booking.currency)}`} body="The refund has been paid back to you." />
             )}
             {booking.status === 'held' && (
               <View style={{ marginTop: Spacing.two }}>
@@ -169,6 +194,13 @@ export default function BookingDetail() {
             )}
           </Animated.View>
         )}
+
+        {booking && canExtend && r && (
+          <MoreTime bookingId={booking.id} start={r.start} end={r.end} overdue={booking.status === 'overdue'} rates={booking.vehicles?.price_plans ?? null}
+            currency={booking.currency} pending={pendingExt} lastDeclined={lastDeclined} onChange={load} />
+        )}
+        {booking && claim && <ClaimCard bookingId={booking.id} claim={claim} currency={booking.currency} onChange={load} />}
+        {booking && <HandoverPhotos inspections={insp} />}
 
         {booking && (
           <Animated.View style={{ gap: Spacing.three }}>
@@ -181,9 +213,9 @@ export default function BookingDetail() {
   );
 }
 
-function Notice({ tone, title, body }: { tone: 'danger' | 'warning'; title: string; body: string }) {
+function Notice({ tone, title, body }: { tone: 'danger' | 'warning' | 'success'; title: string; body: string }) {
   const t = useTheme();
-  const c = tone === 'danger' ? t.danger : t.warning;
+  const c = tone === 'danger' ? t.danger : tone === 'success' ? t.success : t.warning;
   return (
     <View accessibilityRole="alert" style={[styles.notice, { borderColor: c + '66', backgroundColor: c + '14' }]}>
       <ThemedText type="smallBold" style={{ color: c, fontSize: 16 }}>{title}</ThemedText>

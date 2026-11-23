@@ -4,8 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-/** Record that an unpaid fee was paid at the counter. */
-export function MarkCollected({ id }: { id: string }) {
+/** Record that an unpaid fee was paid at the counter (or that a refund was paid back). */
+export function MarkCollected({ id, label = "Mark paid" }: { id: string; label?: string }) {
   const router = useRouter();
   const [method, setMethod] = useState("cash");
   const [busy, setBusy] = useState(false);
@@ -18,10 +18,10 @@ export function MarkCollected({ id }: { id: string }) {
   }
   return (
     <span className="flex items-center gap-1.5">
-      <select value={method} onChange={(e) => setMethod(e.target.value)} aria-label="Paid by" className="rounded-lg border border-line bg-panel px-2 py-1 text-xs">
+      <select value={method} onChange={(e) => setMethod(e.target.value)} aria-label="Method" className="rounded-lg border border-line bg-panel px-2 py-1 text-xs">
         <option value="cash">Cash</option><option value="bank">Bank transfer</option><option value="card">Card</option>
       </select>
-      <button type="button" onClick={save} disabled={busy} className="btn btn-primary btn-sm">{busy ? "Saving…" : "Mark paid"}</button>
+      <button type="button" onClick={save} disabled={busy} className="btn btn-primary btn-sm">{busy ? "Saving…" : label}</button>
       {err && <span className="text-xs text-red-600">{err}</span>}
     </span>
   );

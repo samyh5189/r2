@@ -18,6 +18,16 @@ const ISLAND = 'M0.0 134.3 L9.3 146.0 L41.2 148.1 L84.7 185.7 L91.2 229.3 L94.4 
 const COAST_LENGTH = 5506;
 const BOX = { w: 1000, h: 1579 };
 const COUNTER = { x: 590, y: 849 };
+// The projection the coastline was drawn with (OSM bounding box of the island, equirectangular, 1000 units wide).
+const GEO = { minLat: 6.6122437, maxLat: 6.6342148, minLng: 73.0619292, maxLng: 73.0759396 };
+const K = Math.cos(((GEO.minLat + GEO.maxLat) / 2) * Math.PI / 180);
+const UNIT = 1000 / ((GEO.maxLng - GEO.minLng) * K);
+/** Where a latitude/longitude falls on the map; null when it is off the island's box. */
+function project(at?: { lat: number; lng: number }) {
+  if (!at) return null;
+  const x = (at.lng - GEO.minLng) * K * UNIT, y = (GEO.maxLat - at.lat) * UNIT;
+  return x >= 0 && x <= BOX.w && y >= 0 && y <= BOX.h ? { x, y } : null;
+}
 const PAD = 90;
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -26,7 +36,7 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
  * The island map: the coastline draws itself, the land fills in, then the pin drops onto our
  * counter and keeps pulsing. Everything is static when reduced motion is on.
  */
-export function IslandMap({ height = 340, label = 'Our counter' }: { height?: number; label?: string }) {
+export function IslandMap({ height = 340, label = 'Our counter', at }: { height?: number; label?: string; at?: { lat: number; lng: number } }) {
   const t = useTheme();
   const reduce = useReducedMotion();
   const draw = useSharedValue(reduce ? 1 : 0);
@@ -50,8 +60,9 @@ export function IslandMap({ height = 340, label = 'Our counter' }: { height?: nu
   const vbH = BOX.h + PAD * 2;
   const scale = height / vbH;
   const width = vbW * scale;
-  const px = (COUNTER.x + PAD) * scale;
-  const py = (COUNTER.y + PAD) * scale;
+  const spot = project(at) ?? COUNTER;
+  const px = (spot.x + PAD) * scale;
+  const py = (spot.y + PAD) * scale;
 
   const drop = useAnimatedStyle(() => ({ opacity: Math.min(1, pin.value * 1.4), transform: [{ translateY: (1 - pin.value) * -36 }, { scale: 0.6 + 0.4 * pin.value }] }));
   const ring = useAnimatedStyle(() => ({ opacity: pin.value * 0.5 * (1 - pulse.value), transform: [{ scale: 0.4 + pulse.value * 1.8 }] }));
