@@ -149,7 +149,8 @@ export function ModelCard({ m }: { m: Model }) {
   const shown = chosen?.bike ?? m.first;
   const { source, cutout } = bikeSource(shown);
   const photoColour = stockPhotoColour(shown);
-  const word = m.model.split(/\s+/)[0]!.toUpperCase();
+  // The model name behind the vehicle: whole when short ("MAZDA 2"), else its first word ("AIRBLADE").
+  const word = (m.model.length <= 9 ? m.model : m.model.split(/\s+/)[0]!).toUpperCase();
   const book = () => router.push({ pathname: '/book', params: { bike: shown.id } });
   const ink = t.text;
   const wordSize = stageW * 0.19;
@@ -167,17 +168,17 @@ export function ModelCard({ m }: { m: Model }) {
         tr('transform, box-shadow, border-color', 450),
       ]}>
       <View style={styles.stage} onLayout={(e) => setStageW(e.nativeEvent.layout.width)}>
+        {stageW > 0 && (
+          <View pointerEvents="none" style={[styles.wordBox, { transform: [{ translateX: hover ? stageW * 0.02 : 0 }] }, tr('transform', 700)]}>
+            <ThemedText aria-hidden numberOfLines={1}
+              style={[styles.word, { fontSize: wordSize, lineHeight: wordSize, letterSpacing: -wordSize * 0.05 },
+                web ? ({ color: 'transparent', WebkitTextStroke: `1.5px ${ink}2E`, whiteSpace: 'nowrap' } as object) : { color: ink + '14' }]}>
+              {word}
+            </ThemedText>
+          </View>
+        )}
         {cutout ? (
           <>
-            {stageW > 0 && (
-              <View pointerEvents="none" style={[styles.wordBox, { transform: [{ translateX: hover ? stageW * 0.02 : 0 }] }, tr('transform', 700)]}>
-                <ThemedText aria-hidden numberOfLines={1}
-                  style={[styles.word, { fontSize: wordSize, lineHeight: wordSize, letterSpacing: -wordSize * 0.05 },
-                    web ? ({ color: 'transparent', WebkitTextStroke: `1.5px ${ink}2E`, whiteSpace: 'nowrap' } as object) : { color: ink + '14' }]}>
-                  {word}
-                </ThemedText>
-              </View>
-            )}
             <View style={[styles.shot, { transform: [{ translateX: hover ? -stageW * 0.025 : 0 }, { scale: hover ? 1.03 : 1 }] }, tr('transform', 700)]}>
               <Image source={source} style={StyleSheet.absoluteFill} contentFit="contain" contentPosition="bottom" transition={300}
                 alt={`${m.make} ${m.model}${chosen ? `, ${VEHICLE_COLOURS[chosen.colour].label.toLowerCase()}` : ''}`} />
@@ -185,16 +186,16 @@ export function ModelCard({ m }: { m: Model }) {
             <View style={[styles.line, redLine(t.accent)]} />
           </>
         ) : (
-          <View style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
-            <View style={[StyleSheet.absoluteFill, { transform: [{ scale: hover ? 1.03 : 1 }] }, tr('transform', 700)]}>
-              <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" transition={300} alt={`${m.make} ${m.model}`} />
-            </View>
+          // A real photo: framed in front of the model name, lifting slightly on hover.
+          <View style={[styles.frame, { transform: [{ translateY: hover ? -4 : 0 }, { scale: hover ? 1.02 : 1 }] }, tr('transform, box-shadow', 700),
+            web && ({ boxShadow: hover ? '0 28px 50px -26px rgba(17,16,20,0.55)' : '0 20px 40px -28px rgba(17,16,20,0.45)' } as ViewStyle)]}>
+            <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" transition={300} alt={`${m.make} ${m.model}`} />
           </View>
         )}
       </View>
       <View style={styles.cardBody}>
         <ThemedText style={[styles.kicker, { color: t.accent }]}>{m.cc ? `${m.cc} cc ` : ''}{m.kind}</ThemedText>
-        <ThemedText style={[styles.name, { color: t.text }]}>{m.make} {m.model}</ThemedText>
+        <ThemedText style={[styles.name, { color: t.text }]}>{m.model.toLowerCase().startsWith(m.make.toLowerCase()) ? m.model : `${m.make} ${m.model}`}</ThemedText>
         {m.colours.length > 0 && (
           <View style={styles.swatchRow}>
             <View style={styles.swatches} accessibilityRole="radiogroup" accessibilityLabel="Colour">
@@ -253,6 +254,7 @@ const styles = StyleSheet.create({
   wordBox: { position: 'absolute', top: '13%', left: '-50%', right: '-50%', alignItems: 'center' },
   word: { textAlign: 'center', fontFamily: Fonts?.display, fontWeight: '800' },
   shot: { position: 'absolute', top: '16%', left: '8%', right: '8%', bottom: '3.5%' },
+  frame: { position: 'absolute', top: '31%', left: '9%', right: '9%', bottom: '7%', borderRadius: 14, overflow: 'hidden', backgroundColor: '#0001' },
   line: { position: 'absolute', left: '8%', right: '8%', bottom: '7%', height: 3, borderRadius: 999 },
   cardBody: { paddingTop: Spacing.two, paddingHorizontal: Spacing.four, paddingBottom: Spacing.four, gap: 12, flexGrow: 1 },
   kicker: { fontSize: 13, lineHeight: 20, fontWeight: '600', letterSpacing: 13 * 0.18, textTransform: 'uppercase' },

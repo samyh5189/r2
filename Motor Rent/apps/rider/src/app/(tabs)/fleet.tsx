@@ -14,13 +14,13 @@ export default function FleetScreen() {
   const credits = [...new Set((models ?? []).map((m) => bikeCredit(m.first)).filter(Boolean))] as string[];
   return (
     <Page>
-      <PageHead title="Pick your bike." lead="Scooters and motorbikes by the hour or the day, from our counter in Kulhudhuffushi. Helmets on request." />
+      <PageHead title="Pick your ride." lead="Scooters, motorbikes and cars by the hour or the day, from our counter in Kulhudhuffushi. Helmets on request." />
       {!models ? <ActivityIndicator color={t.accent} style={{ marginVertical: Spacing.six }} /> : (
         <ModelCarousel models={models} style={{ marginTop: Spacing.six }} />
       )}
       {models && models.length > 0 && (
         <View style={{ marginTop: Spacing.three }}>
-          <ThemedText type="small" themeColor="textSecondary">Colours and plates depend on which bike is free for your times.</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">Colours and plates depend on which vehicle is free for your times.</ThemedText>
           {credits.map((c) => <ThemedText key={c} type="small" themeColor="textSecondary" style={{ fontSize: 11, lineHeight: 15, opacity: 0.8 }}>{c}</ThemedText>)}
         </View>
       )}
