@@ -211,9 +211,9 @@ export default function BookScreen() {
     <ThemedView style={styles.flex}>
       <Stack.Screen options={{ headerShown: false, title: 'Book a ride' }} />
       <View style={[styles.bar, { borderColor: t.border, backgroundColor: t.background }]}>
-        <Pressable onPress={() => router.replace('/')} accessibilityRole="link" accessibilityLabel="Rent a Motor home" style={styles.brand}>
+        <Pressable onPress={() => router.replace('/')} accessibilityRole="link" accessibilityLabel="EasyRide home" style={styles.brand}>
           <BrandMark size={30} />
-          <ThemedText type="smallBold" style={{ fontSize: 17 }}>Rent a Motor</ThemedText>
+          <ThemedText type="smallBold" style={{ fontSize: 17 }}>EasyRide</ThemedText>
         </Pressable>
         <ThemedText type="small" themeColor="textSecondary" style={{ marginLeft: 'auto' }}>{step + 1} of {STEPS.length}</ThemedText>
         <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} accessibilityRole="button" accessibilityLabel="Close booking" hitSlop={10} style={styles.close}>

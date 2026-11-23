@@ -5,7 +5,7 @@ export const PRIVACY_UPDATED = '22 November 2026';
 // Plain-language privacy policy. Have it reviewed by a Maldivian lawyer before relying on it.
 export const PRIVACY: TermsSection[] = [
   { title: 'Who we are', body: [
-    'Rent a Motor rents scooters and motorbikes in Kulhudhuffushi, Maldives. This policy explains what we collect when you use our app or website, why, and what you can do about it.',
+    'EasyRide (Kulhudhuffushi MotoRentals) rents scooters, motorbikes and cars in Kulhudhuffushi, Maldives. This policy explains what we collect when you use our app or website, why, and what you can do about it.',
   ] },
   { title: 'What we collect', body: [
     'Account details: your name, email address, phone and WhatsApp number. If you sign in with Google or Apple, we receive your name, email address and profile picture from them, and nothing else.',

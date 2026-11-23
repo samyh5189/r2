@@ -63,10 +63,10 @@ export function SiteHeader({ floating = false, back = false }: { floating?: bool
             <ArrowLeftIcon color={t.text} />
           </Pressable>
         )}
-        <Pressable onPress={() => router.navigate('/')} accessibilityRole="link" accessibilityLabel="Rent a Motor home"
+        <Pressable onPress={() => router.navigate('/')} accessibilityRole="link" accessibilityLabel="EasyRide home"
           style={({ pressed }) => [styles.brand, pressed && { opacity: 0.7 }]}>
           <BrandMark size={34} />
-          {width >= 360 && <ThemedText type="heading" style={styles.brandText}>Rent a Motor</ThemedText>}
+          {width >= 360 && <ThemedText type="heading" style={styles.brandText}>EasyRide</ThemedText>}
         </Pressable>
 
         {wide && (
@@ -148,9 +148,9 @@ export function MenuDrawer({ open, onClose }: { open: boolean; onClose: () => vo
         style={[styles.panel, { width: panelWidth, backgroundColor: t.background, paddingTop: insets.top, paddingBottom: insets.bottom },
           panelWidth < width && [styles.panelRaised, { borderColor: t.border }], panel]}>
         <View style={[styles.panelHead, { borderColor: t.border }]}>
-          <Pressable onPress={() => pick('/')} accessibilityRole="link" accessibilityLabel="Rent a Motor home" style={styles.brand}>
+          <Pressable onPress={() => pick('/')} accessibilityRole="link" accessibilityLabel="EasyRide home" style={styles.brand}>
             <BrandMark size={34} />
-            <ThemedText type="heading" style={styles.brandText}>Rent a Motor</ThemedText>
+            <ThemedText type="heading" style={styles.brandText}>EasyRide</ThemedText>
           </Pressable>
           <Pressable onPress={close} accessibilityRole="button" accessibilityLabel="Close menu" hitSlop={6}
             style={({ pressed }) => [styles.square, { borderColor: t.border, backgroundColor: t.backgroundElement }, pressed && { opacity: 0.7 }]}>

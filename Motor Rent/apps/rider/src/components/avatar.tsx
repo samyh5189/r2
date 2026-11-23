@@ -9,7 +9,7 @@ import { ThemedText } from './themed-text';
 export const initialsOf = (name?: string | null) =>
   (name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
 
-/** Round profile photo, falling back to initials (or a custom mark, e.g. "RM" for the office). */
+/** Round profile photo, falling back to initials (or a custom mark, e.g. "ER" for the office). */
 export function Avatar({ path, name, size = 40, color, mark }: {
   path?: string | null; name?: string | null; size?: number; color?: string; mark?: string;
 }) {

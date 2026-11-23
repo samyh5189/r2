@@ -5,12 +5,12 @@ import { useTheme } from '@/hooks/use-theme';
 
 import { ThemedText } from './themed-text';
 
-/** The Rent a Motor mark: a red tile with white RM. */
+/** The EasyRide mark: a red tile with white ER. */
 export function BrandMark({ size = 36 }: { size?: number }) {
   const t = useTheme();
   return (
     <View accessible={false} style={[styles.tile, { width: size, height: size, borderRadius: size * 0.28, backgroundColor: t.accent }]}>
-      <ThemedText style={[styles.text, { fontSize: size * 0.4, lineHeight: size * 0.46 }]}>RM</ThemedText>
+      <ThemedText style={[styles.text, { fontSize: size * 0.4, lineHeight: size * 0.46 }]}>ER</ThemedText>
     </View>
   );
 }

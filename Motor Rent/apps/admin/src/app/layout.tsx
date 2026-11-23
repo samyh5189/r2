@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Rent a Motor Admin", template: "%s · Rent a Motor Admin" },
+  title: { default: "EasyRide Admin", template: "%s · EasyRide Admin" },
   description: "Fleet, bookings and revenue console",
   robots: { index: false, follow: false },
 };

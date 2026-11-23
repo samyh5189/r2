@@ -55,7 +55,7 @@ export function HeroSettings({ url, credit, note, canEdit }: { url: string | nul
           <img src={current ?? "/stock/hero.jpg"} alt="Current home page photo" className="h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30" />
           <div className="absolute left-4 top-4 text-white">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/80">Rent a Motor · Kulhudhuffushi</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/80">EasyRide · Kulhudhuffushi MotoRentals</p>
             <p className="text-2xl font-bold">Ride Kulhudhuffushi.</p>
           </div>
           <span className="absolute bottom-3 right-3 rounded-full bg-black/50 px-2 py-0.5 text-xs text-white">{current ? "Custom photo" : "Default: Sinamalé Bridge"}</span>

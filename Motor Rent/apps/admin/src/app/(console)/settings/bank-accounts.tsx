@@ -44,7 +44,7 @@ function AccountForm({ account, onClose }: { account?: BankAccount; onClose: () 
         <select className={field} value={a.currency} onChange={(e) => setA({ ...a, currency: e.target.value as "MVR" | "USD" })}>
           <option value="MVR">MVR</option><option value="USD">USD</option></select></label>
       <label className="col-span-2 space-y-1"><span className="text-xs font-medium text-muted">Account name</span>
-        <input className={field} value={a.account_name} onChange={(e) => setA({ ...a, account_name: e.target.value })} placeholder="Rent a Motor" required maxLength={80} /></label>
+        <input className={field} value={a.account_name} onChange={(e) => setA({ ...a, account_name: e.target.value })} placeholder="EasyRide" required maxLength={80} /></label>
       <label className="col-span-2 space-y-1"><span className="text-xs font-medium text-muted">Account number</span>
         <input className={`${field} font-mono`} value={a.account_number} onChange={(e) => setA({ ...a, account_number: e.target.value })} placeholder="7730000123456" required maxLength={34} /></label>
       <label className="space-y-1"><span className="text-xs font-medium text-muted">SWIFT (optional)</span>

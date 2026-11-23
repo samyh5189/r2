@@ -40,8 +40,8 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
     <div className="flex min-h-full flex-1 flex-col">
       <header className="sticky top-0 z-30 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-background/95 px-4 py-2 backdrop-blur sm:static sm:px-6 sm:py-3">
         <Link href="/" className="flex items-center gap-2 leading-tight">
-          <span className="brand-mark text-sm" aria-hidden>RM</span>
-          <span><span className="block font-display font-extrabold">Rent a Motor</span><span className="hidden text-xs text-muted sm:block">Kulhudhuffushi Motor Rentals</span></span>
+          <span className="brand-mark text-sm" aria-hidden>ER</span>
+          <span><span className="block font-display font-extrabold">EasyRide</span><span className="hidden text-xs text-muted sm:block">Kulhudhuffushi MotoRentals</span></span>
         </Link>
         <div className="order-2 w-full sm:order-none sm:w-auto">
           <Suspense fallback={<nav aria-label="Console" className="flex gap-1 overflow-x-auto">{NAV.map((n) => <Link key={n.href} href={n.href} className="nav-link">{n.label}</Link>)}</nav>}>

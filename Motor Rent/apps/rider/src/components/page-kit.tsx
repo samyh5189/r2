@@ -285,7 +285,10 @@ export function SiteFooter() {
         <View style={[{ gap: Spacing.three }, wide && { flex: 1.4 }]}>
           <View style={styles.footBrand}>
             <BrandMark size={30} />
-            <ThemedText style={[styles.title, { fontSize: 20, lineHeight: 24, color: t.text }]}>Rent a Motor</ThemedText>
+            <View>
+              <ThemedText style={[styles.title, { fontSize: 20, lineHeight: 24, color: t.text }]}>EasyRide</ThemedText>
+              <ThemedText themeColor="textSecondary" style={{ fontSize: 13, lineHeight: 17 }}>Kulhudhuffushi MotoRentals</ThemedText>
+            </View>
           </View>
           <ThemedText themeColor="textSecondary" style={{ fontSize: 15, lineHeight: 22, maxWidth: 340 }}>
             Scooters and motorbikes for rent in Kulhudhuffushi, by the hour or the day.
@@ -311,7 +314,7 @@ export function SiteFooter() {
         </View>
       </View>
       <View style={[styles.footBase, { borderColor: t.border, paddingHorizontal: gutter }]}>
-        <ThemedText themeColor="textSecondary" style={{ fontSize: 13 }}>© {new Date().getFullYear()} Rent a Motor</ThemedText>
+        <ThemedText themeColor="textSecondary" style={{ fontSize: 13 }}>© {new Date().getFullYear()} EasyRide · Kulhudhuffushi MotoRentals</ThemedText>
       </View>
     </View>
   );

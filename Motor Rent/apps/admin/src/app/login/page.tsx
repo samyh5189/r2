@@ -23,7 +23,7 @@ export default function LoginPage() {
             <img src="/stock/hero.jpg" alt="" className="kenburns absolute inset-0 h-full w-full object-cover object-[50%_62%]" />
           </div>
           <div className="rise">
-            <div className="flex items-center gap-3"><span className="brand-mark" aria-hidden>RM</span><h1 className="text-3xl font-bold tracking-tight">Rent a Motor</h1></div>
+            <div className="flex items-center gap-3"><span className="brand-mark" aria-hidden>ER</span><h1 className="text-3xl font-bold tracking-tight">EasyRide</h1></div>
             <p className="text-sm text-muted">Staff and managers only.</p>
           </div>
           <div className="rise rounded-2xl border border-line bg-panel p-5 " style={{ animationDelay: "120ms" }}>

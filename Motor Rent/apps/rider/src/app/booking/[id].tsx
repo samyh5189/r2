@@ -29,7 +29,7 @@ type Slip = { id: string; status: 'pending' | 'approved' | 'rejected'; amount: n
 type Owed = { id: string; kind: string; amount: number; currency: 'MVR' | 'USD'; status: string; idempotency_key: string | null };
 type Message = { id: number; author: string; from_staff: boolean; author_name: string | null; author_avatar: string | null; body: string; created_at: string };
 
-const OFFICE = { name: 'Rent a Motor', mark: 'RM', staff: true, me: false };
+const OFFICE = { name: 'EasyRide', mark: 'ER', staff: true, me: false };
 
 export default function BookingDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -112,7 +112,7 @@ export default function BookingDetail() {
     }
     for (const m of messages) {
       out.push({ key: `m${m.id}`, at: new Date(m.created_at), kind: 'message', body: m.body,
-        who: m.author === uid ? self : { name: m.author_name ?? 'Rent a Motor team', avatar: m.author_avatar, staff: m.from_staff, me: false } });
+        who: m.author === uid ? self : { name: m.author_name ?? 'EasyRide team', avatar: m.author_avatar, staff: m.from_staff, me: false } });
     }
     return out;
   }, [events, slips, messages, me, uid, booking]);

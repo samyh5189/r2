@@ -31,7 +31,7 @@ export const TERMS: TermsSection[] = [
   ] },
   { title: 'Blocklist', body: [
     'We may refuse future rentals to a rider who has not paid money they owe us, seriously damaged or misused a vehicle, gave false identity details, or behaved abusively towards staff.',
-    'The blocklist is internal. It is seen only by Rent a Motor staff and is never published or shown to other riders.',
+    'The blocklist is internal. It is seen only by EasyRide staff and is never published or shown to other riders.',
     'If you are on it, you can see that and the reason on your Account page. You can settle what is owed or tell us why you think it is wrong, and we will review it and remove the entry once it is resolved.',
   ] },
   { title: 'Your data', body: [

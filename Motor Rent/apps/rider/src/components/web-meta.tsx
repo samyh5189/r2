@@ -4,10 +4,10 @@ import { Platform } from 'react-native';
 
 import { Colors } from '@/constants/theme';
 
-const SITE = 'Rent a Motor';
+const SITE = 'EasyRide';
 /** Tab titles per page (web). Anything not listed gets the site name alone. */
 const TITLES: [RegExp, string][] = [
-  [/^\/$/, 'Scooter and motorbike rental in Kulhudhuffushi'],
+  [/^\/$/, 'Kulhudhuffushi MotoRentals'],
   [/^\/fleet$/, 'Fleet'],
   [/^\/prices$/, 'Prices'],
   [/^\/help$/, 'Questions'],
@@ -22,7 +22,7 @@ const TITLES: [RegExp, string][] = [
   [/^\/privacy$/, 'Privacy policy'],
   [/^\/reset-password$/, 'New password'],
 ];
-const DESCRIPTION = 'Rent a scooter or motorbike in Kulhudhuffushi by the hour or the day. See the full price, book online and collect the keys at our counter.';
+const DESCRIPTION = 'EasyRide, Kulhudhuffushi MotoRentals: rent a scooter, motorbike or car by the hour or the day. See the full price, book online and collect the keys at our counter.';
 
 function meta(name: string, content: string) {
   let el = document.head.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
