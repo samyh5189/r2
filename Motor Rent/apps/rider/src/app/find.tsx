@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { BikeImage, type VehicleKind } from '@/components/photo';
 import { ThemedText } from '@/components/themed-text';
+import { TransferPayment } from '@/components/transfer-payment';
 import { ViberButton } from '@/components/viber-button';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, ErrorText, Field, Pill } from '@/components/ui';
@@ -15,6 +16,7 @@ import { STATUS } from '@/lib/booking-status';
 import { dateTime, money, parseRange } from '@/lib/format';
 
 type Found = {
+  id: string; slip: { status: 'pending' | 'approved' | 'rejected'; reject_reason: string | null; created_at: string } | null;
   reference: string; status: string; period: string; total: number; currency: 'MVR' | 'USD'; held_until: string | null;
   handover: 'counter' | 'delivery'; delivery_address: string | null; guest_name: string; linked: boolean; viber_token: string;
   vehicles: { make: string; model: string; plate: string; kind: VehicleKind } | null; branches: { name: string } | null;
@@ -79,10 +81,11 @@ export default function FindBooking() {
             </ThemedText>
             {found.status === 'held' && (
               <ThemedText style={{ color: t.warning }}>
-                Not paid yet. We’ll call you to confirm and take payment{found.held_until ? `; we hold it until ${dateTime(new Date(found.held_until))}` : ''}.
+                Not paid yet. Pay by transfer and upload the slip below, or we’ll call you{found.held_until ? `; we hold it until ${dateTime(new Date(found.held_until))}` : ''}.
               </ThemedText>
             )}
             {found.status === 'expired' && <ThemedText themeColor="textSecondary">The hold ran out before payment. Book again, or call us.</ThemedText>}
+            {found.status === 'held' && mobile && <TransferPayment booking={found} guest={{ phone: mobile }} onChange={look} />}
             {['held', 'confirmed', 'active', 'overdue'].includes(found.status) && <ViberButton code={found.viber_token} />}
             {found.linked ? (
               <Button variant="secondary" title="Open in my account" onPress={() => router.push('/bookings')} />

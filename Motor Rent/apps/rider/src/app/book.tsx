@@ -41,7 +41,7 @@ const LAST = STEPS.length - 1;
  * All choices live in the URL (?start&end&bike&helmets&step) so Back, refresh and the sign-in round trip keep them.
  */
 export default function BookScreen() {
-  const params = useLocalSearchParams<{ start?: string; end?: string; bike?: string; helmets?: string; step?: string; type?: string }>();
+  const params = useLocalSearchParams<{ start?: string; end?: string; bike?: string; helmets?: string; step?: string; type?: string; pick?: string }>();
   const { session } = useSession();
   const t = useTheme();
   const { width } = useWindowDimensions();
@@ -56,7 +56,8 @@ export default function BookScreen() {
   const askedHelmets = Math.min(2, Math.max(0, Number(params.helmets ?? 0) || 0));
 
   const set = (p: Record<string, string | undefined>) => router.setParams(p);
-  const go = (s: number) => set({ step: String(s) });
+  // Going to the vehicle step on purpose (Back, or the answer chip) always shows the list.
+  const go = (s: number) => set({ step: String(s), pick: s === 3 ? '1' : undefined });
   const minEnd = useMemo(() => new Date(+start + MIN_RENTAL_HOURS * 3_600_000), [start]);
   function setStart(d: Date) {
     const len = Math.max(+end - +start, MIN_RENTAL_HOURS * 3_600_000);
@@ -86,6 +87,9 @@ export default function BookScreen() {
         .map((r) => ({ id: r.vehicle_id, from: +new Date(r.busy_from), to: +new Date(r.busy_to) }))));
   }, []);
   const bike = bikes?.find((b) => b.id === bikeId) ?? null;
+  // Booking a particular vehicle (from its card): once the times are set and it's free, skip the vehicle list.
+  const autoSkip = !params.pick && !!bikeId && !!free && free.has(bikeId) && Number(params.step) === 3;
+  useEffect(() => { if (autoSkip) router.setParams({ step: '4' }); }, [autoSkip]);
   // Helmets are for two-wheelers; a car never carries one into the quote.
   const isCar = bike?.kind === 'car';
   const helmets = isCar ? 0 : askedHelmets;
@@ -342,22 +346,24 @@ export default function BookScreen() {
             <>
               <View style={styles.chips}>
                 {DURATIONS.map((d) => (
-                  <Choice key={d.label} label={d.label} selected={d.hours === hours} onPress={() => set({ end: new Date(+start + d.hours * 3_600_000).toISOString(), step: '3' })} />
+                  <Choice key={d.label} label={d.label} selected={d.hours === hours} onPress={() => set({ end: new Date(+start + d.hours * 3_600_000).toISOString(), step: '3', pick: undefined })} />
                 ))}
               </View>
               <ThemedText type="small" themeColor="textSecondary">Or pick the day and time:</ThemedText>
               <DateTimePicker value={end} onChange={(d) => set({ end: d.toISOString() })} min={minEnd} days={MAX_RENTAL_DAYS + 1}
-                onCommit={(d) => set({ end: d.toISOString(), step: '3' })} />
+                onCommit={(d) => set({ end: d.toISOString(), step: '3', pick: undefined })} />
             </>,
           )}
 
           {step === 3 && screen(
-            `${dateTime(start)} to ${dateTime(end)}.`,
+            bike && free && !free.has(bike.id) && !params.pick
+              ? `The ${bike.make} ${bike.model} is booked for ${dateTime(start)} to ${dateTime(end)}. Pick another, or change the times.`
+              : `${dateTime(start)} to ${dateTime(end)}.`,
             `Which ${noun(freeList?.length ? freeList : shown, 1)} would you like?`,
             !bikes || !free ? <ActivityIndicator color={t.accent} /> : (
               <BikeList bikes={shown!} free={free} selected={bikeId} estimate={estimate}
                 nextFree={(b) => (busy ? nextFree(busy.filter((w) => w.id === b.id), start, +end - +start) : null)}
-                onPick={(id) => set({ bike: id, step: '4' })}
+                onPick={(id) => set({ bike: id, step: '4', pick: undefined })}
                 onPickAt={(id, s) => set({ bike: id, start: s.toISOString(), end: new Date(+s + (+end - +start)).toISOString(), step: '4' })}
                 onChangeTimes={() => go(1)} />
             ),

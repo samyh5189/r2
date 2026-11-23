@@ -23,7 +23,7 @@ export default function TransfersPage() {
 type Row = {
   id: string; path: string; status: "pending" | "approved" | "rejected"; ocr: unknown; amount: number | null;
   reject_reason: string | null; created_at: string; reviewed_at: string | null;
-  bookings: { id: string; reference: string; total: number; currency: string; status: string; held_until: string | null } | null;
+  bookings: { id: string; reference: string; total: number; currency: string; status: string; held_until: string | null; guest_name: string | null; guest_phone: string | null } | null;
   rider: { full_name: string | null } | null;
 };
 
@@ -31,7 +31,7 @@ async function Transfers() {
   const { db } = await requireStaff();
   const [slips, accounts] = await Promise.all([
     db.from("transfer_slips")
-      .select("id, path, status, ocr, amount, reject_reason, created_at, reviewed_at, bookings(id, reference, total, currency, status, held_until), rider:profiles!transfer_slips_rider_id_fkey(full_name)")
+      .select("id, path, status, ocr, amount, reject_reason, created_at, reviewed_at, bookings(id, reference, total, currency, status, held_until, guest_name, guest_phone), rider:profiles!transfer_slips_rider_id_fkey(full_name)")
       .order("created_at", { ascending: false }).limit(60),
     db.from("bank_accounts").select("account_number"),
   ]);
@@ -56,7 +56,7 @@ async function Transfers() {
             <li key={r.id} className="space-y-1">
               <Link href={`/bookings/${r.bookings.id}`} className="text-xs font-semibold text-accent hover:underline">Booking history &amp; messages ›</Link>
               <SlipReview accountNumbers={accountNumbers} slip={{
-                id: r.id, imageUrl: urlOf.get(r.path) ?? null, createdAt: r.created_at, riderName: r.rider?.full_name ?? "Rider",
+                id: r.id, imageUrl: urlOf.get(r.path) ?? null, createdAt: r.created_at, riderName: r.rider?.full_name ?? (r.bookings?.guest_name ? `${r.bookings.guest_name} (no account, ${r.bookings.guest_phone})` : "Rider"),
                 riderOcr: r.ocr, booking: r.bookings,
               } satisfies PendingSlip} />
             </li>
@@ -72,7 +72,7 @@ async function Transfers() {
               <li key={r.id}><Link href={r.bookings ? `/bookings/${r.bookings.id}` : "#"} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm hover:bg-line/40">
                 <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.status === "approved" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-red-500/15 text-red-700 dark:text-red-400"}`}>{r.status}</span>
                 <span className="plate text-xs">{r.bookings?.reference}</span>
-                <span>{r.rider?.full_name ?? "Rider"}</span>
+                <span>{r.rider?.full_name ?? r.bookings?.guest_name ?? "Rider"}</span>
                 <span className="tabular-nums">{r.amount != null ? money(r.amount, r.bookings?.currency) : r.bookings ? money(r.bookings.total, r.bookings.currency) : ""}</span>
                 {r.reject_reason && <span className="text-muted">“{r.reject_reason}”</span>}
                 <span className="ml-auto text-muted">{r.reviewed_at ? dt(new Date(r.reviewed_at)) : ""} ›</span>

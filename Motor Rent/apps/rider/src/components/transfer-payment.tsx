@@ -11,13 +11,14 @@ import { useTheme } from '@/hooks/use-theme';
 import { dateTime, money } from '@/lib/format';
 import { ocrAvailable, ocrImage } from '@/lib/ocr';
 import { loadBankAccounts, useSiteSettings, type BankAccount } from '@/lib/site';
+import { callFunction } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 
 import { ThemedText } from './themed-text';
 import { Button, Card, ErrorText, Pill, PressableScale } from './ui';
 
 export type PayableBooking = { id: string; reference: string; total: number; currency: string; status: string; held_until: string | null };
-type Slip = { id: string; status: 'pending' | 'approved' | 'rejected'; reject_reason: string | null; created_at: string };
+type Slip = { id?: string; status: 'pending' | 'approved' | 'rejected'; reject_reason: string | null; created_at: string };
 
 function CopyRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   const t = useTheme();
@@ -44,8 +45,10 @@ function CopyRow({ label, value, mono }: { label: string; value: string; mono?: 
 /**
  * Bank-transfer payment for a held booking: our account details (copyable), the exact amount and
  * reference, then slip upload. On web the slip is OCR-checked instantly; staff always approve it.
+ * Riders without an account pass `guest` (the mobile number they booked with): the upload goes through the
+ * guest-booking function, which checks the reference and number.
  */
-export function TransferPayment({ booking, onChange }: { booking: PayableBooking; onChange?: () => void }) {
+export function TransferPayment({ booking, onChange, guest }: { booking: PayableBooking; onChange?: () => void; guest?: { phone: string } }) {
   const t = useTheme();
   const settings = useSiteSettings();
   const [accounts, setAccounts] = useState<BankAccount[] | null>(null);
@@ -56,15 +59,19 @@ export function TransferPayment({ booking, onChange }: { booking: PayableBooking
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
+  const guestPhone = guest?.phone;
   const refresh = useCallback(async () => {
     const [acc, s] = await Promise.all([
       loadBankAccounts(),
-      supabase.from('transfer_slips').select('id, status, reject_reason, created_at').eq('booking_id', booking.id)
-        .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      guestPhone
+        ? callFunction<{ booking: { slip: Slip | null } }>('guest-booking', { action: 'lookup', reference: booking.reference, phone: guestPhone })
+            .then((r) => r.booking.slip).catch(() => null)
+        : supabase.from('transfer_slips').select('id, status, reject_reason, created_at').eq('booking_id', booking.id)
+            .order('created_at', { ascending: false }).limit(1).maybeSingle().then((r) => r.data as Slip | null),
     ]);
     setAccounts(acc);
-    setSlip((s.data as Slip | null) ?? null);
-  }, [booking.id]);
+    setSlip(s ?? null);
+  }, [booking.id, booking.reference, guestPhone]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => { const i = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(i); }, []);
@@ -102,6 +109,18 @@ export function TransferPayment({ booking, onChange }: { booking: PayableBooking
       }
 
       setBusy('Uploading…');
+      const contentType = `image/${type === 'jpg' ? 'jpeg' : type}`;
+      if (guest) {
+        const who = { reference: booking.reference, phone: guest.phone };
+        const link = await callFunction<{ path: string; token: string }>('guest-booking', { action: 'slip-url', ...who, ext: type });
+        const file = Platform.OS === 'web' ? blob : await (await fetch(asset.uri)).arrayBuffer();
+        const up = await supabase.storage.from('payment-slips').uploadToSignedUrl(link.path, link.token, file, { contentType });
+        if (up.error) throw new Error(up.error.message);
+        await callFunction('guest-booking', { action: 'slip', ...who, path: link.path, ocr });
+        await refresh();
+        onChange?.();
+        return;
+      }
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Please sign in again.');
       const path = `${user.id}/${booking.id}/${Date.now()}.${type}`;

@@ -114,7 +114,7 @@ export function Reserved({ booking, bankTransfer, vehicle, title, guest }: {
           <View style={{ alignItems: 'center', gap: Spacing.one }}>
             <ThemedText type="subtitle" style={{ textAlign: 'center' }}>We’ve got your booking</ThemedText>
             <ThemedText themeColor="textSecondary" style={{ textAlign: 'center' }}>
-              We’ll call {phoneLabel(guest.phone)} to confirm and take payment
+              Pay by bank transfer below and upload the slip to confirm it, or we’ll call {phoneLabel(guest.phone)} to arrange payment
               {booking.held_until ? `. We hold the ${vehicle.kind === 'car' ? 'car' : 'bike'} for you until ${dateTime(new Date(booking.held_until))}.` : '.'}
             </ThemedText>
           </View>
@@ -126,6 +126,7 @@ export function Reserved({ booking, bankTransfer, vehicle, title, guest }: {
               {guest.handover === 'delivery' ? ` We’ll bring it to ${guest.address}.` : ' Show it at the counter with your licence and ID.'}
             </ThemedText>
           </Card>
+          <TransferPayment booking={booking} guest={{ phone: guest.phone }} />
           <ViberButton code={booking.viber_token} />
           <Button variant="secondary" title="Check my booking" onPress={() => router.replace({ pathname: '/find', params: { ref: reference, phone: guest.phone } })} />
           <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>

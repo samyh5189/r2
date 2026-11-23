@@ -1,6 +1,7 @@
 // POST /guest-booking — book without an account, or look a booking up by reference and mobile number.
 //   { action: "book", quoteId, name, phone, handover, deliveryAddress?, acceptedTermsVersion }
 //   { action: "lookup", reference, phone }
+//   { action: "slip-url", reference, phone, ext } → signed upload link; { action: "slip", reference, phone, path, ocr }
 // A guest booking is held unpaid; the office calls the number to confirm and take payment. When someone later
 // verifies an account with the same mobile number, staff approval joins these bookings to it.
 import { GuestBookingRequest, GuestLookupRequest } from "@shared/schemas.ts";
@@ -39,17 +40,45 @@ Deno.serve(handler(async (req) => {
   try { body = await req.json(); } catch { throw new HttpError(400, "BAD_JSON", "Request body must be JSON."); }
   const ip = clientIp(req);
 
+  // Bank transfer slip: get an upload link, then submit the uploaded file for review.
+  if (body.action === "slip-url" || body.action === "slip") {
+    const parsed = GuestLookupRequest.safeParse(body);
+    if (!parsed.success) throw new HttpError(422, "VALIDATION", parsed.error.issues.map((i) => i.message).join("; "));
+    await rateLimit(db, "slip", ip, 12, 60);
+    const phone = await normPhone(db, parsed.data.phone);
+    const { data: b } = await db.from("bookings").select("id, status, held_until")
+      .eq("reference", parsed.data.reference).eq("guest_phone", phone).maybeSingle();
+    if (!b) throw new HttpError(404, "NOT_FOUND", "No booking with that reference and mobile number.");
+    if (b.status !== "held" || (b.held_until && new Date(b.held_until) < new Date())) {
+      throw new HttpError(409, "NOT_PAYABLE", "This booking is no longer waiting for payment.");
+    }
+    if (body.action === "slip-url") {
+      const ext = ["jpg", "png", "webp"].includes(String(body.ext)) ? String(body.ext) : "jpg";
+      const path = `guest/${b.id}/${Date.now()}.${ext}`;
+      const { data, error } = await db.storage.from("payment-slips").createSignedUploadUrl(path);
+      if (error || !data) throw new HttpError(500, "UPLOAD_LINK", "Could not prepare the upload. Try again.");
+      return json({ path, token: data.token });
+    }
+    const path = String(body.path ?? "");
+    const ocr = body.ocr && typeof body.ocr === "object" ? body.ocr : null;
+    const { error } = await db.rpc("submit_guest_slip", { p_booking: b.id, p_path: path, p_ocr: ocr });
+    if (error) throw new HttpError(409, "SLIP", error.message);
+    return json({ ok: true });
+  }
+
   if (body.action === "lookup") {
     const parsed = GuestLookupRequest.safeParse(body);
     if (!parsed.success) throw new HttpError(422, "VALIDATION", parsed.error.issues.map((i) => i.message).join("; "));
     await rateLimit(db, "lookup", ip, 20, 60);
     const phone = await normPhone(db, parsed.data.phone);
     const { data: b } = await db.from("bookings")
-      .select("reference, status, period, total, currency, held_until, handover, delivery_address, guest_name, rider_id, viber_token, vehicles(make, model, plate, kind), branches(name)")
+      .select("id, reference, status, period, total, currency, held_until, handover, delivery_address, guest_name, rider_id, viber_token, vehicles(make, model, plate, kind), branches(name)")
       .eq("reference", parsed.data.reference).eq("guest_phone", phone).maybeSingle();
     if (!b) throw new HttpError(404, "NOT_FOUND", "No booking with that reference and mobile number.");
-    const { rider_id, ...rest } = b;
-    return json({ booking: { ...rest, linked: !!rider_id } });
+    const { rider_id, id, ...rest } = b;
+    const { data: slip } = await db.from("transfer_slips").select("status, reject_reason, created_at").eq("booking_id", id)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    return json({ booking: { ...rest, id, linked: !!rider_id, slip } });
   }
 
   const parsed = GuestBookingRequest.safeParse(body);

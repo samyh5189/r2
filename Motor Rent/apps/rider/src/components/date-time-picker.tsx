@@ -117,62 +117,83 @@ function TapThrough({ value, min, days, onCommit }: { value: Date; min: Date; da
   const today = new Date();
   const tomorrow = addDays(today, 1);
   const dayName = (d: Date) => sameMvDay(d, today) ? 'Today' : sameMvDay(d, tomorrow) ? 'Tomorrow' : fmtWeekday(d);
+  const mvLabel = (d: Date, o: Intl.DateTimeFormatOptions) => d.toLocaleDateString('en-GB', { ...o, timeZone: 'Indian/Maldives' });
 
-  if (!day) return <DaySwiper days={dayList} value={value} dayName={dayName} onPick={setDay} />;
+  if (!day) {
+    return (
+      <Swiper items={dayList} selected={dayList.findIndex((d) => sameMvDay(d, value))} perPhone={4}
+        label={(first) => (dayList[first] ? mvLabel(dayList[first], { month: 'long', year: 'numeric' }) : '')} hint="Swipe for more days."
+        render={(d, w) => {
+          const sel = sameMvDay(d, value);
+          return (
+            <PressableScale key={d.getTime()} onPress={() => setDay(d)} accessibilityRole="radio" accessibilityState={{ selected: sel }}
+              accessibilityLabel={`${fmtWeekday(d, 'long')} ${fmtDayMonth(d)}`} scaleTo={0.93} lift={false}
+              style={[styles.swipeCard, { width: w, borderColor: sel ? t.accent : t.border, backgroundColor: t.backgroundElement }, snapStart]}>
+              <ThemedText type="small" style={{ color: sel ? t.accent : t.textSecondary, fontSize: 12, lineHeight: 15 }}>{dayName(d)}</ThemedText>
+              <ThemedText type="heading" style={{ fontSize: 24, lineHeight: 28 }}>{mvLabel(d, { day: 'numeric' })}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" style={{ fontSize: 12, lineHeight: 15 }}>{mvLabel(d, { month: 'short' })}</ThemedText>
+            </PressableScale>
+          );
+        }} />
+    );
+  }
   const times = slotsFor(day, min);
+  const part = (d: Date) => { const h = mvMinutes(d) / 60; return h < 12 ? 'Morning' : h < 17 ? 'Afternoon' : 'Evening'; };
   return (
-    <Animated.View entering={FadeIn.duration(200)} style={{ gap: Spacing.three }}>
+    <Animated.View entering={FadeIn.duration(200)} style={{ gap: Spacing.two }}>
       <View style={styles.dayHead}>
         <ThemedText type="heading">{dayName(day)}, {fmtDayMonth(day)}</ThemedText>
         <Pressable onPress={() => setDay(null)} accessibilityRole="button" hitSlop={8}>
           <ThemedText type="smallBold" themeColor="accent">Change day</ThemedText>
         </Pressable>
       </View>
-      <View style={styles.grid} accessibilityRole="radiogroup">
-        {times.map((s) => {
+      <Swiper items={times} selected={times.findIndex((s) => s.getTime() === value.getTime())} perPhone={4}
+        label={(first) => (times[first] ? part(times[first]) : '')} hint="Swipe for more times."
+        render={(s, w) => {
           const sel = s.getTime() === value.getTime();
           return (
             <PressableScale key={s.getTime()} onPress={() => onCommit(s)} accessibilityRole="radio" accessibilityState={{ selected: sel }}
               scaleTo={0.93} lift={false}
-              style={[styles.timeCard, { borderColor: sel ? t.accent : t.border, backgroundColor: sel ? t.accent : t.backgroundElement }]}>
-              <ThemedText type="smallBold" style={{ color: sel ? t.accentText : t.text, fontVariant: ['tabular-nums'], fontSize: 16 }}>{fmtTime(s)}</ThemedText>
+              style={[styles.swipeCard, { width: w, borderColor: sel ? t.accent : t.border, backgroundColor: sel ? t.accent : t.backgroundElement }, snapStart]}>
+              <ThemedText type="heading" style={{ color: sel ? t.accentText : t.text, fontVariant: ['tabular-nums'], fontSize: 20, lineHeight: 26 }}>{fmtTime(s)}</ThemedText>
             </PressableScale>
           );
-        })}
-      </View>
+        }} />
     </Animated.View>
   );
 }
 
-/** Day cards in a swipeable row that snaps card by card (like the fleet showcase); arrows on wider screens. */
-function DaySwiper({ days, value, dayName, onPick }: { days: Date[]; value: Date; dayName: (d: Date) => string; onPick: (d: Date) => void }) {
-  const t = useTheme();
+const snapStart = Platform.OS === 'web' ? ({ scrollSnapAlign: 'start' } as object) : null;
+
+/** Cards in a swipeable row that snaps card by card (like the fleet showcase); arrows on wider screens. */
+function Swiper<T>({ items, selected, perPhone, label, hint, render }: {
+  items: T[]; selected: number; perPhone: number; label: (first: number) => string; hint: string;
+  render: (item: T, width: number) => React.ReactNode;
+}) {
   const { width } = useWindowDimensions();
   const [boxW, setBoxW] = useState(0);
-  const per = width >= 900 ? 7 : width >= 640 ? 5 : 4;
+  const per = width >= 900 ? perPhone + 3 : width >= 640 ? perPhone + 1 : perPhone;
   const gap = Spacing.two;
   const cardW = boxW ? (boxW - gap * (per - 1)) / per : 80;
   const step = cardW + gap;
   const ref = useRef<ScrollViewInstance>(null);
   const [first, setFirst] = useState(0);
-  const selected = Math.max(0, days.findIndex((d) => sameMvDay(d, value)));
-  const last = Math.max(0, days.length - per);
+  const last = Math.max(0, items.length - per);
   const go = (i: number) => ref.current?.scrollTo({ x: Math.max(0, Math.min(last, i)) * step, animated: true });
-  // Start with the chosen day in view.
+  // Start with the chosen card in view.
   useEffect(() => {
     if (!boxW) return;
     const id = setTimeout(() => ref.current?.scrollTo({ x: Math.min(last, Math.max(0, selected - 1)) * step, animated: false }), 0);
     return () => clearTimeout(id);
   }, [boxW, selected, last, step]);
-  const month = days[first] ? days[first].toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'Indian/Maldives' }) : '';
   return (
     <View style={{ gap: Spacing.two }} onLayout={(e) => setBoxW(e.nativeEvent.layout.width)}>
       <View style={styles.dayHead}>
-        <ThemedText type="smallBold" themeColor="textSecondary">{month}</ThemedText>
+        <ThemedText type="smallBold" themeColor="textSecondary">{label(first)}</ThemedText>
         {width >= 640 && (
           <View style={{ flexDirection: 'row', gap: Spacing.two }}>
-            <SwipeArrow label="Earlier days" disabled={first === 0} onPress={() => go(first - per)}>‹</SwipeArrow>
-            <SwipeArrow label="Later days" disabled={first >= last} onPress={() => go(first + per)}>›</SwipeArrow>
+            <SwipeArrow label="Earlier" disabled={first === 0} onPress={() => go(first - per)}>‹</SwipeArrow>
+            <SwipeArrow label="Later" disabled={first >= last} onPress={() => go(first + per)}>›</SwipeArrow>
           </View>
         )}
       </View>
@@ -180,21 +201,9 @@ function DaySwiper({ days, value, dayName, onPick }: { days: Date[]; value: Date
         scrollEventThrottle={32} onScroll={(e) => setFirst(Math.round(e.nativeEvent.contentOffset.x / step))}
         contentContainerStyle={{ gap }} style={Platform.OS === 'web' ? ({ scrollSnapType: 'x mandatory' } as object) : undefined}
         accessibilityRole="radiogroup">
-        {days.map((d) => {
-          const sel = sameMvDay(d, value);
-          return (
-            <PressableScale key={d.getTime()} onPress={() => onPick(d)} accessibilityRole="radio" accessibilityState={{ selected: sel }}
-              accessibilityLabel={`${fmtWeekday(d, 'long')} ${fmtDayMonth(d)}`} scaleTo={0.93} lift={false}
-              style={[styles.swipeCard, { width: cardW, borderColor: sel ? t.accent : t.border, backgroundColor: t.backgroundElement },
-                Platform.OS === 'web' && ({ scrollSnapAlign: 'start' } as object)]}>
-              <ThemedText type="small" style={{ color: sel ? t.accent : t.textSecondary, fontSize: 12, lineHeight: 15 }}>{dayName(d)}</ThemedText>
-              <ThemedText type="heading" style={{ fontSize: 24, lineHeight: 28 }}>{d.toLocaleDateString('en-GB', { day: 'numeric', timeZone: 'Indian/Maldives' })}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary" style={{ fontSize: 12, lineHeight: 15 }}>{d.toLocaleDateString('en-GB', { month: 'short', timeZone: 'Indian/Maldives' })}</ThemedText>
-            </PressableScale>
-          );
-        })}
+        {items.map((it) => render(it, cardW))}
       </ScrollView>
-      <ThemedText type="small" themeColor="textSecondary">Swipe for more days.</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">{hint}</ThemedText>
     </View>
   );
 }
