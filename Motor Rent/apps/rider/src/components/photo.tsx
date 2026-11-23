@@ -51,8 +51,18 @@ const ModelCutouts: { make: RegExp; match: RegExp; source: ImageProps['source'];
     silver: require('@/assets/images/stock/colours/pcx-silver.webp'),
     yellow: require('@/assets/images/stock/colours/pcx-yellow.webp'),
   } },
-  // Our own Mazda 2, cut out of the photo uploaded in the admin.
-  { make: /mazda/i, match: /\b2\b/, source: require('@/assets/images/stock/mazda2-cutout.webp'), credit: '', colour: 'silver', variants: {} },
+  // Our own Mazda 2, cut out of the photo uploaded in the admin (plate blanked); used for every Mazda 2.
+  { make: /mazda/i, match: /\b2\b/, source: require('@/assets/images/stock/mazda2-cutout.webp'), credit: '', colour: 'silver', variants: {
+    black: require('@/assets/images/stock/colours/mazda2-black.webp'),
+    white: require('@/assets/images/stock/colours/mazda2-white.webp'),
+    grey: require('@/assets/images/stock/colours/mazda2-grey.webp'),
+    red: require('@/assets/images/stock/colours/mazda2-red.webp'),
+    blue: require('@/assets/images/stock/colours/mazda2-blue.webp'),
+    green: require('@/assets/images/stock/colours/mazda2-green.webp'),
+    yellow: require('@/assets/images/stock/colours/mazda2-yellow.webp'),
+    orange: require('@/assets/images/stock/colours/mazda2-orange.webp'),
+    brown: require('@/assets/images/stock/colours/mazda2-brown.webp'),
+  } },
 ];
 
 type BikeLike = { photos?: string[] | null; kind?: VehicleKind | null; make?: string | null; model?: string | null; colour?: string | null };

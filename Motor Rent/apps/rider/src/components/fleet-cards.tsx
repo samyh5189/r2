@@ -99,7 +99,7 @@ export function ModelCarousel({ models, onView = false, style }: { models: Model
           snapToInterval={step} decelerationRate="fast" disableIntervalMomentum onScroll={onScroll} scrollEventThrottle={32}
           style={[styles.track, web && ({ scrollSnapType: 'x mandatory', overscrollBehaviorX: 'contain' } as ViewStyle)]}
           contentContainerStyle={[styles.trackInner, { gap }]}
-          accessibilityRole="list" accessibilityLabel="Bikes in the fleet">
+          accessibilityRole="list" accessibilityLabel="Vehicles in the fleet">
           {models.map((m, i) => (
             <View key={m.key} style={[{ width: cardW }, web && ({ scrollSnapAlign: 'start' } as ViewStyle)]}>
               <Reveal onView={onView} delay={80 * (i + 1)} duration={800} style={{ flex: 1 }}>

@@ -30,7 +30,7 @@ export default function HomeScreen() {
         <View style={[styles.body, { paddingHorizontal: gutter }]}>
           {models && models.length > 0 && (
             <View style={styles.section}>
-              <SectionTitle title="The fleet" sub="Well-kept scooters and motorbikes, shown with the full day price." />
+              <SectionTitle title="The fleet" sub="Well-kept scooters, motorbikes and cars, shown with the full day price." />
               <ModelCarousel models={models} onView />
               <Reveal onView><ArrowLink label="See the whole fleet" href="/fleet" /></Reveal>
             </View>
@@ -74,7 +74,7 @@ function Hero({ wide }: { wide: boolean }) {
             <Reveal delay={650} duration={900}>
               <View style={{ gap: Spacing.three, marginTop: Spacing.four }}>
                 <ThemedText style={{ color: 'rgba(255,255,255,0.88)', fontSize: 17, lineHeight: 25, maxWidth: 440 }}>
-                  Scooters and motorbikes by the hour or the day. Choose your times, pick a bike, collect the keys.
+                  Scooters, motorbikes and cars by the hour or the day. Choose your times, pick your ride, collect the keys.
                 </ThemedText>
                 <View style={{ alignSelf: 'flex-start', minWidth: 230 }}>
                   <Button variant="cta" title="Book a ride" onPress={() => router.push('/book')} />

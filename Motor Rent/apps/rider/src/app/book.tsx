@@ -47,7 +47,7 @@ export default function BookScreen() {
   const hours = Math.round((+end - +start) / 3_600_000);
   const step = Math.min(LAST, Math.max(0, Number(params.step ?? 0) || 0));
   const bikeId = params.bike ?? null;
-  const helmets = Math.min(2, Math.max(0, Number(params.helmets ?? 0) || 0));
+  const askedHelmets = Math.min(2, Math.max(0, Number(params.helmets ?? 0) || 0));
 
   const set = (p: Record<string, string | undefined>) => router.setParams(p);
   const go = (s: number) => set({ step: String(s) });
@@ -80,6 +80,9 @@ export default function BookScreen() {
         .map((r) => ({ id: r.vehicle_id, from: +new Date(r.busy_from), to: +new Date(r.busy_to) }))));
   }, []);
   const bike = bikes?.find((b) => b.id === bikeId) ?? null;
+  // Helmets are for two-wheelers; a car never carries one into the quote.
+  const isCar = bike?.kind === 'car';
+  const helmets = isCar ? 0 : askedHelmets;
   // Helmets are an optional extra (none come with the bike); show the daily price on the extras step.
   const [helmetPrice, setHelmetPrice] = useState<number | null>(null);
   useEffect(() => {
@@ -184,7 +187,7 @@ export default function BookScreen() {
           </View>
           <View style={{ alignItems: 'flex-end' }}><ThemedText type="small" themeColor="textSecondary">Return</ThemedText><ThemedText type="smallBold">{step >= 1 ? dateTime(end) : '—'}</ThemedText></View>
         </View>
-        <ThemedText type="small" themeColor="textSecondary">{step >= 1 ? lengthLabel(hours) : 'Return time next'}{step >= 3 ? (helmets ? `, ${helmets} helmet${helmets > 1 ? 's' : ''}` : ', no helmet') : ''}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">{step >= 1 ? lengthLabel(hours) : 'Return time next'}{step >= 3 && !isCar ? (helmets ? `, ${helmets} helmet${helmets > 1 ? 's' : ''}` : ', no helmet') : ''}</ThemedText>
       </View>
       <View style={[styles.ticketPad, styles.dashed, styles.rowBetween, { borderColor: t.border }]}>
         <View style={styles.flex}><ThemedText type="small" themeColor="textSecondary">Rider</ThemedText><ThemedText type="smallBold">{me?.full_name || (session ? '—' : 'Sign in at the extras step')}</ThemedText></View>
@@ -258,15 +261,23 @@ export default function BookScreen() {
 
           {step === 3 && bike && screen(
             `${bike.make} ${bike.model}, good choice.`,
-            'Would you like a helmet?',
+            isCar ? 'Ready for your price?' : 'Would you like a helmet?',
             <>
-              <ThemedText themeColor="textSecondary">
-                Helmets aren’t required in Kulhudhuffushi, so the bike comes without one. Ask for one if you’d like it
-                {helmetPrice != null ? `, ${money(helmetPrice, bike.price_plans?.currency ?? 'MVR')} a day each` : ''}.
-              </ThemedText>
-              <View style={styles.chips}>
-                {[0, 1, 2].map((n) => <Choice key={n} label={n === 0 ? 'No helmet' : n === 1 ? '1 helmet' : '2 helmets'} selected={n === helmets} onPress={() => set({ helmets: String(n) })} />)}
-              </View>
+              {isCar ? (
+                <ThemedText themeColor="textSecondary">
+                  You’ll need a driving licence valid for cars. The car comes with a full check at pickup; return it with the same fuel level.
+                </ThemedText>
+              ) : (
+                <>
+                  <ThemedText themeColor="textSecondary">
+                    Helmets aren’t required in Kulhudhuffushi, so the bike comes without one. Ask for one if you’d like it
+                    {helmetPrice != null ? `, ${money(helmetPrice, bike.price_plans?.currency ?? 'MVR')} a day each` : ''}.
+                  </ThemedText>
+                  <View style={styles.chips}>
+                    {[0, 1, 2].map((n) => <Choice key={n} label={n === 0 ? 'No helmet' : n === 1 ? '1 helmet' : '2 helmets'} selected={n === helmets} onPress={() => set({ helmets: String(n) })} />)}
+                  </View>
+                </>
+              )}
               {!session ? (
                 <View style={{ gap: Spacing.two }}>
                   <ThemedText>Sign in to see your exact price and book. Your choices are kept.</ThemedText>
