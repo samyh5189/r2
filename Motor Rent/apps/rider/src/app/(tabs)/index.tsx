@@ -114,7 +114,7 @@ function HowItWorks({ wide }: { wide: boolean }) {
   const counter = useCounter();
   const steps = [
     ['Pick your times', `Pickup and return at our counter, any time from ${counter.label.replace(' – ', ' to ')}.`],
-    ['Choose a bike and pay', 'You only see bikes free for your times, with the full price. Pay by bank transfer to confirm.'],
+    ['Choose your ride and pay', 'You only see vehicles free for your times, with the full price. Pay by bank transfer to confirm.'],
     ['Collect and ride', 'Verify your licence and ID once, then show your reference at the counter.'],
   ];
   return (

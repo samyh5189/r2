@@ -25,7 +25,14 @@ type Bike = {
   branches: { name: string } | null;
   price_plans: { hourly: number; daily: number; weekly: number; deposit: number; multiplier: number; currency: 'MVR' | 'USD' } | null;
 };
-const STEPS = ['Pickup', 'Return', 'Bike', 'Extras', 'Review'] as const;
+const STEPS = ['Pickup', 'Return', 'Vehicle', 'Extras', 'Review'] as const;
+
+/** What to call a set of vehicles: "bike(s)" or "car(s)" when they're all one kind, else "vehicle(s)". */
+function noun(list: { kind: string }[] | null | undefined, n = 2) {
+  const kinds = new Set((list ?? []).map((v) => (v.kind === 'car' ? 'car' : 'bike')));
+  const word = kinds.size === 1 ? [...kinds][0]! : 'vehicle';
+  return n === 1 ? word : `${word}s`;
+}
 const LAST = STEPS.length - 1;
 
 /**
@@ -157,6 +164,7 @@ export default function BookScreen() {
     : bike && estimate(bike) != null ? money(estimate(bike)!, bike.price_plans!.currency) : null;
   const firstName = me?.full_name?.trim().split(/\s+/)[0];
   const freeCount = free?.size ?? 0;
+  const freeList = bikes && free ? bikes.filter((b) => free.has(b.id)) : null;
 
   /** One screen = one question: a short lead line, a big question, the answer, one button. */
   const screen = (lead: string, question: string, body: React.ReactNode) => (
@@ -177,7 +185,7 @@ export default function BookScreen() {
       <View style={styles.ticketPad}>
         <View style={styles.rowBetween}>
           <ThemedText type="eyebrow" style={{ color: t.accent }}>Your ride</ThemedText>
-          {bike ? <Plate size="sm">{bike.plate}</Plate> : <ThemedText type="small" themeColor="textSecondary">Bike</ThemedText>}
+          {bike ? <Plate size="sm">{bike.plate}</Plate> : <ThemedText type="small" themeColor="textSecondary">Vehicle</ThemedText>}
         </View>
         <ThemedText type="heading" themeColor={bike ? 'text' : 'textSecondary'}>{bike ? `${bike.make} ${bike.model}` : 'Not chosen yet'}</ThemedText>
       </View>
@@ -227,7 +235,7 @@ export default function BookScreen() {
       <ScrollView contentContainerStyle={[styles.scroll, wide && styles.scrollWide]} keyboardShouldPersistTaps="handled">
         <View style={[styles.main, wide && { flex: 1 }]}>
           {step === 0 && screen(
-            firstName ? `Hi ${firstName}, let’s get you on a bike. It takes about a minute.` : 'Let’s get you on a bike. It takes about a minute.',
+            firstName ? `Hi ${firstName}, let’s get you riding. It takes about a minute.` : 'Let’s get you riding. It takes about a minute.',
             'When do you want to pick up?',
             <>
               <DateTimePicker value={start} onChange={setStart} min={earliest} days={MAX_RENTAL_DAYS} />
@@ -246,14 +254,14 @@ export default function BookScreen() {
                 ))}
               </View>
               <DateTimePicker value={end} onChange={(d) => set({ end: d.toISOString() })} min={minEnd} days={MAX_RENTAL_DAYS + 1} />
-              <Button title={free == null ? 'See available bikes' : freeCount ? `See ${freeCount} available bike${freeCount === 1 ? '' : 's'}` : 'See bikes'}
+              <Button title={free == null ? `See available ${noun(bikes)}` : freeCount ? `See ${freeCount} available ${noun(freeList, freeCount)}` : `See ${noun(bikes)}`}
                 onPress={() => go(2)} disabled={hours > MAX_RENTAL_DAYS * 24} />
             </>,
           )}
 
           {step === 2 && screen(
             `${dateTime(start)} to ${dateTime(end)}.`,
-            'Which bike would you like?',
+            freeList && noun(freeList) === 'vehicles' ? 'What would you like to ride?' : `Which ${noun(freeList ?? bikes, 1)} would you like?`,
             !bikes || !free ? <ActivityIndicator color={t.accent} /> : (
               <BikeList bikes={bikes} free={free} selected={bikeId} estimate={estimate}
                 nextFree={(b) => (busy ? nextFree(busy.filter((w) => w.id === b.id), start, +end - +start) : null)}
@@ -343,8 +351,8 @@ export default function BookScreen() {
 
           {step >= 3 && !bike && bikes && (
             <Card style={{ gap: Spacing.two }}>
-              <ThemedText>Choose a bike first.</ThemedText>
-              <Button variant="secondary" title="Pick a bike" onPress={() => go(2)} />
+              <ThemedText>Choose what you’d like to ride first.</ThemedText>
+              <Button variant="secondary" title={`Pick a ${noun(bikes, 1)}`} onPress={() => go(2)} />
             </Card>
           )}
 
@@ -419,8 +427,8 @@ function BikeList({ bikes, free, selected, estimate, nextFree: freeAt, onPick, o
     return (
       <View style={{ gap: Spacing.two }}>
         <Card style={{ gap: Spacing.two }}>
-          <ThemedText>{bikes.length === 1 ? 'Our bike is booked for these times.' : 'All bikes are booked for these times.'}</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">Pick different times, or book when a bike is free again below.</ThemedText>
+          <ThemedText>{bikes.length === 1 ? `Our ${noun(bikes, 1)} is booked for these times.` : `All ${noun(bikes)} are booked for these times.`}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">Pick different times, or book when one is free again below.</ThemedText>
           <Button variant="secondary" title="Change times" onPress={onChangeTimes} />
         </Card>
         {bookedList}
