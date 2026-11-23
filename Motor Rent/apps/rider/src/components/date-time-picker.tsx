@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { ScrollView, StyleSheet, View, type ScrollViewInstance } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View, type ScrollViewInstance } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -34,10 +35,18 @@ export function firstSlot(min: Date): Date {
   return min;
 }
 
-/** Day chips (scrollable) + 30-minute time chips within opening hours. */
-export function DateTimePicker({ value, onChange, min, days = 30, label }: {
-  value: Date; onChange: (d: Date) => void; min: Date; days?: number; label?: string;
+/**
+ * Day chips (scrollable) + 30-minute time chips within opening hours.
+ * With `onCommit` it works one tap at a time: tap a day, then its times appear; tapping a time commits.
+ */
+export function DateTimePicker({ value, onChange, min, days = 30, label, onCommit }: {
+  value: Date; onChange: (d: Date) => void; min: Date; days?: number; label?: string; onCommit?: (d: Date) => void;
 }) {
+  if (onCommit) return <TapThrough value={value} min={min} days={days} onCommit={onCommit} />;
+  return <Classic value={value} onChange={onChange} min={min} days={days} label={label} />;
+}
+
+function Classic({ value, onChange, min, days, label }: { value: Date; onChange: (d: Date) => void; min: Date; days: number; label?: string }) {
   const t = useTheme();
   const dayList = useMemo(() => {
     const first = mvDayStart(min);
@@ -97,8 +106,66 @@ export function DateTimePicker({ value, onChange, min, days = 30, label }: {
   );
 }
 
+/** One question at a time: pick a day (it stays highlighted), then a time on that day, which commits. */
+function TapThrough({ value, min, days, onCommit }: { value: Date; min: Date; days: number; onCommit: (d: Date) => void }) {
+  const t = useTheme();
+  const [day, setDay] = useState<Date | null>(null);
+  const dayList = useMemo(() => {
+    const first = mvDayStart(min);
+    return Array.from({ length: days }, (_, i) => addDays(first, i)).filter((d) => slotsFor(d, min).length > 0);
+  }, [min, days]);
+  const today = new Date();
+  const tomorrow = addDays(today, 1);
+  const dayName = (d: Date) => sameMvDay(d, today) ? 'Today' : sameMvDay(d, tomorrow) ? 'Tomorrow' : fmtWeekday(d);
+
+  if (!day) {
+    return (
+      <View style={styles.grid} accessibilityRole="radiogroup">
+        {dayList.map((d) => {
+          const sel = sameMvDay(d, value);
+          return (
+            <PressableScale key={d.getTime()} onPress={() => setDay(d)} accessibilityRole="radio" accessibilityState={{ selected: sel }}
+              accessibilityLabel={`${fmtWeekday(d, 'long')} ${fmtDayMonth(d)}`} scaleTo={0.93} lift={false}
+              style={[styles.dayCard, { borderColor: sel ? t.accent : t.border, backgroundColor: t.backgroundElement }]}>
+              <ThemedText type="small" style={{ color: sel ? t.accent : t.textSecondary, fontSize: 12, lineHeight: 15 }}>{dayName(d)}</ThemedText>
+              <ThemedText type="heading" style={{ fontSize: 18, lineHeight: 22 }}>{fmtDayMonth(d)}</ThemedText>
+            </PressableScale>
+          );
+        })}
+      </View>
+    );
+  }
+  const times = slotsFor(day, min);
+  return (
+    <Animated.View entering={FadeIn.duration(200)} style={{ gap: Spacing.three }}>
+      <View style={styles.dayHead}>
+        <ThemedText type="heading">{dayName(day)}, {fmtDayMonth(day)}</ThemedText>
+        <Pressable onPress={() => setDay(null)} accessibilityRole="button" hitSlop={8}>
+          <ThemedText type="smallBold" themeColor="accent">Change day</ThemedText>
+        </Pressable>
+      </View>
+      <View style={styles.grid} accessibilityRole="radiogroup">
+        {times.map((s) => {
+          const sel = s.getTime() === value.getTime();
+          return (
+            <PressableScale key={s.getTime()} onPress={() => onCommit(s)} accessibilityRole="radio" accessibilityState={{ selected: sel }}
+              scaleTo={0.93} lift={false}
+              style={[styles.timeCard, { borderColor: sel ? t.accent : t.border, backgroundColor: sel ? t.accent : t.backgroundElement }]}>
+              <ThemedText type="smallBold" style={{ color: sel ? t.accentText : t.text, fontVariant: ['tabular-nums'], fontSize: 16 }}>{fmtTime(s)}</ThemedText>
+            </PressableScale>
+          );
+        })}
+      </View>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   row: { gap: Spacing.two, paddingVertical: 2, paddingRight: Spacing.three },
   day: { minWidth: 72, borderWidth: 1.5, borderRadius: Radius.sm, paddingVertical: 6, paddingHorizontal: Spacing.two, alignItems: 'center' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  dayCard: { width: 96, borderWidth: 1.5, borderRadius: Radius.sm, paddingVertical: Spacing.two, alignItems: 'center' },
+  timeCard: { width: 76, minHeight: 46, borderWidth: 1.5, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' },
+  dayHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: Spacing.two },
   time: { width: 62, minHeight: 40, borderWidth: 1.5, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' },
 });

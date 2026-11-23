@@ -201,7 +201,6 @@ export default function BookScreen() {
   const price = quote ? money(quote.total, quote.currency)
     : bike && estimate(bike) != null ? money(estimate(bike)!, bike.price_plans!.currency) : null;
   const firstName = me?.full_name?.trim().split(/\s+/)[0];
-  const freeCount = shown && free ? shown.filter((b) => free.has(b.id)).length : 0;
   const freeList = shown && free ? shown.filter((b) => free.has(b.id)) : null;
 
   /** One screen = one question: a short lead line, a big question, the answer, one button. */
@@ -218,8 +217,22 @@ export default function BookScreen() {
     </Animated.View>
   );
 
+  // What's been answered so far, shown on top; tap one to go back and change it.
+  const trail = [
+    hasBoth && type ? { step: 0, label: 'Ride', value: type === 'car' ? 'Car' : 'Bike' } : null,
+    { step: 1, label: 'Pickup', value: dateTime(start) },
+    { step: 2, label: 'Return', value: dateTime(end) },
+    bike ? { step: 3, label: isCar ? 'Car' : 'Bike', value: `${bike.make} ${bike.model}` } : null,
+    bike && !isCar ? { step: 4, label: 'Helmets', value: helmets ? String(helmets) : 'None' } : null,
+  ].filter((c): c is { step: number; label: string; value: string } => !!c && c.step < step && c.step >= firstStep);
+
   const ticket = (
     <View style={[styles.ticket, { borderColor: t.border, backgroundColor: t.backgroundElement }]}>
+      {bike && (
+        <Animated.View key={bike.id} entering={FadeIn.duration(300)} style={[styles.ticketPic, { backgroundColor: t.backgroundSelected }]}>
+          <BikeImage vehicle={bike} style={StyleSheet.absoluteFill} />
+        </Animated.View>
+      )}
       <View style={styles.ticketPad}>
         <View style={styles.rowBetween}>
           <ThemedText type="eyebrow" style={{ color: t.accent }}>Your ride</ThemedText>
@@ -269,6 +282,17 @@ export default function BookScreen() {
       <View style={[styles.progress, { backgroundColor: t.border }]} accessibilityRole="progressbar" accessibilityValue={{ min: 1, max: STEPS.length - firstStep, now: step - firstStep + 1 }}>
         <View style={{ width: `${((step - firstStep + 1) / (STEPS.length - firstStep)) * 100}%`, height: '100%', backgroundColor: t.accent }} />
       </View>
+      {trail.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0, minHeight: 58 }} contentContainerStyle={styles.trail}>
+          {trail.map((c) => (
+            <PressableScale key={c.step} onPress={() => go(c.step)} accessibilityRole="button" accessibilityLabel={`${c.label}: ${c.value}. Change`}
+              scaleTo={0.95} lift={false} style={[styles.trailChip, { borderColor: t.border, backgroundColor: t.backgroundElement }]}>
+              <ThemedText type="small" themeColor="textSecondary" style={{ fontSize: 11, lineHeight: 14 }}>{c.label}</ThemedText>
+              <ThemedText type="smallBold" numberOfLines={1}>{c.value} <ThemedText type="small" themeColor="accent">✎</ThemedText></ThemedText>
+            </PressableScale>
+          ))}
+        </ScrollView>
+      )}
 
       <ScrollView contentContainerStyle={[styles.scroll, wide && styles.scrollWide]} keyboardShouldPersistTaps="handled">
         <View style={[styles.main, wide && { flex: 1 }]}>
@@ -303,9 +327,12 @@ export default function BookScreen() {
             type ? `${type === 'car' ? 'A car' : 'A bike'}, good.` : firstName ? `Hi ${firstName}, let’s get you riding. It takes about a minute.` : 'Let’s get you riding. It takes about a minute.',
             'When do you want to pick up?',
             <>
-              <DateTimePicker value={start} onChange={setStart} min={earliest} days={MAX_RENTAL_DAYS} />
-              <ThemedText type="small" themeColor="textSecondary">Our counter is open 07:00 to 22:00.</ThemedText>
-              <Button title="Continue" onPress={() => go(2)} />
+              <DateTimePicker value={start} onChange={setStart} min={earliest} days={MAX_RENTAL_DAYS}
+                onCommit={(d) => {
+                  const len = Math.max(+end - +start, MIN_RENTAL_HOURS * 3_600_000);
+                  set({ start: d.toISOString(), end: firstSlot(new Date(+d + len)).toISOString(), step: '2' });
+                }} />
+              <ThemedText type="small" themeColor="textSecondary">Tap a day, then a time. Our counter is open 07:00 to 22:00.</ThemedText>
             </>,
           )}
 
@@ -315,12 +342,12 @@ export default function BookScreen() {
             <>
               <View style={styles.chips}>
                 {DURATIONS.map((d) => (
-                  <Choice key={d.label} label={d.label} selected={d.hours === hours} onPress={() => set({ end: new Date(+start + d.hours * 3_600_000).toISOString() })} />
+                  <Choice key={d.label} label={d.label} selected={d.hours === hours} onPress={() => set({ end: new Date(+start + d.hours * 3_600_000).toISOString(), step: '3' })} />
                 ))}
               </View>
-              <DateTimePicker value={end} onChange={(d) => set({ end: d.toISOString() })} min={minEnd} days={MAX_RENTAL_DAYS + 1} />
-              <Button title={free == null ? `See available ${noun(shown)}` : freeCount ? `See ${freeCount} available ${noun(freeList, freeCount)}` : `See ${noun(shown)}`}
-                onPress={() => go(3)} disabled={hours > MAX_RENTAL_DAYS * 24} />
+              <ThemedText type="small" themeColor="textSecondary">Or pick the day and time:</ThemedText>
+              <DateTimePicker value={end} onChange={(d) => set({ end: d.toISOString() })} min={minEnd} days={MAX_RENTAL_DAYS + 1}
+                onCommit={(d) => set({ end: d.toISOString(), step: '3' })} />
             </>,
           )}
 
@@ -582,6 +609,9 @@ const styles = StyleSheet.create({
   choice: { borderWidth: 1.5, borderRadius: Radius.md, paddingHorizontal: Spacing.three, paddingVertical: 12, minHeight: 48, justifyContent: 'center' },
   bike: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, padding: Spacing.two, borderRadius: Radius.md, borderWidth: 1.5 },
   kindRow: { gap: Spacing.three },
+  trail: { gap: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
+  trailChip: { borderWidth: 1, borderRadius: Radius.sm, paddingHorizontal: Spacing.two, paddingVertical: 4, maxWidth: 220 },
+  ticketPic: { height: 150, overflow: 'hidden' },
   kindCard: { flex: 1, borderWidth: 1.5, borderRadius: 18, padding: Spacing.three, gap: Spacing.one },
   kindPic: { width: '100%', height: 140, borderRadius: 12 },
   bikePhoto: { width: 128, height: 96, borderRadius: Radius.sm },
