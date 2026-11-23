@@ -61,5 +61,9 @@ export const InspectionSubmit = z.object({
   riderSignaturePath: z.string().regex(/\/rider-signature-\d+\.svg$/, "Rider signature required"),
   staffSignaturePath: z.string().regex(/\/staff-signature-\d+\.svg$/, "Staff signature required"),
   notes: z.string().max(2000).optional(),
+  /** Car checklist, item → ok / issue. */
+  checklist: z.record(z.string().max(40), z.enum(["ok", "issue"])).optional(),
+  /** Pickup: staff confirm the rider read and accepted the rental agreement before signing. */
+  agreementAccepted: z.boolean().optional(),
 });
 export type InspectionSubmit = z.infer<typeof InspectionSubmit>;

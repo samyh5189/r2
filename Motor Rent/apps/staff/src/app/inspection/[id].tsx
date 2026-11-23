@@ -12,6 +12,7 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError, callFunction } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
+import { AGREEMENT_SUMMARY } from '@motor-rent/shared';
 
 const ANGLES = ['front', 'back', 'left', 'right', 'dashboard', 'close-ups'] as const;
 type Shot = (typeof ANGLES)[number];
@@ -28,6 +29,7 @@ export default function InspectionScreen() {
   const [riderSig, setRiderSig] = useState<string | null>(null);
   const [staffSig, setStaffSig] = useState<string | null>(null);
   const [scrollLocked, setScrollLocked] = useState(false);
+  const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +39,7 @@ export default function InspectionScreen() {
   const minHrs = hrs ? Number(hrs) : 0;
   const hrsNum = Number(hours);
   const hrsValid = noMeter || (/^\d{1,6}(\.\d)?$/.test(hours) && hrsNum >= minHrs);
-  const complete = ANGLES.every((a) => shots[a]) && fuel !== null && odoValid && hrsValid && !!riderSig && !!staffSig;
+  const complete = ANGLES.every((a) => shots[a]) && fuel !== null && odoValid && hrsValid && !!riderSig && !!staffSig && (phase !== 'pickup' || accepted);
 
   async function take(shot: Shot) {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -74,7 +76,7 @@ export default function InspectionScreen() {
       const res = await callFunction<{ status: string; lateFee?: number }>('submit-inspection', {
         bookingId: id, phase, photoPaths, fuelLevel: fuel, odometerKm: odoNum, notes: notes || undefined,
         engineHours: noMeter ? null : Math.round(hrsNum * 10) / 10,
-        riderSignaturePath, staffSignaturePath,
+        riderSignaturePath, staffSignaturePath, agreementAccepted: phase === 'pickup' ? accepted : undefined,
       });
       if (res.lateFee && res.lateFee > 0) {
         const msg = `Returned late. Collect a late fee of Rf ${(res.lateFee / 100).toFixed(2)} before closing.`;
@@ -131,6 +133,20 @@ export default function InspectionScreen() {
             <ThemedText type="small">This vehicle has no hour meter</ThemedText>
           </Pressable>
         </View>
+
+        {phase === 'pickup' && (
+          <View style={[styles.section, { borderColor: t.border }]}>
+            <ThemedText type="smallBold">Rental agreement</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">Read these out to the rider. Their signature signs the agreement; the PDF is on the booking in the admin.</ThemedText>
+            {AGREEMENT_SUMMARY.map((line) => <ThemedText key={line} type="small">• {line}</ThemedText>)}
+            <Pressable onPress={() => setAccepted((v) => !v)} accessibilityRole="checkbox" accessibilityState={{ checked: accepted }} style={styles.checkRow}>
+              <View style={[styles.box, { borderColor: accepted ? t.accent : t.border, backgroundColor: accepted ? t.accent : 'transparent' }]}>
+                {accepted && <ThemedText type="smallBold" style={{ color: '#fff', lineHeight: 16 }}>✓</ThemedText>}
+              </View>
+              <ThemedText type="small" style={{ flex: 1 }}>The rider has read and accepts the rental agreement, including responsibility for fines, offences and criminal acts during the rental.</ThemedText>
+            </Pressable>
+          </View>
+        )}
 
         <View style={[styles.section, { borderColor: t.border }]}
           onTouchStart={() => setScrollLocked(true)} onTouchEnd={() => setScrollLocked(false)} onTouchCancel={() => setScrollLocked(false)}>

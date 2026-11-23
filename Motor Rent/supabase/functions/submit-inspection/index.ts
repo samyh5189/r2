@@ -3,6 +3,7 @@ import { lateFee } from "@shared/pricing.ts";
 import { InspectionSubmit } from "@shared/schemas.ts";
 import { handler, HttpError, json } from "../_shared/http.ts";
 import { parseTstzRange } from "../_shared/range.ts";
+import { makeAgreement } from "../_shared/agreement-file.ts";
 import { stripeClient } from "../_shared/stripe.ts";
 import { adminClient, parseJson, requireUser } from "../_shared/supabase.ts";
 
@@ -21,6 +22,10 @@ Deno.serve(handler(async (req) => {
     .eq("id", input.bookingId).single();
   if (!b) throw new HttpError(404, "NOT_FOUND", "Booking not found.");
   if (staff.role === "staff" && staff.branch_id !== b.branch_id) throw new HttpError(403, "WRONG_BRANCH", "This booking belongs to another branch.");
+
+  if (input.phase === "pickup" && !input.agreementAccepted) {
+    throw new HttpError(422, "AGREEMENT", "The rider must read and accept the rental agreement before signing.");
+  }
 
   // Files must belong to this booking + phase (no re-using another booking's photos).
   const prefix = `${b.id}/${input.phase}/`;
@@ -69,6 +74,7 @@ Deno.serve(handler(async (req) => {
     booking_id: b.id, phase: input.phase, photo_paths: input.photoPaths, fuel_level: input.fuelLevel,
     odometer_km: input.odometerKm, engine_hours: input.engineHours, rider_signature_path: input.riderSignaturePath,
     staff_signature_path: input.staffSignaturePath, notes: input.notes, staff_id: user.id,
+    ...(input.checklist ? { checklist: input.checklist } : {}),
   });
   if (insErr?.code === "23505") throw new HttpError(409, "ALREADY_DONE", `The ${input.phase} inspection was already recorded.`);
   if (insErr) throw insErr;
@@ -81,7 +87,14 @@ Deno.serve(handler(async (req) => {
   if (input.phase === "pickup") {
     await db.from("bookings").update({ status: "active", picked_up_at: now.toISOString() }).eq("id", b.id).eq("status", "confirmed");
     // TODO: create deposit authorisation hold off-session on the saved card (Stripe manual capture).
-    return json({ status: "active" });
+    // The signed rental agreement. The handover stands even if the PDF fails; staff can make it again.
+    try {
+      const { path } = await makeAgreement(db, b.id);
+      return json({ status: "active", contractPath: path });
+    } catch (e) {
+      console.error("agreement", e);
+      return json({ status: "active", contractError: "The vehicle is handed over, but the rental agreement PDF wasn't made. Use “Make agreement PDF” on the booking." });
+    }
   }
 
   const plan = vehicle.price_plans;

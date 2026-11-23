@@ -4,6 +4,7 @@ import { requireStaff } from "@/lib/auth";
 import { BankAccounts, type BankAccount } from "./bank-accounts";
 import { HeroSettings } from "./hero-settings";
 import { BranchSettings, type Branch } from "./branch-settings";
+import { CompanyDetails } from "./company-details";
 import { SupportContacts } from "./support-contacts";
 import { ConnectWhatsApp, MyWhatsApp, type WaTemplate } from "./whatsapp-settings";
 
@@ -27,7 +28,7 @@ async function Settings() {
   const { db, user } = await requireStaff();
   const canEdit = user.role === "manager" || user.role === "owner";
   const [settings, accounts, me, templates, branches] = await Promise.all([
-    db.from("site_settings").select("hero_image_url, hero_credit, bank_transfer_note, support_phone, support_email, whatsapp_ready, viber_ready, viber_uri").single(),
+    db.from("site_settings").select("hero_image_url, hero_credit, bank_transfer_note, support_phone, support_email, whatsapp_ready, viber_ready, viber_uri, company_legal_name, company_reg_no, company_address").single(),
     db.from("bank_accounts").select("id, bank_name, account_name, account_number, currency, swift, note, active, sort").order("sort").order("created_at"),
     db.from("profiles").select("whatsapp, whatsapp_verified, whatsapp_alerts").eq("id", user.id).single(),
     db.from("whatsapp_templates").select("name, audience, body, status, rejected_reason").order("audience").order("name"),
@@ -47,6 +48,7 @@ async function Settings() {
       <ViberSettings ready={!!settings.data.viber_ready} uri={settings.data.viber_uri} canEdit={canEdit} />
       <HeroSettings url={settings.data.hero_image_url} credit={settings.data.hero_credit} note={settings.data.bank_transfer_note} canEdit={canEdit} />
       {(branches.data ?? []).map((br) => <BranchSettings key={br.id} branch={br as Branch} canEdit={canEdit} />)}
+      <CompanyDetails legalName={settings.data.company_legal_name} regNo={settings.data.company_reg_no} address={settings.data.company_address} canEdit={canEdit} />
       <SupportContacts phone={settings.data.support_phone} email={settings.data.support_email} canEdit={canEdit} />
       <BankAccounts accounts={(accounts.data ?? []) as BankAccount[]} note={settings.data.bank_transfer_note}
         hero={{ url: settings.data.hero_image_url, credit: settings.data.hero_credit }} canEdit={canEdit} />

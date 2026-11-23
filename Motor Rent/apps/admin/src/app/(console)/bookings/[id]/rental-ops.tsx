@@ -202,34 +202,56 @@ export function ConfirmPaid({ id, total, currency, heldUntil, guest }: { id: str
   );
 }
 
-/** Before pickup, for riders without a verified account (or whose account lacks the category): check the licence in person. */
-export function CounterCheck({ id, need, needLabel, rentalEnds, done }: {
-  id: string; need: "A" | "B"; needLabel: string; rentalEnds: string; done: { categories: string[]; expires: string } | null;
+/** Before pickup, for riders without a verified account (or whose account lacks the category): check the licence and ID in person. */
+export type CounterDone = { categories: string[]; expires: string; fullName: string | null; idType: string | null; idNumber: string | null; licenceNumber: string | null; dob: string | null };
+export function CounterCheck({ id, need, needLabel, rentalEnds, done, suggestedName }: {
+  id: string; need: "A" | "B"; needLabel: string; rentalEnds: string; done: CounterDone | null; suggestedName: string;
 }) {
   const { busy, error, run } = useRpc();
   const [cats, setCats] = useState<string[]>(done?.categories ?? [need]);
   const [expires, setExpires] = useState(done?.expires ?? "");
-  const ok = done && done.categories.includes(need) && done.expires >= rentalEnds.slice(0, 10);
+  const [name, setName] = useState(done?.fullName ?? suggestedName);
+  const [idType, setIdType] = useState(done?.idType ?? "national_id");
+  const [idNo, setIdNo] = useState(done?.idNumber ?? "");
+  const [licNo, setLicNo] = useState(done?.licenceNumber ?? "");
+  const [dob, setDob] = useState(done?.dob ?? "");
+  const ok = done && done.idNumber && done.categories.includes(need) && done.expires >= rentalEnds.slice(0, 10);
+  const ready = cats.length && expires && name.trim().length > 1 && idNo.trim().length > 2 && licNo.trim().length > 2 && dob;
   return (
-    <Card title="Licence check at the counter" tone={ok ? undefined : "warn"}>
+    <Card title="Licence and ID check at the counter" tone={ok ? undefined : "warn"}>
       {ok ? (
-        <p className="text-sm">Checked: categories {done.categories.join(", ")}, valid until {done.expires}. The rider can be handed the vehicle.</p>
+        <p className="text-sm">Checked: {done.fullName}, {done.idType === "passport" ? "passport" : "ID card"} {done.idNumber}, licence {done.licenceNumber} (categories {done.categories.join(", ")}, valid until {done.expires}). These details go on the rental agreement.</p>
       ) : (
-        <p className="text-sm text-muted">This rider has no verified licence for this vehicle. Look at their driving licence and ID card or passport, then record what the licence shows. It needs category {needLabel} and must be valid until the rental ends.</p>
+        <p className="text-sm text-muted">This rider has no verified licence for this vehicle. Look at their driving licence and ID card or passport, and copy the details exactly: they go on the rental agreement. The licence needs category {needLabel} and must be valid until the rental ends.</p>
       )}
-      <div className="flex flex-wrap gap-4 text-sm">
-        {(["A", "B"] as const).map((c) => (
-          <label key={c} className="flex items-center gap-2">
-            <input type="checkbox" checked={cats.includes(c)} onChange={(e) => setCats(e.target.checked ? [...cats, c] : cats.filter((x) => x !== c))} />
-            {c === "A" ? "A · Motorcycle and scooter" : "B · Car"}
-          </label>
-        ))}
+      <div className="grid gap-3 text-sm sm:grid-cols-2">
+        <label className="space-y-1 sm:col-span-2"><span className="text-muted">Full name as on the ID</span>
+          <input className={field} value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" /></label>
+        <label className="space-y-1"><span className="text-muted">ID type</span>
+          <select className={field} value={idType} onChange={(e) => setIdType(e.target.value)}>
+            <option value="national_id">Maldivian ID card</option><option value="passport">Passport</option></select></label>
+        <label className="space-y-1"><span className="text-muted">{idType === "passport" ? "Passport number" : "ID card number"}</span>
+          <input className={field} value={idNo} onChange={(e) => setIdNo(e.target.value.toUpperCase())} placeholder={idType === "passport" ? "" : "A123456"} autoCapitalize="characters" autoComplete="off" /></label>
+        <label className="space-y-1"><span className="text-muted">Date of birth</span>
+          <input className={field} type="date" value={dob} onChange={(e) => setDob(e.target.value)} /></label>
+        <label className="space-y-1"><span className="text-muted">Driving licence number</span>
+          <input className={field} value={licNo} onChange={(e) => setLicNo(e.target.value.toUpperCase())} autoCapitalize="characters" autoComplete="off" /></label>
+        <fieldset className="space-y-1"><legend className="text-muted">Categories on the licence</legend>
+          <div className="flex flex-wrap gap-4 pt-1">
+            {(["A", "B"] as const).map((c) => (
+              <label key={c} className="flex min-h-11 items-center gap-2">
+                <input type="checkbox" className="size-5" checked={cats.includes(c)} onChange={(e) => setCats(e.target.checked ? [...cats, c] : cats.filter((x) => x !== c))} />
+                {c === "A" ? "A · Motorcycle, scooter" : "B · Car"}
+              </label>
+            ))}
+          </div></fieldset>
+        <label className="space-y-1"><span className="text-muted">Licence valid until</span>
+          <input className={field} type="date" value={expires} onChange={(e) => setExpires(e.target.value)} /></label>
       </div>
-      <label className="block max-w-xs space-y-1 text-sm"><span className="text-muted">Licence valid until</span>
-        <input className={field} type="date" value={expires} onChange={(e) => setExpires(e.target.value)} /></label>
       <Err e={error} />
-      <button type="button" disabled={busy || !cats.length || !expires} onClick={() => run("record_counter_check", { b: id, p_categories: cats, p_licence_expires_on: expires })}
-        className="rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{done ? "Update licence check" : "Licence checked"}</button>
+      <button type="button" disabled={busy || !ready} onClick={() => run("record_counter_check", { b: id, p_categories: cats, p_licence_expires_on: expires,
+        p_full_name: name, p_id_type: idType, p_id_number: idNo, p_licence_number: licNo, p_date_of_birth: dob })}
+        className="w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto">{done ? "Update licence and ID check" : "Licence and ID checked"}</button>
     </Card>
   );
 }

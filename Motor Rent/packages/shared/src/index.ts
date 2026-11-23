@@ -6,3 +6,4 @@ export * from "./slip.ts";
 export * from "./colours.ts";
 export * from "./licence.ts";
 export * from "./phone.ts";
+export * from "./agreement.ts";

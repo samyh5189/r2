@@ -9,6 +9,7 @@ import { CancelBooking } from "../cancel-booking";
 import { baseRental, billableHours, LICENCE_CATEGORIES, lateFee, licenceCategoryFor, licenceCovers } from "@motor-rent/shared";
 import { CloseRental } from "./close-rental";
 import { CAR_CHECKS } from "./checks";
+import { AgreementCard } from "./agreement-card";
 import { Handover } from "./handover";
 import { type Claim, ConfirmPaid, CounterCheck, DamageClaimCard, DepositCard, type Extension, ExtensionRequest, ReportDamage } from "./rental-ops";
 
@@ -46,7 +47,7 @@ export default function BookingPage({ params }: { params: Promise<{ id: string }
 type B = {
   id: string; reference: string; status: string; period: string; total: number; deposit: number; currency: string; created_at: string; rider_id: string | null;
   guest_name: string | null; guest_phone: string | null; handover: string; delivery_address: string | null; held_until: string | null;
-  counter_licence_categories: string[] | null; counter_licence_expires_on: string | null;
+  counter_licence_categories: string[] | null; counter_licence_expires_on: string | null; counter_full_name: string | null; counter_id_type: string | null; counter_id_number: string | null; counter_licence_number: string | null; counter_date_of_birth: string | null; contract_path: string | null; contract_signed_at: string | null; agreement_version: string | null;
   vehicles: { id: string; kind: string; plate: string; make: string; model: string; odometer_km: number; engine_hours: number | null;
     price_plans: { late_fee_per_hour: number; late_grace_minutes: number; hourly: number; daily: number; weekly: number } | null } | null;
   branches: { name: string } | null;
@@ -57,7 +58,7 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { db } = await requireStaff();
   const { data: b } = await db.from("bookings")
-    .select("id, reference, status, period, total, deposit, currency, created_at, rider_id, guest_name, guest_phone, handover, delivery_address, held_until, counter_licence_categories, counter_licence_expires_on, vehicles(id, kind, plate, make, model, odometer_km, engine_hours, price_plans(late_fee_per_hour, late_grace_minutes, hourly, daily, weekly)), branches(name), rider:profiles!bookings_rider_id_fkey(full_name, phone, avatar_path, kyc_status, licence_categories, licence_expires_on)")
+    .select("id, reference, status, period, total, deposit, currency, created_at, rider_id, guest_name, guest_phone, handover, delivery_address, held_until, counter_licence_categories, counter_licence_expires_on, counter_full_name, counter_id_type, counter_id_number, counter_licence_number, counter_date_of_birth, contract_path, contract_signed_at, agreement_version, vehicles(id, kind, plate, make, model, odometer_km, engine_hours, price_plans(late_fee_per_hour, late_grace_minutes, hourly, daily, weekly)), branches(name), rider:profiles!bookings_rider_id_fkey(full_name, phone, avatar_path, kyc_status, licence_categories, licence_expires_on)")
     .eq("id", id).maybeSingle<B>();
   if (!b) return <p role="alert" className="text-red-600">Booking not found (or not at your branch).</p>;
 
@@ -221,7 +222,9 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
         {b.status === "held" && <ConfirmPaid id={b.id} total={b.total} currency={b.currency} heldUntil={b.held_until} guest={!b.rider_id} />}
         {(b.status === "held" || b.status === "confirmed") && need && r && !accountOk && (
           <CounterCheck id={b.id} need={need} needLabel={LICENCE_CATEGORIES[need].label} rentalEnds={r.end.toISOString()}
-            done={b.counter_licence_categories?.length && b.counter_licence_expires_on ? { categories: b.counter_licence_categories, expires: b.counter_licence_expires_on } : null} />
+            suggestedName={b.guest_name ?? b.rider?.full_name ?? ""}
+            done={b.counter_licence_categories?.length && b.counter_licence_expires_on ? { categories: b.counter_licence_categories, expires: b.counter_licence_expires_on,
+              fullName: b.counter_full_name, idType: b.counter_id_type, idNumber: b.counter_id_number, licenceNumber: b.counter_licence_number, dob: b.counter_date_of_birth } : null} />
         )}
         {ask && r && <ExtensionRequest ext={ask} currentEnd={r.end.toISOString()} quoted={askPrice} currency={b.currency} />}
         {claim && <DamageClaimCard id={b.id} claim={claim} currency={b.currency} />}
@@ -230,6 +233,9 @@ async function Booking({ params }: { params: Promise<{ id: string }> }) {
         {b.deposit > 0 && b.status !== "held" && b.status !== "expired" && (b.status !== "cancelled" || depHeld) && (
           <DepositCard id={b.id} deposit={b.deposit} currency={b.currency} held={depHeld ? { provider: depHeld.provider } : null}
             settled={depSettled} canReturn={back} owed={owed} />
+        )}
+        {b.status !== "confirmed" && (insp.data ?? []).some((i) => i.phase === "pickup") && (
+          <AgreementCard bookingId={b.id} reference={b.reference} path={b.contract_path} signedAt={b.contract_signed_at} version={b.agreement_version} />
         )}
         {(b.status === "confirmed" || b.status === "active" || b.status === "overdue") && (
           <Handover bookingId={b.id} phase={b.status === "confirmed" ? "pickup" : "return"} currency={b.currency} riderName={riderName}

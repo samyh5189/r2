@@ -2,7 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AGREEMENT_SECTIONS, AGREEMENT_SUMMARY, AGREEMENT_VERSION } from "@motor-rent/shared";
 import { SignatureCanvas } from "@/components/signature-canvas";
+import { openAgreement } from "./agreement-card";
 import { money } from "@/lib/format";
 import { CAR_CHECKS } from "./checks";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -49,6 +51,8 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [accepted, setAccepted] = useState(false);
+  const [contract, setContract] = useState<{ path?: string; error?: string } | null>(null);
 
   const isPickup = phase === "pickup";
   const odo = Number(odometer);
@@ -59,6 +63,7 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
     lastOdometer != null && odometer && odo < lastOdometer && `odometer of at least ${lastOdometer} km`,
     !noMeter && (!hours || Number.isNaN(hrs) || hrs < 0) && "engine hours",
     !noMeter && lastEngineHours != null && hours && hrs < lastEngineHours && `engine hours of at least ${lastEngineHours}`,
+    isPickup && !accepted && "the rider accepting the agreement",
     !riderSig && "rider signature",
     !staffSig && "staff signature",
     isCar && CAR_CHECKS.some((c) => !checks[c.key]) && "the car checklist",
@@ -86,21 +91,17 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
       };
       const [riderSignaturePath, staffSignaturePath] = await Promise.all([sig("rider", riderSig!), sig("staff", staffSig!)]);
       setBusy(isPickup ? "Handing over…" : "Closing the rental…");
-      const { data, error } = await db.functions.invoke<{ status: string; lateFee?: number }>("submit-inspection", {
+      const { data, error } = await db.functions.invoke<{ status: string; lateFee?: number; contractPath?: string; contractError?: string }>("submit-inspection", {
         body: { bookingId, phase, photoPaths, fuelLevel: fuel, odometerKm: odo, engineHours: noMeter ? null : hrs,
-          riderSignaturePath, staffSignaturePath, notes: notes.trim() || undefined },
+          riderSignaturePath, staffSignaturePath, notes: notes.trim() || undefined,
+          checklist: isCar ? checks : undefined, agreementAccepted: isPickup ? accepted : undefined },
       });
       if (error) {
         const ctx = (error as { context?: Response }).context;
         const body = ctx ? await ctx.json().catch(() => null) : null;
         throw new Error(body?.error?.message ?? body?.message ?? "The server refused this inspection.");
       }
-      if (isCar) {
-        // Saved with the inspection just recorded; a failure here must not undo the handover.
-        await db.rpc("save_inspection_checklist", { b: bookingId, p_phase: phase, p_items: checks }).then(({ error }) => {
-          if (error) console.warn("checklist not saved", error.message);
-        });
-      }
+      if (isPickup) setContract({ path: data?.contractPath, error: data?.contractError });
       setDone(isPickup ? "Handed over. The rental is now on the road."
         : data?.lateFee ? `Collected. Returned late: collect a late fee of ${money(data.lateFee, currency)}.` : "Collected. Rental closed for inspection.");
       router.refresh();
@@ -117,7 +118,18 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
       </div>
     );
   }
-  if (done) return <p role="status" className="rounded-xl bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">{done}</p>;
+  if (done) return (
+    <div role="status" className="space-y-3 rounded-2xl bg-emerald-500/10 p-4 text-sm">
+      <p className="font-medium text-emerald-700 dark:text-emerald-400">{done}</p>
+      {contract?.path && (
+        <div className="grid gap-2 sm:flex">
+          <button type="button" className="btn btn-primary" onClick={() => openAgreement(contract.path!)}>Open the signed agreement</button>
+          <button type="button" className="btn btn-secondary" onClick={() => openAgreement(contract.path!, true)}>Download PDF</button>
+        </div>
+      )}
+      {contract?.error && <p className="text-amber-700">{contract.error}</p>}
+    </div>
+  );
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)} className="btn btn-primary btn-lg w-full">
@@ -127,13 +139,17 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
   }
 
   return (
-    <section id="handover" className="space-y-4 rounded-2xl border border-line bg-panel p-4">
+    <section id="handover" className="space-y-5 rounded-2xl border border-line bg-panel p-3 sm:p-4">
       <div>
         <h2 className="text-lg font-semibold">{isPickup ? "Hand over" : "Collect"}</h2>
         <p className="text-sm text-muted">{isPickup ? "Check the rider's licence matches their profile, walk round the vehicle with them, then both sign." : "Walk round the vehicle with the rider, note any new damage, then both sign."}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="flex items-baseline justify-between">
+        <h3 className="text-sm font-semibold">Photos</h3>
+        <span className={`text-xs font-semibold ${ANGLES.every((a) => photos[a.key]) ? "text-emerald-600" : "text-muted"}`}>{ANGLES.filter((a) => photos[a.key]).length} of {ANGLES.length}</span>
+      </div>
+      <div className="-mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
         {ANGLES.map((a) => {
           const p = photos[a.key];
           return (
@@ -141,7 +157,7 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
               {p ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={p.url} alt={a.label} className="aspect-[4/3] w-full object-cover" />
-              ) : <span className="flex aspect-[4/3] items-center justify-center p-2 text-center text-sm text-muted">Add photo</span>}
+              ) : <span className="flex aspect-[4/3] flex-col items-center justify-center gap-1 p-2 text-center text-sm text-muted"><span aria-hidden className="text-2xl leading-none">＋</span>Take photo</span>}
               <span className="block border-t border-line px-2 py-1 text-xs font-medium">{a.label}{p ? " (tap to retake)" : ""}</span>
               <input type="file" accept="image/*" capture="environment" className="sr-only"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) setPhotos((s) => ({ ...s, [a.key]: { file: f, url: URL.createObjectURL(f) } })); }} />
@@ -150,8 +166,8 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
         })}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <label className="space-y-1"><span className="text-xs font-medium text-muted">Odometer (km){lastOdometer != null ? `, last ${lastOdometer}` : ""}</span>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <label className="col-span-2 space-y-1 sm:col-span-1"><span className="text-xs font-medium text-muted">Odometer (km){lastOdometer != null ? `, last ${lastOdometer}` : ""}</span>
           <input className={field} inputMode="numeric" value={odometer} onChange={(e) => setOdometer(e.target.value.replace(/\D/g, ""))} /></label>
         <label className="space-y-1"><span className="text-xs font-medium text-muted">Engine running hours{lastEngineHours != null ? `, last ${lastEngineHours}` : ""}</span>
           <input className={field} inputMode="decimal" value={hours} disabled={noMeter} onChange={(e) => setHours(e.target.value.replace(/[^\d.]/g, ""))} />
@@ -185,19 +201,45 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
       <label className="block space-y-1"><span className="text-xs font-medium text-muted">Notes (existing scratches, helmet count, anything agreed)</span>
         <textarea className={field} rows={2} maxLength={2000} value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
 
+      {isPickup && (
+        <fieldset className="space-y-3 rounded-xl border border-line p-3">
+          <legend className="px-1 text-sm font-semibold">Rental agreement</legend>
+          <p className="text-sm text-muted">Show the rider these points (or read them out), then let them read the full agreement. Their signature below signs it, and a PDF copy is made.</p>
+          <ul className="list-disc space-y-1 pl-5 text-sm">{AGREEMENT_SUMMARY.map((s) => <li key={s}>{s}</li>)}</ul>
+          <details className="rounded-lg bg-black/[.03] p-3 text-sm dark:bg-white/[.04]">
+            <summary className="cursor-pointer font-semibold">Read the full agreement</summary>
+            <div className="mt-3 max-h-[55vh] space-y-3 overflow-y-auto pr-1">
+              {AGREEMENT_SECTIONS.map((s) => (
+                <div key={s.title}><p className="font-semibold">{s.title}</p>
+                  <ol className="mt-1 space-y-1">{s.clauses.map((c, i) => <li key={i} className="flex gap-2"><span className="text-muted">{s.title.split(".")[0]}.{i + 1}</span><span>{c}</span></li>)}</ol></div>
+              ))}
+              <p className="text-xs text-muted">Version {AGREEMENT_VERSION}</p>
+            </div>
+          </details>
+          <label className="flex min-h-11 items-start gap-3 text-sm font-medium">
+            <input type="checkbox" className="mt-0.5 size-5 shrink-0 accent-[var(--accent)]" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
+            {riderName} has read the rental agreement and accepts it, including being responsible for any fines, offences and criminal acts during the rental.
+          </label>
+        </fieldset>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
         <SignatureCanvas label={`Rider: ${riderName}`} onChange={setRiderSig} />
         <SignatureCanvas label="Staff" onChange={setStaffSig} />
       </div>
-      <p className="text-xs text-muted">By signing, the rider confirms the vehicle condition, readings and fuel above.</p>
+      <p className="text-xs text-muted">{isPickup
+        ? "By signing, the rider signs the rental agreement and confirms the vehicle condition, readings and fuel above."
+        : "By signing, the rider confirms the vehicle condition, readings and fuel above."}</p>
 
       {error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="button" disabled={!!problems.length || !!busy} onClick={submit}
-          className="btn btn-primary btn-lg">
-          {busy ?? (isPickup ? "Confirm handover" : "Confirm collection")}</button>
-        <button type="button" onClick={() => setOpen(false)} className="text-sm text-muted">Cancel</button>
-        {!!problems.length && <span className="text-xs text-muted">Still needed: {problems.join(", ")}</span>}
+      <div className="sticky bottom-0 -mx-3 -mb-3 space-y-2 rounded-b-2xl border-t border-line bg-panel/95 p-3 backdrop-blur sm:static sm:m-0 sm:flex sm:flex-wrap sm:items-center sm:gap-3 sm:space-y-0 sm:border-0 sm:bg-transparent sm:p-0">
+        {!!problems.length && <p className="text-xs text-muted sm:order-last">Still needed: {problems.join(", ")}</p>}
+        <div className="flex items-center gap-3">
+          <button type="button" disabled={!!problems.length || !!busy} onClick={submit}
+            className="btn btn-primary btn-lg flex-1 sm:flex-none">
+            {busy ?? (isPickup ? "Confirm handover" : "Confirm collection")}</button>
+          <button type="button" onClick={() => setOpen(false)} className="px-2 text-sm text-muted">Cancel</button>
+        </div>
       </div>
     </section>
   );
