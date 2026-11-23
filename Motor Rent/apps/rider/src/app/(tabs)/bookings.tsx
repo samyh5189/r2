@@ -41,6 +41,8 @@ export default function BookingsScreen() {
     const { data, error } = await supabase
       .from('bookings')
       .select('id, reference, status, period, total, currency, held_until, vehicles(make, model, plate, kind, photos, colour), msgs:booking_messages(count), last:booking_messages(from_staff, created_at)')
+      // Only the signed-in rider's own (staff accounts can read every booking).
+      .eq('rider_id', session.user.id)
       .order('created_at', { ascending: false })
       .order('created_at', { referencedTable: 'last', ascending: false })
       .limit(1, { referencedTable: 'last' })
