@@ -90,7 +90,7 @@ export function LoginForm() {
   }
 
   const input =
-    "w-full rounded-xl border-[1.5px] border-line bg-panel px-3.5 py-3 text-base outline-none transition focus:border-accent focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--accent)_18%,transparent)]";
+    "w-full rounded-xl border border-line bg-panel px-3.5 py-3 text-base outline-none transition focus:border-accent focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--accent)_18%,transparent)]";
   const disabled =
     busy ||
     (method === "email" ? !cleanEmail || !password : step === "code" ? code.length !== 6 : !/^\+\d{7,15}$/.test(cleanPhone));

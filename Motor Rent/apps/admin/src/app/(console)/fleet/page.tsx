@@ -50,7 +50,7 @@ async function Fleet() {
     <>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Fleet</h1>
+          <h1 className="text-3xl tracking-tight">Fleet</h1>
           <p className="text-sm text-muted">Add vehicles, upload and crop real photos, set prices. The first photo is what riders see.</p>
         </div>
         {canEdit && <AddVehicle branches={branchOpts} plans={planOpts} />}

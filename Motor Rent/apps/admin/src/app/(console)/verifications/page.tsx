@@ -10,7 +10,7 @@ export default function VerificationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Identity verifications</h1>
+        <h1 className="text-3xl tracking-tight">Identity verifications</h1>
         <p className="text-sm text-muted">Compare the selfie with the ID and licence photos, and check names, dates and the licence class before approving.</p>
       </div>
       <Suspense fallback={<p className="animate-pulse text-muted">Loading…</p>}>

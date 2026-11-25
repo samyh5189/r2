@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-const field = "w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
+const field = "w-full rounded-xl border border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
 const btn = "btn btn-primary";
 
 function toE164(raw: string) {

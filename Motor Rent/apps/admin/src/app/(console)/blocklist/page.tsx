@@ -8,7 +8,7 @@ export default function BlocklistPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Blocklist</h1>
+        <h1 className="text-3xl tracking-tight">Blocklist</h1>
         <p className="text-sm text-muted">
           People who may not rent: unpaid balances, damage, abuse. <b>Staff only.</b> Riders never see this list. A blocked person just
           can&apos;t book, and is matched by account, phone or email.

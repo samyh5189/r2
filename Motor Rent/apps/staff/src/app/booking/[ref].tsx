@@ -4,7 +4,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Button, Card, ErrorText } from '@/components/ui';
+import { Avatar, Button, Card, Chip, ErrorText, InfoRow } from '@/components/ui';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { StaffBooking } from '@/lib/api';
@@ -40,16 +40,29 @@ export default function BookingScreen() {
   return (
     <ThemedView style={styles.flex}>
       <ScrollView contentContainerStyle={styles.body}>
-        <ThemedText type="subtitle">{b.reference}</ThemedText>
-        <Card>
-          <ThemedText type="smallBold">{b.vehicles?.make} {b.vehicles?.model} · {b.vehicles?.plate}</ThemedText>
-          {range && <ThemedText type="small">{dateTime(range.start)} → {dateTime(range.end)}</ThemedText>}
-          <ThemedText type="small">Status: {b.status}</ThemedText>
-          <ThemedText type="small">Paid {money(b.total, b.currency)} · Deposit {money(b.deposit, b.currency)}</ThemedText>
+        <View style={styles.head}>
+          <Avatar name={b.profiles?.full_name ?? b.guest_name ?? 'Rider'} size={72} />
+          <View style={{ flex: 1, gap: 6 }}>
+            <ThemedText style={styles.name}>{b.profiles?.full_name ?? b.guest_name ?? 'Rider'}</ThemedText>
+            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              <Chip label={b.status.replace('_', ' ')} tone={b.status === 'overdue' ? 'danger' : b.status === 'active' ? 'success' : b.status === 'confirmed' ? 'accent' : 'neutral'} />
+              {!b.profiles && <Chip label="No account" tone="warning" />}
+              {b.handover === 'delivery' && <Chip label="Delivery" tone="accent" />}
+            </View>
+            <ThemedText type="small" themeColor="textSecondary">Booking {b.reference}</ThemedText>
+          </View>
+        </View>
+        <Card style={{ gap: 0, paddingVertical: Spacing.one }}>
+          <InfoRow label="Phone">{b.profiles?.phone ?? b.guest_phone ?? '—'}</InfoRow>
+          <InfoRow label="Vehicle">{`${b.vehicles?.make ?? ''} ${b.vehicles?.model ?? ''} · ${b.vehicles?.plate ?? ''}`}</InfoRow>
+          {range && <InfoRow label="From">{dateTime(range.start)}</InfoRow>}
+          {range && <InfoRow label="To">{dateTime(range.end)}</InfoRow>}
+          {b.handover === 'delivery' && <InfoRow label="Deliver to">{b.delivery_address ?? '—'}</InfoRow>}
+          <InfoRow label="Paid">{money(b.total, b.currency)}</InfoRow>
+          <InfoRow label="Deposit" last>{money(b.deposit, b.currency)}</InfoRow>
         </Card>
-        <Card>
-          <ThemedText type="smallBold">{b.profiles?.full_name ?? b.guest_name ?? 'Rider'} · {b.profiles?.phone ?? b.guest_phone}{b.profiles ? '' : ' · no account'}</ThemedText>
-          {b.handover === 'delivery' && <ThemedText type="small">Delivery to {b.delivery_address}</ThemedText>}
+        <Card style={{ backgroundColor: kycOk ? t.successSoft : t.dangerSoft, borderColor: 'transparent' }}>
+          <ThemedText type="smallBold" style={{ color: kycOk ? t.success : t.danger }}>{kycOk ? 'Licence OK' : 'Licence not checked'}</ThemedText>
           <ThemedText type="small" style={{ color: kycOk ? t.success : t.danger }}>
             {accountOk ? `ID verified · licence valid to ${b.profiles?.licence_expires_on}`
               : counterOk ? `Licence checked at the counter (${(b.counter_licence_categories ?? []).join(', ')}) · valid to ${b.counter_licence_expires_on}`
@@ -73,5 +86,7 @@ export default function BookingScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  body: { padding: Spacing.three, gap: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center' },
+  body: { padding: Spacing.three + 4, gap: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center' },
+  head: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingVertical: Spacing.two },
+  name: { fontSize: 24, lineHeight: 30, fontWeight: 800, letterSpacing: -0.3 },
 });

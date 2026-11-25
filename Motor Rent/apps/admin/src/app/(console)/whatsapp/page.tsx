@@ -18,7 +18,7 @@ export default function WhatsAppPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">WhatsApp</h1>
+        <h1 className="text-3xl tracking-tight">WhatsApp</h1>
         <p className="text-sm text-muted">Every booking update, reminder and alert the system writes. Once WhatsApp is connected in Settings, messages to confirmed numbers go out on their own; the rest wait here for you to send.</p>
       </div>
       <Suspense fallback={<p className="animate-pulse text-muted">Loading…</p>}>

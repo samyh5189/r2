@@ -10,7 +10,7 @@ export default function TransfersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Bank transfers</h1>
+        <h1 className="text-3xl tracking-tight">Bank transfers</h1>
         <p className="text-sm text-muted">Check each slip against your bank app before approving. OCR helps, but you make the decision.</p>
       </div>
       <Suspense fallback={<p className="animate-pulse text-muted">Loading…</p>}>

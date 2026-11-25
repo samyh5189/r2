@@ -8,7 +8,7 @@ import { SignaturePad } from '@/components/signature-pad';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, ErrorText, Field } from '@/components/ui';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError, callFunction } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
@@ -90,7 +90,7 @@ export default function InspectionScreen() {
 
   const tile = (shot: Shot, label: string) => (
     <Pressable key={shot} onPress={() => take(shot)} accessibilityRole="button" accessibilityLabel={`Photo: ${label}`}
-      style={[styles.tile, { borderColor: shots[shot] ? t.success : t.border }]}>
+      style={[styles.tile, { borderColor: shots[shot] ? t.success : t.border, backgroundColor: t.backgroundElement }]}>
       {shots[shot] ? <Image source={shots[shot]} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
       <ThemedText type="small" style={styles.tileLabel}>{shots[shot] ? '✓ ' : '+ '}{label}</ThemedText>
     </Pressable>
@@ -106,8 +106,8 @@ export default function InspectionScreen() {
         <View style={styles.grid}>
           {Array.from({ length: 9 }, (_, n) => (
             <Pressable key={n} onPress={() => setFuel(n)} accessibilityRole="radio" accessibilityState={{ selected: fuel === n }}
-              style={[styles.fuel, { borderColor: fuel === n ? t.accent : t.border }]}>
-              <ThemedText type="small">{n === 0 ? 'E' : n === 8 ? 'F' : `${n}/8`}</ThemedText>
+              style={[styles.fuel, { borderColor: fuel === n ? t.accent : t.border, backgroundColor: fuel === n ? t.accent : t.backgroundElement }]}>
+              <ThemedText type="smallBold" style={{ color: fuel === n ? '#fff' : t.text }}>{n === 0 ? 'E' : n === 8 ? 'F' : `${n}/8`}</ThemedText>
             </Pressable>
           ))}
         </View>
@@ -118,7 +118,7 @@ export default function InspectionScreen() {
 
         <Field label="Notes (existing scratches, issues)" value={notes} onChangeText={setNotes} multiline style={{ minHeight: 88 }} />
 
-        <View style={[styles.section, { borderColor: t.border }]}>
+        <View style={[styles.section, CardShadow, { borderColor: t.border, backgroundColor: t.backgroundElement }]}>
           <ThemedText type="smallBold">Engine running hours — {phase === 'pickup' ? 'before delivery' : 'after collection'}</ThemedText>
           <Field label={hrs ? `Hour meter (last recorded ${hrs} h)` : 'Hour meter reading (h)'} value={noMeter ? '' : hours}
             editable={!noMeter} placeholder="e.g. 1234.5"
@@ -135,7 +135,7 @@ export default function InspectionScreen() {
         </View>
 
         {phase === 'pickup' && (
-          <View style={[styles.section, { borderColor: t.border }]}>
+          <View style={[styles.section, CardShadow, { borderColor: t.border, backgroundColor: t.backgroundElement }]}>
             <ThemedText type="smallBold">Rental agreement</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">Read these out to the rider. Their signature signs the agreement; the PDF is on the booking in the admin.</ThemedText>
             {AGREEMENT_SUMMARY.map((line) => <ThemedText key={line} type="small">• {line}</ThemedText>)}
@@ -148,7 +148,7 @@ export default function InspectionScreen() {
           </View>
         )}
 
-        <View style={[styles.section, { borderColor: t.border }]}
+        <View style={[styles.section, CardShadow, { borderColor: t.border, backgroundColor: t.backgroundElement }]}
           onTouchStart={() => setScrollLocked(true)} onTouchEnd={() => setScrollLocked(false)} onTouchCancel={() => setScrollLocked(false)}>
           <ThemedText type="small" themeColor="textSecondary">
             {phase === 'pickup'
@@ -171,10 +171,10 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   body: { padding: Spacing.three, gap: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  tile: { width: 104, height: 104, borderRadius: 12, borderWidth: 2, overflow: 'hidden', justifyContent: 'flex-end' },
+  tile: { width: 104, height: 104, borderRadius: 18, borderWidth: 2, overflow: 'hidden', justifyContent: 'flex-end' },
   tileLabel: { padding: Spacing.one, backgroundColor: '#0008', color: '#fff' },
-  section: { borderWidth: 1, borderRadius: 14, padding: Spacing.three, gap: Spacing.two },
+  section: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 22, padding: Spacing.three + 2, gap: Spacing.two },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 44 },
-  box: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  fuel: { minWidth: 52, minHeight: 44, borderRadius: 10, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  box: { width: 22, height: 22, borderRadius: 7, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  fuel: { minWidth: 52, minHeight: 44, borderRadius: 999, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
 });

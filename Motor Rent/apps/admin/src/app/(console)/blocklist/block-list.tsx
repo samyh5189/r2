@@ -11,7 +11,7 @@ export type Block = {
   amount_owed: number; currency: "MVR" | "USD"; photo_path: string | null; photoUrl: string | null; active: boolean; created_at: string;
 };
 
-const field = "w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
+const field = "w-full rounded-xl border border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
 const REASONS = ["Unpaid balance", "Vehicle damage not paid", "Late return / no return", "Reckless riding", "Abusive behaviour", "Fake documents"];
 
 function BlockForm({ block, userId, onClose }: { block?: Block; userId: string; onClose: () => void }) {

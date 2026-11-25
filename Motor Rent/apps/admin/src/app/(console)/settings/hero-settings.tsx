@@ -67,10 +67,10 @@ export function HeroSettings({ url, credit, note, canEdit }: { url: string | nul
             <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden
               onChange={(e) => { const f = e.target.files?.[0]; if (f) setFile(f); e.target.value = ""; }} />
             <label className="min-w-56 flex-1 space-y-1"><span className="text-xs font-medium text-muted">Photo credit (shown small on the photo)</span>
-              <input className="w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none focus:border-accent" value={creditText}
+              <input className="w-full rounded-xl border border-line bg-panel px-3 py-2 outline-none focus:border-accent" value={creditText}
                 maxLength={120} placeholder="Photo: your name" onChange={(e) => { setCreditText(e.target.value); setSaved(false); }} /></label>
             <button type="button" disabled={!!busy} onClick={() => run("Saving…", () => publish(current, creditText))}
-              className="rounded-xl border border-line px-3 py-2 font-semibold disabled:opacity-50">Save credit</button>
+              className="btn btn-secondary disabled:opacity-50">Save credit</button>
             {current && (
               <button type="button" disabled={!!busy} onClick={() => run("Resetting…", () => publish(null, ""))}
                 className="rounded-xl px-3 py-2 text-sm text-muted hover:text-foreground">Use default photo</button>

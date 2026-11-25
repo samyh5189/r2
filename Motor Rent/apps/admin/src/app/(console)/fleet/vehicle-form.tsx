@@ -13,7 +13,7 @@ export type VehicleDraft = {
   colour: VehicleColour | null;
 };
 
-const field = "w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
+const field = "w-full rounded-xl border border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
 
 function friendly(msg: string) {
   if (/only managers/i.test(msg)) return "Only managers and owners can change the fleet.";

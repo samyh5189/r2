@@ -15,7 +15,7 @@ const ANGLES = [
 ] as const;
 type Angle = (typeof ANGLES)[number]["key"];
 type Check = "ok" | "issue";
-const field = "w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none focus:border-accent";
+const field = "w-full rounded-xl border border-line bg-panel px-3 py-2 outline-none focus:border-accent";
 
 /** Shrink phone photos to ≤1600px JPEG before upload. */
 async function compress(file: File): Promise<Blob> {
@@ -180,7 +180,7 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
       {isCar && (
         <fieldset className="space-y-2">
           <legend className="text-sm font-semibold">Car checklist</legend>
-          <ul className="divide-y divide-line rounded-xl border border-line">
+          <ul className="divide-y divide-line rounded-xl border border-line bg-panel">
             {CAR_CHECKS.map((c) => (
               <li key={c.key} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                 <span>{c.label}</span>
@@ -202,7 +202,7 @@ export function Handover({ bookingId, phase, currency, lastOdometer, lastEngineH
         <textarea className={field} rows={2} maxLength={2000} value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
 
       {isPickup && (
-        <fieldset className="space-y-3 rounded-xl border border-line p-3">
+        <fieldset className="space-y-3 rounded-xl border border-line bg-panel p-3">
           <legend className="px-1 text-sm font-semibold">Rental agreement</legend>
           <p className="text-sm text-muted">Show the rider these points (or read them out), then let them read the full agreement. Their signature below signs it, and a PDF copy is made.</p>
           <ul className="list-disc space-y-1 pl-5 text-sm">{AGREEMENT_SUMMARY.map((s) => <li key={s}>{s}</li>)}</ul>

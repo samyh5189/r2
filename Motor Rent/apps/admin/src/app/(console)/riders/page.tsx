@@ -16,8 +16,8 @@ const FILTERS = [
 
 export default function RidersPage({ searchParams }: { searchParams: Promise<{ q?: string; f?: string }> }) {
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Riders</h1>
+    <div className="space-y-5">
+      <header><p className="text-sm font-medium text-muted">Everyone with an account</p><h1 className="text-3xl tracking-tight">Riders</h1></header>
       <Suspense fallback={<p className="animate-pulse text-muted">Loading…</p>}>
         <Riders searchParams={searchParams} />
       </Suspense>
@@ -44,21 +44,23 @@ async function Riders({ searchParams }: { searchParams: Promise<{ q?: string; f?
 
   return (
     <>
-      <form className="flex flex-wrap gap-2" role="search">
+      <form className="flex gap-2" role="search">
         <input name="q" defaultValue={q} placeholder="Search name or phone" aria-label="Search riders"
-          className="min-w-0 flex-1 rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none focus:border-accent" />
+          className="min-w-0 flex-1 rounded-full border border-line bg-panel px-4 py-2.5 shadow-[var(--shadow)] outline-none focus:border-accent" />
         <input type="hidden" name="f" value={f} />
         <button className="btn btn-primary">Search</button>
       </form>
-      <nav aria-label="Filter" className="-mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
-        {FILTERS.map((x) => (
-          <Link key={x.key} href={`/riders?f=${x.key}${q ? `&q=${encodeURIComponent(q)}` : ""}`} aria-current={x.key === f ? "page" : undefined}
-            className="seg">{x.label}</Link>
-        ))}
+      <nav aria-label="Filter" className="-mx-4 flex overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
+        <div className="flex gap-1 rounded-full border border-line bg-panel p-1 shadow-[var(--shadow)]">
+          {FILTERS.map((x) => (
+            <Link key={x.key} href={`/riders?f=${x.key}${q ? `&q=${encodeURIComponent(q)}` : ""}`} aria-current={x.key === f ? "page" : undefined}
+              className="seg border-0">{x.label}</Link>
+          ))}
+        </div>
       </nav>
       <p className="text-sm text-muted">{rows.length} rider{rows.length === 1 ? "" : "s"}</p>
       {!rows.length ? <p className="text-muted">No riders match.</p> : (
-        <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-panel">
+        <ul className="card divide-y divide-line overflow-hidden">
           {rows.map((r) => {
             const paid = r.bookings.filter((b) => !["held", "cancelled", "expired"].includes(b.status));
             const spent = paid.reduce((a, b) => a + b.total, 0);
@@ -67,22 +69,22 @@ async function Riders({ searchParams }: { searchParams: Promise<{ q?: string; f?
             const expired = r.licence_expires_on && r.licence_expires_on < today;
             return (
               <li key={r.id}>
-                <Link href={`/riders/${r.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-line/40">
+                <Link href={`/riders/${r.id}`} className="flex items-center gap-3 px-4 py-3.5 hover:bg-background/70">
                   {av ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={av} alt="" className="size-10 flex-none rounded-full object-cover" />
-                  ) : <span className="flex size-10 flex-none items-center justify-center rounded-full bg-teal-700 font-bold text-white">{(r.full_name ?? "R").slice(0, 1)}</span>}
+                    <img src={av} alt="" className="size-12 flex-none rounded-full object-cover" />
+                  ) : <span className="flex size-12 flex-none items-center justify-center rounded-full bg-accent-soft text-lg font-bold text-accent">{(r.full_name ?? "R").slice(0, 1)}</span>}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{r.full_name ?? "No name"}</span>
+                      <span className="font-bold">{r.full_name ?? "No name"}</span>
                       <StatusBadge status={r.kyc_status} />
-                      {blocked && <span className="rounded bg-red-500/15 px-1.5 text-xs font-semibold text-red-600">Blocked</span>}
-                      {expired && <span className="rounded bg-amber-500/15 px-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">Licence expired</span>}
+                      {blocked && <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-600">Blocked</span>}
+                      {expired && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">Licence expired</span>}
                     </div>
                     <div className="truncate text-sm text-muted">{r.phone ?? r.whatsapp ?? "no phone"}, joined {dt(new Date(r.created_at))}</div>
                   </div>
                   <div className="hidden text-right text-sm sm:block">
-                    <div className="tabular-nums">{money(spent)}</div>
+                    <div className="font-bold tabular-nums">{money(spent)}</div>
                     <div className="text-muted">{paid.length} rental{paid.length === 1 ? "" : "s"}</div>
                   </div>
                 </Link>

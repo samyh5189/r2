@@ -19,7 +19,7 @@ type Report = {
 export default function AccountingPage({ searchParams }: { searchParams: Promise<{ p?: string }> }) {
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Accounting</h1>
+      <h1 className="text-3xl tracking-tight">Accounting</h1>
       <Suspense fallback={<p className="animate-pulse text-muted">Loading…</p>}>
         <Accounting searchParams={searchParams} />
       </Suspense>

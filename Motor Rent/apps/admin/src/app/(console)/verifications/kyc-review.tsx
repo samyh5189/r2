@@ -17,7 +17,7 @@ const LABEL: Record<string, string> = {
   licence_front: "Licence — front", licence_back: "Licence — back", national_id: "ID card", passport: "Passport", selfie: "Selfie",
 };
 const ORDER = ["selfie", "national_id", "passport", "licence_front", "licence_back"];
-const field = "rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none focus:border-accent";
+const field = "rounded-xl border border-line bg-panel px-3 py-2 outline-none focus:border-accent";
 
 function age(dob: string) {
   const d = new Date(dob);
@@ -109,7 +109,7 @@ export function KycReview({ sub }: { sub: PendingKyc }) {
       </fieldset>
 
       {sub.guestBookings.length > 0 && (
-        <div className="space-y-2 rounded-xl border border-line p-3 text-sm">
+        <div className="space-y-2 rounded-xl border border-line bg-panel p-3 text-sm">
           <p className="font-semibold">{sub.guestBookings.length} booking{sub.guestBookings.length === 1 ? "" : "s"} made without an account on {sub.phone}</p>
           <ul className="flex flex-wrap gap-2">
             {sub.guestBookings.map((g) => (

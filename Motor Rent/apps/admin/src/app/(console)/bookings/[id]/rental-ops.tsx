@@ -5,7 +5,7 @@ import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { dt, money } from "@/lib/format";
 
-const field = "w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 text-sm outline-none transition focus:border-accent";
+const field = "w-full rounded-xl border border-line bg-panel px-3 py-2 text-sm outline-none transition focus:border-accent";
 const toMinor = (s: string) => Math.round((parseFloat(s) || 0) * 100);
 const major = (n: number) => String(n / 100);
 const clean = (m: string) => m.replace(/^.*?ERROR:\s*/i, "");

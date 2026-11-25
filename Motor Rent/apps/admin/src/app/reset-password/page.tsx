@@ -12,7 +12,7 @@ export default function ResetPasswordPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const valid = pw.length >= 8 && /[a-z]/i.test(pw) && /\d/.test(pw) && pw === pw2;
-  const input = "w-full rounded-xl border-[1.5px] border-line bg-panel px-3.5 py-3 outline-none focus:border-accent";
+  const input = "w-full rounded-xl border border-line bg-panel px-3.5 py-3 outline-none focus:border-accent";
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -27,7 +27,7 @@ export default function ResetPasswordPage() {
   return (
     <main className="flex min-h-full flex-1 items-center justify-center p-6">
       <form onSubmit={save} className="rise w-full max-w-sm space-y-4 rounded-2xl border border-line bg-panel p-6">
-        <h1 className="text-2xl font-bold">Choose a new password</h1>
+        <h1 className="text-3xl tracking-tight">Choose a new password</h1>
         <label className="block space-y-1"><span className="text-sm text-muted">New password</span>
           <input className={input} type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" autoFocus /></label>
         <label className="block space-y-1"><span className="text-sm text-muted">Repeat new password</span>

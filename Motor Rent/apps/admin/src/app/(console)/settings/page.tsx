@@ -14,7 +14,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
+        <h1 className="text-3xl tracking-tight">Settings</h1>
         <p className="text-sm text-muted">WhatsApp, the home page photo, support contacts and the bank accounts riders pay into.</p>
       </div>
       <Suspense fallback={<p className="animate-pulse text-muted">Loading…</p>}>

@@ -4,7 +4,7 @@ import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Button, ErrorText, Field } from '@/components/ui';
+import { Button, Card, ErrorText, Field } from '@/components/ui';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
@@ -49,6 +49,12 @@ export default function SignInScreen() {
     <ThemedView style={styles.flex}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         <View style={styles.body}>
+          <View style={styles.brand}>
+            <View style={styles.mark}><ThemedText style={styles.markText}>ER</ThemedText></View>
+            <ThemedText type="subtitle">EasyRide Staff</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">Staff and managers only.</ThemedText>
+          </View>
+          <Card style={{ gap: Spacing.three }}>
           {method === 'email' ? (
             <>
               <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none"
@@ -78,6 +84,7 @@ export default function SignInScreen() {
               <Button title="Use a different number" variant="secondary" onPress={() => { setStep('phone'); setCode(''); }} />
             </>
           )}
+          </Card>
         </View>
       </KeyboardAvoidingView>
     </ThemedView>
@@ -86,5 +93,8 @@ export default function SignInScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  body: { padding: Spacing.three, gap: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center' },
+  body: { padding: Spacing.three + 4, gap: Spacing.four, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center' },
+  brand: { alignItems: 'center', gap: 6, paddingTop: Spacing.four },
+  mark: { width: 56, height: 56, borderRadius: 18, backgroundColor: '#2F6BFF', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  markText: { color: '#fff', fontWeight: 800, fontSize: 20, lineHeight: 24 },
 });

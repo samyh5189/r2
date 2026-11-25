@@ -9,7 +9,7 @@ export type BankAccount = {
   swift: string | null; note: string | null; active: boolean; sort: number;
 };
 
-const field = "w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
+const field = "w-full rounded-xl border border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
 const EMPTY = { bank_name: "Bank of Maldives", account_name: "", account_number: "", currency: "MVR" as const, swift: "", note: "", active: true };
 
 function AccountForm({ account, onClose }: { account?: BankAccount; onClose: () => void }) {

@@ -9,28 +9,40 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-    accent: '#E5484D',
+    text: '#0F172A',
+    background: '#F3F5FA',
+    backgroundElement: '#FFFFFF',
+    backgroundSelected: '#EAF0FF',
+    textSecondary: '#667085',
+    accent: '#2F6BFF',
+    accentSoft: '#EAF0FF',
     accentText: '#ffffff',
-    border: '#D9D9E0',
-    success: '#30A46C',
-    danger: '#CE2C31',
+    violet: '#7A5CFF',
+    border: '#E6EAF2',
+    success: '#12B76A',
+    successSoft: '#E7F8EF',
+    danger: '#E5484D',
+    dangerSoft: '#FDECEC',
+    warning: '#B54708',
+    warningSoft: '#FEF3E2',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
-    accent: '#EC5D5E',
+    text: '#EEF2FB',
+    background: '#0B1020',
+    backgroundElement: '#121A2C',
+    backgroundSelected: '#1A2647',
+    textSecondary: '#98A2B8',
+    accent: '#5B8CFF',
+    accentSoft: '#1A2647',
     accentText: '#ffffff',
-    border: '#3A3F42',
+    violet: '#9A82FF',
+    border: '#222A3D',
     success: '#3DD68C',
+    successSoft: '#0F2E21',
     danger: '#FF6369',
+    dangerSoft: '#3A1418',
+    warning: '#F5B451',
+    warningSoft: '#33240C',
   },
 } as const;
 
@@ -69,6 +81,11 @@ export const Spacing = {
   four: 24,
   five: 32,
   six: 64,
+} as const;
+
+/** Soft card lift used on every white panel. */
+export const CardShadow = {
+  shadowColor: '#101828', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 2,
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;

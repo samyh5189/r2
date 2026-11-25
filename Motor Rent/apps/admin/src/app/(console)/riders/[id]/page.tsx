@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { avatarPublicUrl, diff, Timeline, type TimelineEntry } from "@/components/timeline";
+import { Icon, type IconName } from "@/components/icons";
 import { requireStaff } from "@/lib/auth";
 import { dt, money, parseRange } from "@/lib/format";
 import { StatusBadge } from "../../status-badge";
@@ -79,33 +80,53 @@ async function Rider({ params }: { params: Promise<{ id: string }> }) {
   }
 
   const av = avatarPublicUrl(p.avatar_path);
+  const paidBookings = ((bookings.data ?? []) as { status: string; total: number }[]).filter((b) => !["held", "cancelled", "expired"].includes(b.status));
+  const spent = paidBookings.reduce((a, b) => a + b.total, 0);
+  const blocked = blocks.data?.some((b) => b.active);
+  const row = (icon: IconName, label: string, value: React.ReactNode) => (
+    <div className="flex items-center gap-3 py-3">
+      <Icon name={icon} className="size-5 flex-none text-muted" />
+      <dt className="w-28 flex-none text-sm text-muted">{label}</dt>
+      <dd className="min-w-0 flex-1 text-sm font-medium">{value}</dd>
+    </div>
+  );
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
       <section className="space-y-4">
-        <Link href="/riders" className="text-sm text-muted hover:underline">← Riders</Link>
-        <div className="space-y-3 rounded-2xl border border-line bg-panel p-5">
-          <div className="flex items-center gap-3">
-            {av ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={av} alt="" className="size-14 rounded-full object-cover" />
-            ) : <span className="flex size-14 items-center justify-center rounded-full bg-sky-600 text-lg font-bold text-white">{name.slice(0, 1)}</span>}
-            <div>
-              <h1 className="text-xl font-semibold">{name}</h1>
-              <p className="text-sm text-muted">{p.phone ?? "no phone"}</p>
-            </div>
+        <Link href="/riders" className="inline-flex size-10 items-center justify-center rounded-full border border-line bg-panel" aria-label="Back to riders"><Icon name="back" className="size-5" /></Link>
+        <div className="flex items-center gap-4">
+          {av ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={av} alt="" className="size-24 flex-none rounded-full object-cover ring-4 ring-panel shadow-[var(--shadow)]" />
+          ) : <span className="flex size-24 flex-none items-center justify-center rounded-full bg-accent-soft text-3xl font-extrabold text-accent ring-4 ring-panel">{name.slice(0, 1)}</span>}
+          <div className="min-w-0 space-y-1.5">
+            <h1 className="text-2xl tracking-tight">{name}</h1>
+            <StatusBadge status={p.kyc_status} />
+            <p className="flex items-center gap-1.5 text-sm text-muted">
+              <span className={`size-2 rounded-full ${blocked ? "bg-rose-500" : "bg-emerald-500"}`} />
+              {blocked ? <Link href="/blocklist" className="font-semibold text-rose-600 hover:underline">Blocked</Link> : "Can book"}
+            </p>
           </div>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-            <dt className="text-muted">Verification</dt><dd><StatusBadge status={p.kyc_status} /></dd>
-            <dt className="text-muted">Date of birth</dt><dd>{p.date_of_birth ?? "—"}</dd>
-            <dt className="text-muted">Licence until</dt><dd>{p.licence_expires_on ?? "—"}</dd>
-            <dt className="text-muted">May ride</dt><dd>{p.kyc_status === "approved"
-              ? <LicenceCategories rider={p.id} current={(p.licence_categories as string[] | null) ?? []} />
-              : <span className="text-muted">set when the ID check is approved</span>}</dd>
-            <dt className="text-muted">WhatsApp</dt><dd>{p.whatsapp ? <a className="text-accent hover:underline" href={`https://wa.me/${p.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">{p.whatsapp}</a> : "—"}{p.whatsapp && !p.whatsapp_verified ? <span className="text-muted"> (not confirmed)</span> : null}</dd>
-            <dt className="text-muted">Joined</dt><dd>{dt(new Date(p.created_at))}</dd>
-            {!!bookings.data?.length && <><dt className="text-muted">Spent</dt><dd className="tabular-nums">{money((bookings.data as { status: string; total: number }[]).filter((b) => !["held", "cancelled", "expired"].includes(b.status)).reduce((a, b) => a + b.total, 0))}</dd></>}
-            {blocks.data?.some((b) => b.active) && <><dt className="text-muted">Blocklist</dt><dd><Link href="/blocklist" className="font-semibold text-red-600 hover:underline">Blocked</Link></dd></>}
-          </dl>
+        </div>
+        <dl className="card divide-y divide-line px-4">
+          {row("phone", "Phone", p.phone ? <a className="text-accent hover:underline" href={`tel:${p.phone.replace(/\s/g, "")}`}>{p.phone}</a> : "—")}
+          {row("chat", "WhatsApp", <>{p.whatsapp ? <a className="text-accent hover:underline" href={`https://wa.me/${p.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">{p.whatsapp}</a> : "—"}{p.whatsapp && !p.whatsapp_verified ? <span className="text-muted"> (not confirmed)</span> : null}</>)}
+          {row("cake", "Date of birth", p.date_of_birth ?? "—")}
+          {row("id", "Licence until", p.licence_expires_on ?? "—")}
+          {row("bike", "May ride", p.kyc_status === "approved"
+            ? <LicenceCategories rider={p.id} current={(p.licence_categories as string[] | null) ?? []} />
+            : <span className="text-muted">set when the ID check is approved</span>)}
+        </dl>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="card p-4">
+            <div className="text-sm font-semibold">Rider since</div>
+            <div className="mt-2 flex items-center gap-2 font-bold"><Icon name="calendar" className="size-5 text-muted" />{new Date(p.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Indian/Maldives" })}</div>
+          </div>
+          <div className="card p-4">
+            <div className="text-sm font-semibold">Total spent</div>
+            <div className="mt-2 text-xl font-extrabold tabular-nums text-accent">{money(spent)}</div>
+            <div className="text-xs text-muted">{paidBookings.length} rental{paidBookings.length === 1 ? "" : "s"}</div>
+          </div>
         </div>
         {canEdit && p.role === "rider" && (
           <>
@@ -114,7 +135,7 @@ async function Rider({ params }: { params: Promise<{ id: string }> }) {
           </>
         )}
         {!!bookings.data?.length && (
-          <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-panel text-sm">
+          <ul className="card divide-y divide-line overflow-hidden text-sm">
             {(bookings.data as unknown as { id: string; reference: string; status: string; period: string; vehicles: { plate: string } | null }[]).map((b) => {
               const r = parseRange(b.period);
               return (
@@ -128,7 +149,7 @@ async function Rider({ params }: { params: Promise<{ id: string }> }) {
         )}
       </section>
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold">History</h2>
+        <h2 className="text-lg">Activity timeline</h2>
         <Timeline entries={entries} />
       </section>
     </div>

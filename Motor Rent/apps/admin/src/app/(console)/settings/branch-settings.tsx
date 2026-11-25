@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-const field = "w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
+const field = "w-full rounded-xl border border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
 
 export type Branch = { id: string; name: string; address: string; lat: number | null; lng: number | null; opening_hours: { open?: string; close?: string } | null };
 

@@ -112,7 +112,7 @@ export function SlipReview({ slip, accountNumbers }: { slip: PendingSlip; accoun
           <div className="flex flex-wrap items-end gap-2">
             <label className="space-y-1"><span className="text-xs font-medium text-muted">Amount received</span>
               <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal"
-                className="w-36 rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 tabular-nums outline-none focus:border-accent" /></label>
+                className="w-36 rounded-xl border border-line bg-panel px-3 py-2 tabular-nums outline-none focus:border-accent" /></label>
             <button type="button" disabled={busy || expired} onClick={() => decide(true)}
               className="btn btn-primary">{busy ? "…" : "Approve & confirm booking"}</button>
             <button type="button" disabled={busy} onClick={() => setRejecting(true)}
@@ -122,7 +122,7 @@ export function SlipReview({ slip, accountNumbers }: { slip: PendingSlip; accoun
           <div className="flex flex-wrap items-end gap-2">
             <label className="min-w-64 flex-1 space-y-1"><span className="text-xs font-medium text-muted">Reason (the rider sees this)</span>
               <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} autoFocus placeholder="e.g. Amount does not match / money not received"
-                className="w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none focus:border-accent" /></label>
+                className="w-full rounded-xl border border-line bg-panel px-3 py-2 outline-none focus:border-accent" /></label>
             <button type="button" disabled={busy || !reason.trim()} onClick={() => decide(false)}
               className="btn btn-primary">Reject slip</button>
             <button type="button" onClick={() => setRejecting(false)} className="btn btn-ghost">Cancel</button>

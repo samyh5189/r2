@@ -15,7 +15,7 @@ const PRICE_FIELDS = [
 ] as const;
 type PriceKey = (typeof PRICE_FIELDS)[number][0];
 
-const field = "w-full rounded-xl border-[1.5px] border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
+const field = "w-full rounded-xl border border-line bg-panel px-3 py-2 outline-none transition focus:border-accent";
 const toMajor = (minor: number) => (minor / 100).toFixed(2);
 const toMinor = (s: string) => Math.round(Number(s.replace(/[^\d.]/g, "")) * 100);
 

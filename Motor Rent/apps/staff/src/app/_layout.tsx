@@ -2,6 +2,8 @@ import { DarkTheme, DefaultTheme, Redirect, Stack, ThemeProvider, useSegments } 
 import * as SplashScreen from 'expo-splash-screen';
 import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 
+import { Colors } from '@/constants/theme';
+
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { supabaseConfigured } from '@/lib/supabase';
 import { SessionProvider, useSession } from '@/lib/session';
@@ -11,10 +13,14 @@ SplashScreen.preventAutoHideAsync();
 function Gate() {
   const { session, loading } = useSession();
   const segments = useSegments();
+  const c = Colors[useColorScheme() === 'dark' ? 'dark' : 'light'];
   if (!loading && !session && segments[0] !== 'sign-in') return <Redirect href="/sign-in" />;
   return (
-    <Stack>
-      <Stack.Screen name="index" options={{ title: 'Find booking' }} />
+    <Stack screenOptions={{
+      headerStyle: { backgroundColor: c.background }, headerShadowVisible: false, headerTintColor: c.text,
+      headerTitleStyle: { fontWeight: '700' }, contentStyle: { backgroundColor: c.background },
+    }}>
+      <Stack.Screen name="index" options={{ title: 'Find booking', headerShown: false }} />
       <Stack.Screen name="booking/[ref]" options={{ title: 'Booking' }} />
       <Stack.Screen name="inspection/[id]" options={{ title: 'Inspection' }} />
       <Stack.Screen name="sign-in" options={{ title: 'Staff sign in' }} />
@@ -34,7 +40,9 @@ export default function RootLayout() {
   }
   return (
     <SessionProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <ThemeProvider value={colorScheme === 'dark'
+        ? { ...DarkTheme, colors: { ...DarkTheme.colors, primary: Colors.dark.accent, background: Colors.dark.background, card: Colors.dark.background, border: Colors.dark.border } }
+        : { ...DefaultTheme, colors: { ...DefaultTheme.colors, primary: Colors.light.accent, background: Colors.light.background, card: Colors.light.background, border: Colors.light.border } }}>
         <AnimatedSplashOverlay />
         <Gate />
       </ThemeProvider>
