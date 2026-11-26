@@ -39,7 +39,7 @@ const INLINE: NavLink[] = [
 const go = (href: Href) => (href === '/' ? router.navigate('/') : router.push(href));
 
 /**
- * The site header: brand, red Book button and a menu button that opens the side drawer.
+ * The site header: brand, blue Book button and a menu button that opens the side drawer.
  * Wide screens show a few links inline instead of the menu button, plus My account.
  * `floating` overlays the page (home, fleet, account); otherwise it sits in the flow with a Back button.
  */
@@ -204,16 +204,17 @@ const styles = StyleSheet.create({
   inFlow: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.two, alignItems: 'center' },
   bar: {
     width: '100%', maxWidth: 1216, flexDirection: 'row', alignItems: 'center', gap: Spacing.two,
-    paddingVertical: Spacing.two, paddingLeft: Spacing.two + 4, paddingRight: Spacing.two, borderRadius: Radius.lg, borderWidth: 1,
-  },
+    paddingVertical: Spacing.two, paddingLeft: Spacing.two + 4, paddingRight: Spacing.two, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth,
+    boxShadow: '0 8px 24px -12px rgba(16, 24, 40, 0.18)',
+  } as object,
   brand: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginRight: 'auto' },
   brandText: { fontSize: 18, lineHeight: 22 },
   inline: { flexDirection: 'row', gap: 2 },
-  inlineLink: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Radius.md },
-  account: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Radius.md },
-  book: { paddingVertical: 9, paddingHorizontal: Spacing.three + 2, borderRadius: Radius.md },
+  inlineLink: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Radius.pill },
+  account: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Radius.pill },
+  book: { paddingVertical: 9, paddingHorizontal: Spacing.three + 4, borderRadius: Radius.pill },
   menuBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  square: { width: 36, height: 36, borderRadius: Radius.md - 2, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  square: { width: 38, height: 38, borderRadius: Radius.pill, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   panel: { position: 'absolute', top: 0, bottom: 0, right: 0 },
   panelRaised: { borderLeftWidth: 1, boxShadow: '0 10px 40px rgba(0,0,0,0.18)' } as object,
   panelHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.three, paddingVertical: Spacing.three, borderBottomWidth: 1 },
@@ -222,5 +223,5 @@ const styles = StyleSheet.create({
   activeBar: { position: 'absolute', left: 0, top: 14, bottom: 14, width: 3, borderRadius: 2 },
   drawerText: { fontFamily: Fonts?.display, fontSize: 24, lineHeight: 30, fontWeight: '600' },
   panelFoot: { padding: Spacing.three, borderTopWidth: 1 },
-  accountBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two, paddingVertical: 10, borderRadius: Radius.md },
+  accountBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two, paddingVertical: 12, borderRadius: Radius.pill },
 });

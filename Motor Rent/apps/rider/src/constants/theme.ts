@@ -1,5 +1,5 @@
 /**
- * Brand palette: one red for every action, selection and link; ink text on warm white; status colours only for status.
+ * Brand palette: one blue for every action, selection and link; ink text on cool grey; status colours only for status.
  * Every screen reads colors through useTheme(), so both schemes stay in sync.
  */
 
@@ -9,52 +9,53 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#17181A',            // ink
-    background: '#F6F4F1',      // coral-sand white
+    text: '#0F172A',
+    background: '#F3F5FA',      // soft cool grey
     backgroundElement: '#FFFFFF',
-    backgroundSelected: '#F1E9E7',
-    textSecondary: '#61646B',
-    accent: '#D7192A',          // brand red: every button, selection, link and progress bar
-    accentStrong: '#B5121F',
-    accentSoft: '#FBE3E5',
+    backgroundSelected: '#EEF1F7',
+    textSecondary: '#667085',
+    accent: '#2F6BFF',          // brand blue: every button, selection, link and progress bar
+    accentStrong: '#1F55E0',
+    accentSoft: '#EAF0FF',
     accentText: '#FFFFFF',
-    cta: '#D7192A',
+    cta: '#2F6BFF',
     ctaText: '#FFFFFF',
-    ocean: '#D7192A',
+    ocean: '#2F6BFF',
     highlight: '#FFC629',
-    road: '#17181A',
+    road: '#0F172A',
     roadLine: '#FFC629',
-    border: '#E4DFDB',
-    shadow: 'rgba(23, 24, 26, 0.10)',
-    success: '#1D8A4E',
-    successSoft: '#DDF1E4',
-    warning: '#9A6400',
-    warningSoft: '#FFF1C7',
-    danger: '#A3131F',
-    dangerSoft: '#F8DEDF',
+    border: '#E6EAF2',
+    shadow: 'rgba(16, 24, 40, 0.08)',
+    success: '#12B76A',
+    successSoft: '#E7F8EF',
+    warning: '#B54708',
+    warningSoft: '#FEF3E2',
+    danger: '#D92D20',
+    dangerSoft: '#FDECEC',
     skyTop: '#8FD3E0',
     skyBottom: '#E9F6F4',
     sun: '#FFF3C4',
     sea: '#2AA6A0',
-    palm: '#17181A',
+    palm: '#0F172A',
+    violet: '#7A5CFF',
   },
   dark: {
-    text: '#F2EFEC',
-    background: '#121214',      // night lagoon
-    backgroundElement: '#1B1B1E',
-    backgroundSelected: '#2A2224',
-    textSecondary: '#A3A1A6',
-    accent: '#E5273A',
-    accentStrong: '#FF4D5A',
-    accentSoft: '#3A1418',
+    text: '#EEF2FB',
+    background: '#0B1020',      // night
+    backgroundElement: '#121A2C',
+    backgroundSelected: '#1A2338',
+    textSecondary: '#98A2B8',
+    accent: '#5B8CFF',
+    accentStrong: '#7AA2FF',
+    accentSoft: '#1A2647',
     accentText: '#FFFFFF',
-    cta: '#E5273A',
+    cta: '#5B8CFF',
     ctaText: '#FFFFFF',
-    ocean: '#FF4D5A',
+    ocean: '#7AA2FF',
     highlight: '#FFC629',
-    road: '#1B1B1E',
+    road: '#121A2C',
     roadLine: '#FFC629',
-    border: '#2E2B2D',
+    border: '#222A3D',
     shadow: 'rgba(0, 0, 0, 0.5)',
     success: '#4CC985',
     successSoft: '#10301F',
@@ -67,6 +68,7 @@ export const Colors = {
     sun: '#F4F1DE',
     sea: '#14505A',
     palm: '#030B0E',
+    violet: '#9A82FF',
   },
 } as const;
 
@@ -107,9 +109,11 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const Radius = { sm: 6, md: 12, lg: 20, pill: 999 } as const;
+export const Radius = { sm: 10, md: 16, lg: 24, pill: 999 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 24, android: 24 }) ?? 0;
+/** Height of the phone tab bar (Home, Fleet, My rentals, Account), shown under 900 px wide. */
+export const TabBarHeight = 64;
 /** The site header floats over the top of the main pages (below the status bar on phones). */
 export const TopNavInset = Platform.select({ web: 84, default: 76 }) ?? 84;
 export const MaxContentWidth = 820;

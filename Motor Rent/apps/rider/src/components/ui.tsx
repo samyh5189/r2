@@ -36,10 +36,10 @@ export function PressableScale({
 export type ButtonVariant = 'primary' | 'cta' | 'secondary' | 'ghost';
 
 /**
- * One button family, all brand red:
- * - primary: red fill, white text (the main action on a screen; `cta` is the same, taller)
- * - secondary: red outline, red text (other actions)
- * - ghost: red text only (cancel, small links)
+ * One pill button family in brand blue:
+ * - primary: blue fill, white text (the main action on a screen; `cta` is the same, taller)
+ * - secondary: white with a grey outline (other actions)
+ * - ghost: blue text only (cancel, small links)
  */
 export function Button({
   title, onPress, disabled, loading, variant = 'primary', size = 'md', icon,
@@ -48,7 +48,7 @@ export function Button({
   const inactive = disabled || loading;
   const filled = variant === 'primary' || variant === 'cta';
   const bg = filled ? t.accent : variant === 'secondary' ? t.backgroundElement : 'transparent';
-  const fg = filled ? t.accentText : t.accent;
+  const fg = filled ? t.accentText : variant === 'secondary' ? t.text : t.accent;
   const sm = size === 'sm';
   return (
     <PressableScale
@@ -60,9 +60,9 @@ export function Button({
       style={[
         styles.button,
         sm && styles.buttonSm,
-        { backgroundColor: bg, borderColor: variant === 'secondary' ? t.accent : 'transparent', opacity: inactive ? 0.45 : 1 },
+        { backgroundColor: bg, borderColor: variant === 'secondary' ? t.border : 'transparent', opacity: inactive ? 0.45 : 1 },
         variant === 'cta' && { minHeight: 56 },
-        filled && !inactive && shadow(t.accent, 0.22, 12),
+        filled && !inactive && shadow(t.accent, 0.3, 16),
       ]}>
       {loading ? (
         <ActivityIndicator color={fg} />
@@ -90,6 +90,7 @@ export function Field({ label, hint, ...props }: TextInputProps & { label: strin
         style={[
           styles.input,
           { color: t.text, borderColor: focused ? t.accent : t.border, backgroundColor: t.backgroundElement },
+          focused && Platform.OS === 'web' && ({ boxShadow: `0 0 0 4px ${t.accentSoft}` } as object),
           
           Platform.OS === 'web' && ({ outlineStyle: 'none' } as object),
           props.style,
@@ -102,7 +103,7 @@ export function Field({ label, hint, ...props }: TextInputProps & { label: strin
 
 export function Card({ style, ...rest }: ViewProps) {
   const t = useTheme();
-  return <View style={[styles.card, { backgroundColor: t.backgroundElement, borderColor: t.border }, style]} {...rest} />;
+  return <View style={[styles.card, { backgroundColor: t.backgroundElement, borderColor: t.border }, shadow('#101828', 0.07, 24), style]} {...rest} />;
 }
 
 export function Pill({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger' }) {
@@ -144,12 +145,12 @@ function hexToRgba(hex: string, a: number) {
 }
 
 const styles = StyleSheet.create({
-  button: { minHeight: 52, borderRadius: Radius.md, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.four },
-  buttonSm: { minHeight: 36, paddingHorizontal: Spacing.three, borderRadius: Radius.sm + 2 },
+  button: { minHeight: 52, borderRadius: Radius.pill, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.four },
+  buttonSm: { minHeight: 36, paddingHorizontal: Spacing.three, borderRadius: Radius.pill },
   buttonRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, alignSelf: 'stretch', justifyContent: 'center', minHeight: 48 },
-  input: { minHeight: 54, borderWidth: 1.5, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 17 },
-  card: { borderRadius: Radius.md, padding: Spacing.three, gap: Spacing.two, borderWidth: 1 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 3, borderRadius: Radius.sm, alignSelf: 'flex-start' },
+  input: { minHeight: 54, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 17 },
+  card: { borderRadius: Radius.lg - 2, padding: Spacing.three + 2, gap: Spacing.two, borderWidth: StyleSheet.hairlineWidth },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 3, borderRadius: Radius.pill, alignSelf: 'flex-start' },
   dot: { width: 6, height: 6, borderRadius: 3 },
   error: { borderRadius: Radius.sm, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
 });

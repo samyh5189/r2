@@ -109,3 +109,29 @@ export function ShieldIcon({ size = 20, color, width = 1.8 }: P) {
     </Svg>
   );
 }
+
+export function HomeIcon({ size = 22, color, width = 1.8 }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />
+    </Svg>
+  );
+}
+
+export function BikeIcon({ size = 22, color, width = 1.8 }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx={5.5} cy={16.5} r={3.5} />
+      <Circle cx={18.5} cy={16.5} r={3.5} />
+      <Path d="M5.5 16.5 9 9h4l3 7.5M9 9H7M13 9l1.5-2H17" />
+    </Svg>
+  );
+}
+
+export function CalendarIcon({ size = 22, color, width = 1.8 }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M7 3v3M17 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" />
+    </Svg>
+  );
+}
